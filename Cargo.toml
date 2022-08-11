@@ -1,0 +1,28 @@
+[package]
+name = "parser_reworked"
+version = "0.1.0"
+authors = ["vera"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bitvec = "1.0.0"
+definitions = {git = "https://github.com/Alzymologist/parity-signer", branch = 'main', default-features = false, features = ["signer"]}
+frame-metadata = { version = "15.0.0", default-features = false, features = ["std", "legacy"]}
+hex = "0.4.3"
+num-bigint = "0.4.3"
+parity-scale-codec = {version = "3.1.5", features = ["derive", "bit-vec"]}
+printing_balance = {git = "https://github.com/Alzymologist/parity-signer", branch = 'main'}
+scale-info = "2.1.2"
+sp-arithmetic = {git = "https://github.com/paritytech/substrate"}
+sp-core = {git = "https://github.com/paritytech/substrate", default-features = false, features = ["full_crypto"]}
+sp-runtime = {git = "https://github.com/paritytech/substrate", default-features = false}
+
+[features]
+default = ["standalone"]
+standalone = []
+
+[lib]
+name = "parser_reworked"
+crate-type = ["lib"]
