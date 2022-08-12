@@ -11,14 +11,15 @@ use scale_info::{
     TypeDefPrimitive, Variant,
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
-use sp_core::{H160, H256, H512};
+use sp_core::{H160, H512};
 use sp_runtime::generic::Era;
 
 use crate::cards::{ParsedData, Call, ExtendedData, FieldData, Info, SequenceRawData, VariantData};
 use crate::decoding_commons::{
-    cut_compact, get_compact, special_case_account_id32, SpecialArray, SpecialtyPrimitive, SpecialtySet, StLenCheckCompact, StLenCheckSpecialtyCompact,
+    cut_compact, get_compact, special_case_account_id32, special_case_h256, SpecialArray, StLenCheckCompact, StLenCheckSpecialtyCompact,
 };
 use crate::error::{ParserDecodingError, ParserError};
+use crate::special::{/*Hint, */Lead, Propagated, SpecialtyField, SpecialtySet};
 
 enum FoundBitOrder {
     Lsb0,
@@ -297,122 +298,6 @@ impl <'a> SpecialtyTypeChecked <'a> {
     }
 }
 
-/// Specialty found from `name` and `type_name` of the [`Field`].
-///
-/// For better decoded data display.
-///
-/// [`Field`] is encountered in [`TypeDefComposite`] and [`TypeDefVariant`].
-///
-/// Gets checked each time decoding goes through a [`Field`]. Gets propagated
-/// downwards until the blob related to that field is decoded.
-pub enum SpecialtyField {
-    Decode(SpecialtyFieldDecode),
-    Display(SpecialtyFieldDisplay),
-    None,
-}
-
-pub enum SpecialtyFieldDecode {
-    Text,
-}
-
-pub enum SpecialtyFieldDisplay {
-    Balance,
-    Nonce
-}
-
-impl SpecialtyField {
-    pub fn from_field(field: &Field<PortableForm>) -> Self {
-        let mut out = match field.name() {
-            Some(name) => match name.as_str() {
-                "remark" | "remark_with_event" => Self::Decode(SpecialtyFieldDecode::Text),
-                "nonce" => Self::Display(SpecialtyFieldDisplay::Nonce),
-                _ => Self::None,
-            },
-            None => Self::None,
-        };
-        if let Self::None = out {
-            if let Some(type_name) = field.type_name() {
-                out = match type_name.as_str() {
-                    "Balance"
-                        | "T::Balance"
-                        | "BalanceOf<T>"
-                        | "ExtendedBalance"
-                        | "BalanceOf<T, I>"
-                        | "DepositBalance"
-                        | "PalletBalanceOf<T>" => Self::Display(SpecialtyFieldDisplay::Balance),
-                    _ => Self::None,
-                };
-            }
-        }
-        out
-    }
-}
-
-/// Propagating type info
-#[derive(Clone, Debug)]
-pub struct Propagated {
-    /// If flag is `true` and the value is suitable, it should be displayed as
-    /// balance.
-    ///
-    /// If the flag is `true` and the value not suitable, the flag is ignored.
-    ///
-    /// Becomes `true` if decoding went through [`Field`] with
-    /// balance-indicating `type_name`.
-    ///
-    /// Flag indicating that the value is compact.
-    ///
-    /// If unsuitable value is marked as compact, an error is produced on
-    /// parsing.
-    ///
-    /// Becomes `true` if decoding went through `TypeDef::Compact(_)`.
-    pub specialty_set: SpecialtySet,
-
-    /// Set of [`Info`] collected while resolving the type.
-    ///
-    /// Only non-empty [`Info`] entries are added.
-    pub info: Vec<Info>,
-}
-
-impl Propagated {
-    pub fn new() -> Self {
-        Self{
-            specialty_set: SpecialtySet::new(),
-            info: Vec::new(),
-        }
-    }
-    pub fn new_with_specialty_set(specialty_set: SpecialtySet) -> Self {
-        Self{
-            specialty_set,
-            info: Vec::new(),
-        }
-    }
-    pub fn new_with_specialty_set_updated(mut specialty_set: SpecialtySet, specialty_field_display: SpecialtyFieldDisplay) -> Self {
-        if let SpecialtyPrimitive::None = specialty_set.specialty_primitive {
-            specialty_set.specialty_primitive = match specialty_field_display {
-                SpecialtyFieldDisplay::Balance => SpecialtyPrimitive::Balance,
-                SpecialtyFieldDisplay::Nonce => SpecialtyPrimitive::Nonce,
-            };
-        }
-        Self{
-            specialty_set,
-            info: Vec::new(),
-        }
-    }
-    pub fn add_info(&mut self, info_update: &Info) {
-        if !info_update.is_empty() {self.info.push(info_update.clone())}
-    }
-    pub fn add_info_slice(&mut self, info_update_slice: &[Info]) {
-        self.info.extend_from_slice(info_update_slice)
-    }
-}
-
-impl Default for Propagated {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-
 impl Info {
     fn from_ty(ty: &Type<PortableForm>) -> Self {
         Self {
@@ -485,7 +370,7 @@ pub fn decode_with_type(ty_symbol: &UntrackedSymbol<std::any::TypeId>, data: &mu
                         inner_ty_symbol,
                         data,
                         meta_v14,
-                        Propagated::new_with_specialty_set(propagated.specialty_set),
+                        Propagated::with_specialty_set(propagated.specialty_set),
                     )?;
                     tuple_data_set.push(tuple_data_element);
                 }
@@ -545,7 +430,7 @@ pub fn decode_with_type(ty_symbol: &UntrackedSymbol<std::any::TypeId>, data: &mu
         }),
         SpecialtyTypeChecked::H256 => Ok(ExtendedData{
             info: propagated.info,
-            data: H256::cut_and_decode(data)?,
+            data: special_case_h256(data, propagated.specialty_set.hash256())?,
         }),
         SpecialtyTypeChecked::H512 => Ok(ExtendedData{
             info: propagated.info,
@@ -626,32 +511,43 @@ pub fn decode_fields(fields: &[Field<PortableForm>], data: &mut Vec<u8>, meta_v1
     for field in fields.iter() {
         let field_name = field.name().map(|name| name.to_string());
         let type_name = field.type_name().map(|name| name.to_string());
-        let data = match SpecialtyField::from_field(field) {
-            SpecialtyField::Decode(SpecialtyFieldDecode::Text) => {
-                let data = decode_str(data)?;
-                ExtendedData{
-                    info: Vec::new(),
-                    data,
+        let this_field_data = match SpecialtyField::from_field(field) {
+            SpecialtyField::Lead(Lead::Text) => {
+                let mut temp_data_clone = data.clone();
+                match decode_str(&mut temp_data_clone){
+                    Ok(parsed_data) => {
+                        *data = temp_data_clone;
+                        ExtendedData{
+                            info: Vec::new(),
+                            data: parsed_data,
+                        }
+                    },
+                    Err(_) => decode_with_type(
+                        field.ty(),
+                        data,
+                        meta_v14,
+                        Propagated::with_specialty_set(specialty_set),
+                    )?
                 }
             },
-            SpecialtyField::Display(specialty_field_display) => decode_with_type(
+            SpecialtyField::Hint(hint) => decode_with_type(
                 field.ty(),
                 data,
                 meta_v14,
-                Propagated::new_with_specialty_set_updated(specialty_set, specialty_field_display),
+                Propagated::with_specialty_set_updated(specialty_set, hint),
             )?,
             SpecialtyField::None => decode_with_type(
                 field.ty(),
                 data,
                 meta_v14,
-                Propagated::new_with_specialty_set(specialty_set),
+                Propagated::with_specialty_set(specialty_set),
             )?,
         };
         out.push(FieldData{
             field_name,
             type_name,
             field_docs: field.collect_docs(),
-            data,
+            data: this_field_data,
         })
     }
     Ok(out)
@@ -684,7 +580,7 @@ pub fn decode_elements_set(element: &UntrackedSymbol<std::any::TypeId>, number_o
                     element,
                     data,
                     meta_v14,
-                    Propagated::new_with_specialty_set(propagated.specialty_set),
+                    Propagated::with_specialty_set(propagated.specialty_set),
                 )?;
                 out.push(element_extended_data.data);
             }

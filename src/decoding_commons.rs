@@ -10,6 +10,7 @@ use printing_balance::AsBalance;
 
 use crate::cards::ParsedData;
 use crate::error::{ParserDecodingError, ParserError};
+use crate::special::{SpecialtyH256, SpecialtySet};
 
 /// Struct to store results of searching Vec<u8> for encoded compact:
 /// consists of actual number decoded, and, if it exists, the beginning position for data after the compact
@@ -172,7 +173,7 @@ macro_rules! impl_check_specialty_compact {
                         if specialty_set.is_compact {get_compact::<Self>(data)?}
                         else {<Self>::decode_value(data)?}
                     };
-                    Ok(ParsedData::$enum_variant{value, specialty: specialty_set.specialty_primitive})
+                    Ok(ParsedData::$enum_variant{value, specialty: specialty_set.primitive()})
                 }
                 fn default_card_name() -> &'static str {
                     stringify!($ty)
@@ -241,46 +242,6 @@ impl_block_compact!(i128, PrimitiveI128);
 impl_block_compact!(BigInt, PrimitiveI256);
 impl_block_compact!(BigUint, PrimitiveU256);
 
-#[derive(Clone, Copy, Debug)]
-pub enum SpecialtyPrimitive {
-    None,
-    Balance,
-    Tip,
-    Nonce,
-    SpecVersion,
-    TxVersion,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct SpecialtySet {
-    pub is_compact: bool,
-    pub specialty_primitive: SpecialtyPrimitive,
-}
-
-impl SpecialtySet {
-    pub fn new() -> Self {
-        Self {
-            is_compact: false,
-            specialty_primitive: SpecialtyPrimitive::None,
-        }
-    }
-    pub fn reject_compact(&self) -> Result<(), ParserError> {
-        if self.is_compact {
-            Err(ParserError::Decoding(
-                ParserDecodingError::UnexpectedCompactInsides,
-            ))
-        }
-        else {Ok(())}
-    }
-}
-
-impl Default for SpecialtySet {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-
 /// Function to decode of AccountId special case and transform the result into base58 format.
 ///
 /// The function decodes only a single AccountId type entry,
@@ -329,4 +290,20 @@ macro_rules! impl_special_array_h {
     }
 }
 
-impl_special_array_h!(H160, H256, H512);
+impl_special_array_h!(H160, H512);
+
+pub fn special_case_h256(data: &mut Vec<u8>, specialty_hash: SpecialtyH256) -> Result<ParsedData, ParserError> {
+    let length = H256::len_bytes();
+    match data.get(..length) {
+        Some(slice) => {
+            let out_data = H256(slice.try_into().expect("fixed checked length, always fits"));
+            *data = data[length..].to_vec();
+            match specialty_hash {
+                SpecialtyH256::GenesisHash => Ok(ParsedData::GenesisHash(out_data)),
+                SpecialtyH256::BlockHash => Ok(ParsedData::BlockHash(out_data)),
+                SpecialtyH256::None => Ok(ParsedData::H256(out_data)),
+            }
+        },
+        None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort))
+    }
+}

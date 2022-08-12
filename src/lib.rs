@@ -157,7 +157,7 @@ use frame_metadata::v14::RuntimeMetadataV14;
 //use parity_scale_codec::{Decode, DecodeAll, Encode};
 //use scale_info::{form::PortableForm, Type};
 use scale_info::interner::UntrackedSymbol;
-//use sp_core::H256;
+use sp_core::H256;
 //use sp_runtime::generic::Era;
 
 //#[cfg(feature = "standalone")]
@@ -176,7 +176,7 @@ use cards::{Call, ExtendedData};
 pub mod decoding_commons;
 use decoding_commons::get_compact;
 mod decoding_sci;
-pub use decoding_sci::{decode_as_call_v14, decode_with_type, Propagated};
+pub use decoding_sci::{decode_as_call_v14, decode_with_type};
 //use decoding_sci::{decoding_sci_entry_point, decoding_sci_complete, CallExpectation};
 mod decoding_sci_ext;
 pub use decoding_sci_ext::decode_ext_attempt;
@@ -185,6 +185,8 @@ pub mod error;
 use error::{Error, ParserError};
 //pub mod method;
 //use method::OlderMeta;
+pub mod special;
+use special::Propagated;
 #[cfg(feature = "standalone")]
 #[cfg(test)]
 mod tests;
@@ -401,13 +403,15 @@ pub struct TransactionParsed {
 pub fn parse_transaction(
     data: &mut Vec<u8>,
     meta_v14: &RuntimeMetadataV14,
+    version: u32,
+    genesis_hash: H256,
 ) -> Result<TransactionParsed, ParserError> {
 
     // if unable to separate method date and extensions, then some fundamental flaw is in transaction itself
     let (mut call_data, mut extensions_data) = cut_method_extensions(data)?;
 
     // try parsing extensions, if is works, the version and extensions are correct
-    let extensions = decode_ext_attempt(&mut extensions_data, meta_v14)?;
+    let extensions = decode_ext_attempt(&mut extensions_data, meta_v14, version, genesis_hash)?;
 
     // try parsing method
     let call_result = decode_as_call_v14(&mut call_data, meta_v14);
@@ -424,10 +428,11 @@ pub fn parse_transaction(
 pub fn display_transaction(
     data: &mut Vec<u8>,
     meta_v14: &RuntimeMetadataV14,
+    version: u32,
     short_specs: &ShortSpecs,
 ) -> Result<String, String> {
 
-    let parsed = parse_transaction(data, meta_v14).map_err(|e| Error::Parser(e).show())?;
+    let parsed = parse_transaction(data, meta_v14, version, short_specs.genesis_hash).map_err(|e| Error::Parser(e).show())?;
     let mut extensions_printed = String::new();
     let indent = 0;
     let printed_extensions = parsed.extensions

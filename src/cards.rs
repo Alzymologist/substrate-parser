@@ -11,7 +11,8 @@ use sp_runtime::generic::Era;
 
 use definitions::network_specs::ShortSpecs;
 
-use crate::decoding_commons::{SpecialtyPrimitive, StLenCheckSpecialtyCompact};
+use crate::decoding_commons::StLenCheckSpecialtyCompact;
+use crate::special::SpecialtyPrimitive;
 
 #[derive(Clone, Debug)]
 pub struct Info {
@@ -194,6 +195,7 @@ pub enum ParsedData {
     BitVecU64Msb0(BitVec<u64, Msb0>),
     Era(Era),
     BlockHash(H256),
+    GenesisHash(H256),
 }
 
 impl ParsedData {
@@ -323,6 +325,9 @@ impl ParsedData {
             },
             ParsedData::BlockHash(block_hash) => {
                 readable(indent, "block_hash", &hex::encode(block_hash))
+            }
+            ParsedData::GenesisHash(genesis_hash) => {
+                readable(indent, "genesis_hash", &hex::encode(genesis_hash))
             }
         }
     }
