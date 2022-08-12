@@ -308,11 +308,8 @@ pub enum ParserDecodingError {
 #[derive(Debug)]
 #[cfg_attr(feature = "test", derive(VariantCount))]
 pub enum ParserMetadataError {
-    /// Metadata extensions have no `Era`
-    NoEra,
-
     /// Metadata extensions have no block hash
-    NoBlockHash,
+    NoGenesisHash,
 
     /// Metadata extensions have no network metadata version
     NoVersionExt,
@@ -370,8 +367,7 @@ impl ParserError {
             },
             ParserError::FundamentallyBadV14Metadata(x) => {
                 let insert = match x {
-                    ParserMetadataError::NoEra => String::from("Era information is missing."),
-                    ParserMetadataError::NoBlockHash => String::from("Block hash information is missing."),
+                    ParserMetadataError::NoGenesisHash => String::from("Genesis hash information is missing."),
                     ParserMetadataError::NoVersionExt => String::from("Metadata spec version information is missing."),
                     ParserMetadataError::EraTwice => String::from("Era information is encountered mora than once."),
                     ParserMetadataError::GenesisHashTwice => String::from("Genesis hash is encountered more than once."),
