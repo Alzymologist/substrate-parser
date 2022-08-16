@@ -1,71 +1,17 @@
 //! Decoder elements common for all metadata versions
 //!
 use num_bigint::{BigInt, BigUint};
-use parity_scale_codec::{Compact, Decode, HasCompact};
+use parity_scale_codec::{Decode, HasCompact};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{crypto::AccountId32, H160, H256, H512};
+use sp_runtime::generic::Era;
 use std::{convert::TryInto, mem::size_of};
 
-use printing_balance::AsBalance;
-
 use crate::cards::ParsedData;
+use crate::compacts::get_compact;
 use crate::error::{ParserDecodingError, ParserError};
-use crate::special::{SpecialtyH256, SpecialtySet};
-
-/// Struct to store results of searching Vec<u8> for encoded compact:
-/// consists of actual number decoded, and, if it exists, the beginning position for data after the compact
-pub struct CutCompact<T: HasCompact> {
-    pub compact_found: T,
-    pub start_next_unit: Option<usize>,
-}
-
-pub fn cut_compact<T>(data: &[u8]) -> Result<CutCompact<T>, ParserError>
-where
-    T: HasCompact,
-    Compact<T>: Decode,
-{
-    if data.is_empty() {
-        return Err(ParserError::Decoding(ParserDecodingError::DataTooShort));
-    }
-    let mut out = None;
-    for i in 0..data.len() {
-        let mut hippo = &data[..=i];
-        let unhippo = <Compact<T>>::decode(&mut hippo);
-        if let Ok(hurray) = unhippo {
-            let start_next_unit = {
-                if data.len() == i {
-                    None
-                } else {
-                    Some(i + 1)
-                }
-            };
-            out = Some(CutCompact {
-                compact_found: hurray.0,
-                start_next_unit,
-            });
-            break;
-        }
-    }
-    match out {
-        Some(c) => Ok(c),
-        None => Err(ParserError::Decoding(ParserDecodingError::NoCompact)),
-    }
-}
-
-/// Function to search &[u8] for shortest compact <T> by brute force.
-/// Outputs CutCompact value in case of success.
-pub(crate) fn get_compact<T>(data: &mut Vec<u8>) -> Result<T, ParserError>
-where
-    T: HasCompact,
-    Compact<T>: Decode,
-{
-    let cut_compact = cut_compact::<T>(data)?;
-    *data = match cut_compact.start_next_unit {
-        Some(start) => data[start..].to_vec(),
-        None => Vec::new(),
-    };
-    Ok(cut_compact.compact_found)
-}
+use crate::printing_balance::AsBalance;
+use crate::special_indicators::{SpecialtyH256, SpecialtySet};
 
 pub(crate) trait StLen: Sized {
     fn decode_value(data: &mut Vec<u8>) -> Result<Self, ParserError>;
@@ -305,5 +251,21 @@ pub fn special_case_h256(data: &mut Vec<u8>, specialty_hash: SpecialtyH256) -> R
             }
         },
         None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort))
+    }
+}
+
+pub fn special_case_era(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
+    let (era_data, remaining_vector) = match data.get(0) {
+        Some(0) => (data[0..1].to_vec(), data[1..].to_vec()),
+        Some(_) => match data.get(0..2) {
+            Some(a) => (a.to_vec(), data[2..].to_vec()),
+            None => return Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+        },
+        None => return Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+    };
+    *data = remaining_vector;
+    match Era::decode(&mut &era_data[..]) {
+        Ok(a) => Ok(ParsedData::Era(a)),
+        Err(_) => Err(ParserError::Decoding(ParserDecodingError::Era)),
     }
 }

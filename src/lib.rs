@@ -164,216 +164,34 @@ use sp_core::H256;
 //use defaults::default_types_vec;
 //#[cfg(feature = "standalone")]
 //use definitions::metadata::info_from_metadata;
-use definitions::{
-    network_specs::ShortSpecs,
-//    types::TypeEntry,
-};
 
 pub mod cards;
 use cards::{Call, ExtendedData};
-//mod decoding_older;
-//use decoding_older::process_as_call;
-pub mod decoding_commons;
-use decoding_commons::get_compact;
+pub mod compacts;
+use compacts::get_compact;
 mod decoding_sci;
 pub use decoding_sci::{decode_as_call_v14, decode_with_type};
-//use decoding_sci::{decoding_sci_entry_point, decoding_sci_complete, CallExpectation};
 mod decoding_sci_ext;
 pub use decoding_sci_ext::decode_ext_attempt;
 pub mod error;
 #[cfg(feature = "standalone")]
 use error::{Error, ParserError};
-//pub mod method;
-//use method::OlderMeta;
-pub mod special;
-use special::Propagated;
+pub mod printing_balance;
+pub mod special_indicators;
+use special_indicators::Propagated;
+pub mod special_types;
 #[cfg(feature = "standalone")]
 #[cfg(test)]
 mod tests;
-/*
-/// Parse call data with suitable network [`MetadataBundle`] and [`ShortSpecs`].
-pub fn parse_method(
-    method_data: &mut Vec<u8>,
-    metadata_bundle: &MetadataBundle,
-) -> Result<Vec<OutputCard>, ParserError> {
-    let start_indent = 0;
-    let out = match metadata_bundle {
-        MetadataBundle::Older {
-            older_meta,
-            types,
-            network_version: _,
-        } => process_as_call(method_data, older_meta, types, start_indent)?,
-        MetadataBundle::Sci {
-            meta_v14,
-            network_version: _,
-        } => decoding_sci_entry_point(method_data, meta_v14, start_indent)?,
-    };
-    if !method_data.is_empty() {
-        return Err(ParserError::Decoding(
-            ParserDecodingError::SomeDataNotUsedMethod,
-        ));
-    }
-    Ok(out)
+
+pub struct ShortSpecs {
+    pub base58prefix: u16,
+    pub decimals: u8,
+    pub genesis_hash: H256,
+    pub name: String,
+    pub unit: String,
 }
 
-/// Statically determined extensions for `V12` and `V13` metadata.
-#[derive(Debug, Decode, Encode)]
-struct ExtValues {
-    era: Era,
-    #[codec(compact)]
-    nonce: u64,
-    #[codec(compact)]
-    tip: u128,
-    metadata_version: u32,
-    tx_version: u32,
-    genesis_hash: H256,
-    block_hash: H256,
-}
-
-/// Parse extensions.
-pub fn parse_extensions(
-    extensions_data: &mut Vec<u8>,
-    metadata_bundle: &MetadataBundle,
-    short_specs: &ShortSpecs,
-    optional_mortal_flag: Option<bool>,
-) -> Result<Vec<OutputCard>, ParserError> {
-    let indent = 0;
-    let (era, block_hash, cards) = match metadata_bundle {
-        MetadataBundle::Older {
-            older_meta: _,
-            types: _,
-            network_version,
-        } => {
-            let ext = match <ExtValues>::decode_all(&mut &extensions_data[..]) {
-                Ok(a) => a,
-                Err(_) => return Err(ParserError::Decoding(ParserDecodingError::ExtensionsOlder)),
-            };
-            if ext.genesis_hash != short_specs.genesis_hash {
-                return Err(ParserError::Decoding(
-                    ParserDecodingError::GenesisHashMismatch,
-                ));
-            }
-            if network_version != &ext.metadata_version {
-                return Err(ParserError::WrongNetworkVersion {
-                    as_decoded: ext.metadata_version.to_string(),
-                    in_metadata: network_version.to_owned(),
-                });
-            }
-            let cards = vec![
-                OutputCard {
-                    card: ParserCard::Era(ext.era),
-                    indent,
-                },
-                OutputCard {
-                    card: ParserCard::PrimitiveU64 {
-                        value: ext.nonce,
-                        specialty: Specialty::Nonce,
-                    },
-                    indent,
-                },
-                OutputCard {
-                    card: ParserCard::PrimitiveU128 {
-                        value: ext.tip,
-                        specialty: Specialty::Tip,
-                    },
-                    indent,
-                },
-                OutputCard {
-                    card: ParserCard::PrimitiveU32 {
-                        value: ext.metadata_version,
-                        specialty: Specialty::SpecVersion,
-                    },
-                    indent,
-                },
-                OutputCard {
-                    card: ParserCard::PrimitiveU32 {
-                        value: ext.tx_version,
-                        specialty: Specialty::TxVersion,
-                    },
-                    indent,
-                },
-                OutputCard {
-                    card: ParserCard::BlockHash(ext.block_hash),
-                    indent,
-                },
-            ];
-            (ext.era, ext.block_hash, cards)
-        }
-        MetadataBundle::Sci {
-            meta_v14,
-            network_version,
-        } => {
-            let mut ext = Ext::init(short_specs.genesis_hash);
-            let extensions_decoded =
-                decode_ext_attempt(extensions_data, &mut ext, meta_v14, indent)?;
-            if let Some(genesis_hash) = ext.found_ext.genesis_hash {
-                if genesis_hash != short_specs.genesis_hash {
-                    return Err(ParserError::Decoding(
-                        ParserDecodingError::GenesisHashMismatch,
-                    ));
-                }
-            }
-            let block_hash = match ext.found_ext.block_hash {
-                Some(a) => a,
-                None => {
-                    return Err(ParserError::FundamentallyBadV14Metadata(
-                        ParserMetadataError::NoBlockHash,
-                    ))
-                }
-            };
-            let era = match ext.found_ext.era {
-                Some(a) => a,
-                None => {
-                    return Err(ParserError::FundamentallyBadV14Metadata(
-                        ParserMetadataError::NoEra,
-                    ))
-                }
-            };
-            match ext.found_ext.network_version_printed {
-                Some(a) => {
-                    if a != network_version.to_string() {
-                        return Err(ParserError::WrongNetworkVersion {
-                            as_decoded: a,
-                            in_metadata: network_version.to_owned(),
-                        });
-                    }
-                }
-                None => {
-                    return Err(ParserError::FundamentallyBadV14Metadata(
-                        ParserMetadataError::NoVersionExt,
-                    ))
-                }
-            }
-            if !extensions_data.is_empty() {
-                return Err(ParserError::Decoding(
-                    ParserDecodingError::SomeDataNotUsedExtensions,
-                ));
-            }
-            (era, block_hash, extensions_decoded)
-        }
-    };
-    if let Era::Immortal = era {
-        if short_specs.genesis_hash != block_hash {
-            return Err(ParserError::Decoding(
-                ParserDecodingError::ImmortalHashMismatch,
-            ));
-        }
-        if let Some(true) = optional_mortal_flag {
-            return Err(ParserError::Decoding(
-                ParserDecodingError::UnexpectedImmortality,
-            ));
-        }
-    }
-    if let Era::Mortal(_, _) = era {
-        if let Some(false) = optional_mortal_flag {
-            return Err(ParserError::Decoding(
-                ParserDecodingError::UnexpectedMortality,
-            ));
-        }
-    }
-    Ok(cards)
-}
-*/
 /// Separate call data and extensions data based on the call data length
 /// declared as a compact.
 pub fn cut_method_extensions(data: &mut Vec<u8>) -> Result<(Vec<u8>, Vec<u8>), ParserError> {

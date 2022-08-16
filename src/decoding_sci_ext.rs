@@ -10,10 +10,10 @@ use sp_runtime::generic::Era;
 
 
 use crate::cards::{ExtendedData, ParsedData};
-use crate::decoding_commons::StLenCheckSpecialtyCompact;
 use crate::decoding_sci::decode_with_type;
 use crate::error::{ParserDecodingError, ParserError, ParserMetadataError};
-use crate::special::{Propagated, SpecialtyPrimitive};
+use crate::special_indicators::{Propagated, SpecialtyPrimitive};
+use crate::special_types::StLenCheckSpecialtyCompact;
 
 
 pub fn decode_ext_attempt(
@@ -78,14 +78,12 @@ pub fn check_extensions(extensions: &[ExtendedData], network_version: u32, genes
             ParserMetadataError::NoGenesisHash,
         )),
     }
-    if let Some(era) = collected_ext.era {
-        if let Era::Immortal = era {
-            if let Some(block_hash) = collected_ext.block_hash {
-                if genesis_hash != block_hash {
-                    return Err(ParserError::Decoding(
-                        ParserDecodingError::ImmortalHashMismatch,
-                    ))
-                }
+    if let Some(Era::Immortal) = collected_ext.era {
+        if let Some(block_hash) = collected_ext.block_hash {
+            if genesis_hash != block_hash {
+                return Err(ParserError::Decoding(
+                    ParserDecodingError::ImmortalHashMismatch,
+                ))
             }
         }
     }
@@ -137,138 +135,4 @@ impl CollectedExt {
         }
     }
 }
-/*
-macro_rules! check {
-    ($($id: ident), *) => {
-        $(
-            impl StLen for $ty {
-                fn decode_value(data: &mut Vec<u8>) -> Result<Self, ParserError> {
-                    let length = size_of::<Self>();
-                    match data.get(..length) {
-                        Some(slice_to_decode) => {
-                            let out = <Self>::decode(&mut &slice_to_decode[..])
-                                .map_err(|_| ParserError::Decoding(ParserDecodingError::PrimitiveFailure(stringify!($ty))))?;
-                            *data = data[length..].to_vec();
-                            Ok(out)
-                        },
-                        None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort))
-                    }
-                }
-            }
-        )*
-    }
-}
-*/
-/*
-pub(crate) struct Ext {
-    pub(crate) genesis_hash: H256,
-    pub(crate) identifier: String,
-    pub(crate) specialty: SpecialExt,
-    pub(crate) found_ext: FoundExt,
-}
-
-impl Ext {
-    pub(crate) fn init(genesis_hash: H256) -> Self {
-        Self {
-            genesis_hash,
-            identifier: String::new(),
-            specialty: SpecialExt::None,
-            found_ext: FoundExt::init(),
-        }
-    }
-    pub(crate) fn check_special(&mut self, current_type: &Type<PortableForm>) {
-        self.specialty = match current_type.path().ident() {
-            Some(a) => match a.as_str() {
-                "Era" => SpecialExt::Era,
-                "CheckNonce" => SpecialExt::Nonce,
-                "ChargeTransactionPayment" => SpecialExt::Tip,
-                _ => SpecialExt::None,
-            },
-            None => SpecialExt::None,
-        };
-        if let SpecialExt::None = self.specialty {
-            self.specialty = match self.identifier.as_str() {
-                "CheckSpecVersion" => SpecialExt::SpecVersion,
-                "CheckTxVersion" => SpecialExt::TxVersion,
-                "CheckGenesis" => SpecialExt::Hash(Hash::GenesisHash),
-                "CheckMortality" => SpecialExt::Hash(Hash::BlockHash),
-                "CheckNonce" => SpecialExt::Nonce,
-                "ChargeTransactionPayment" => SpecialExt::Tip,
-                _ => SpecialExt::None,
-            };
-        }
-    }
-}
-
-pub(crate) struct FoundExt {
-    pub(crate) era: Option<Era>,
-    pub(crate) genesis_hash: Option<H256>,
-    pub(crate) block_hash: Option<H256>,
-    pub(crate) network_version_printed: Option<String>,
-}
-
-impl FoundExt {
-    pub(crate) fn init() -> Self {
-        Self {
-            era: None,
-            genesis_hash: None,
-            block_hash: None,
-            network_version_printed: None,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) enum Hash {
-    GenesisHash,
-    BlockHash,
-}
-
-#[derive(Debug)]
-pub(crate) enum SpecialExt {
-    Era,
-    Nonce,
-    Tip,
-    SpecVersion,
-    TxVersion,
-    Hash(Hash),
-    None,
-}
-
-pub(crate) fn special_case_hash(
-    data: &mut Vec<u8>,
-    found_ext: &mut FoundExt,
-    indent: u32,
-    genesis_hash: H256,
-    hash: &Hash,
-) -> Result<Vec<OutputCard>, ParserError> {
-    match data.get(0..32) {
-        Some(a) => {
-            let decoded_hash = H256::from_slice(a);
-            *data = data[32..].to_vec();
-            let out = match hash {
-                Hash::GenesisHash => {
-                    found_ext.genesis_hash = Some(decoded_hash);
-                    if decoded_hash != genesis_hash {
-                        return Err(ParserError::Decoding(
-                            ParserDecodingError::GenesisHashMismatch,
-                        ));
-                    }
-                    Vec::new()
-                }
-                Hash::BlockHash => {
-                    found_ext.block_hash = Some(decoded_hash);
-                    vec![OutputCard {
-                        card: ParserCard::BlockHash(decoded_hash),
-                        indent,
-                    }]
-                }
-            };
-            Ok(out)
-        }
-        None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
-    }
-}
-*/
-
 
