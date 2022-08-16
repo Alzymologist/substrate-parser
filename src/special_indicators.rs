@@ -138,6 +138,15 @@ impl Propagated {
             info: Vec::new(),
         }
     }
+    pub fn with_compact(is_compact: bool) -> Self {
+        Self{
+            specialty_set: SpecialtySet{
+                is_compact,
+                hint: Hint::None,
+            },
+            info: Vec::new(),
+        }
+    }
     pub fn with_specialty_set(specialty_set: SpecialtySet) -> Self {
         Self{
             specialty_set,

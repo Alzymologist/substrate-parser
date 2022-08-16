@@ -9,10 +9,9 @@ use sp_core::{
 };
 use sp_runtime::generic::Era;
 
-use definitions::network_specs::ShortSpecs;
-
-use crate::decoding_commons::StLenCheckSpecialtyCompact;
-use crate::special::SpecialtyPrimitive;
+use crate::ShortSpecs;
+use crate::special_indicators::SpecialtyPrimitive;
+use crate::special_types::StLenCheckSpecialtyCompact;
 
 #[derive(Clone, Debug)]
 pub struct Info {

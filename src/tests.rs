@@ -1,7 +1,8 @@
 use crate::display_transaction;
-use definitions::network_specs::ShortSpecs;
 use frame_metadata::v14::RuntimeMetadataV14;
 use parity_scale_codec::Decode;
+
+use crate::ShortSpecs;
 
 fn metadata(filename: &str) -> RuntimeMetadataV14 {
     let metadata_hex = std::fs::read_to_string(&filename).unwrap();

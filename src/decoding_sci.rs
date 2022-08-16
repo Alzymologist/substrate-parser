@@ -12,14 +12,12 @@ use scale_info::{
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{H160, H512};
-use sp_runtime::generic::Era;
 
 use crate::cards::{ParsedData, Call, ExtendedData, FieldData, Info, SequenceRawData, VariantData};
-use crate::decoding_commons::{
-    cut_compact, get_compact, special_case_account_id32, special_case_h256, SpecialArray, StLenCheckCompact, StLenCheckSpecialtyCompact,
-};
+use crate::compacts::{cut_compact, get_compact};
 use crate::error::{ParserDecodingError, ParserError};
-use crate::special::{/*Hint, */Lead, Propagated, SpecialtyField, SpecialtySet};
+use crate::special_indicators::{/*Hint, */Lead, Propagated, SpecialtyField, SpecialtySet};
+use crate::special_types::{special_case_account_id32, special_case_h256, SpecialArray, StLenCheckCompact, StLenCheckSpecialtyCompact, special_case_era};
 
 enum FoundBitOrder {
     Lsb0,
@@ -555,36 +553,25 @@ pub fn decode_fields(fields: &[Field<PortableForm>], data: &mut Vec<u8>, meta_v1
 
 pub fn decode_elements_set(element: &UntrackedSymbol<std::any::TypeId>, number_of_elements: u32, data: &mut Vec<u8>, meta_v14: &RuntimeMetadataV14, propagated: Propagated) -> Result<ExtendedData, ParserError> {
     propagated.specialty_set.reject_compact()?;
-    let inner_type = match meta_v14.types.resolve(element.id()) {
-        Some(a) => a,
-        None => return Err(ParserError::Decoding(ParserDecodingError::V14TypeNotResolved)),
-    };
-    let inner_type_info = Info::from_ty(inner_type);
-    let element_info = {
-        if inner_type_info.is_empty() {Vec::new()}
-        else {vec![inner_type_info]}
-    };
-/*
-            if let TypeDef::Compact(y) = inner_ty.type_def() {
-                let inner_compact_ty_info
-            }
-*/
+    
+    let husked_type = husk_type(element, meta_v14)?;
+
     let data = {
         if number_of_elements == 0 {
-            ParsedData::SequenceRaw(SequenceRawData{info: element_info, data: Vec::new()})
+            ParsedData::SequenceRaw(SequenceRawData{info: husked_type.info, data: Vec::new()})
         }
         else {
             let mut out: Vec<ParsedData> = Vec::new();
             for _i in 0..number_of_elements {
                 let element_extended_data = decode_with_type(
-                    element,
+                    &husked_type.last_symbol,
                     data,
                     meta_v14,
-                    Propagated::with_specialty_set(propagated.specialty_set),
+                    Propagated::with_compact(husked_type.is_compact),
                 )?;
                 out.push(element_extended_data.data);
             }
-            ParsedData::SequenceRaw(SequenceRawData{info: element_info, data: out})
+            ParsedData::SequenceRaw(SequenceRawData{info: husked_type.info, data: out})
         }
     };
     Ok(ExtendedData{
@@ -715,18 +702,45 @@ fn decode_type_def_bit_sequence(
     }.map_err(|_| ParserError::Decoding(ParserDecodingError::BitVecFailure))
 }
 
-fn special_case_era(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
-    let (era_data, remaining_vector) = match data.get(0) {
-        Some(0) => (data[0..1].to_vec(), data[1..].to_vec()),
-        Some(_) => match data.get(0..2) {
-            Some(a) => (a.to_vec(), data[2..].to_vec()),
-            None => return Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
-        },
-        None => return Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
-    };
-    *data = remaining_vector;
-    match Era::decode(&mut &era_data[..]) {
-        Ok(a) => Ok(ParsedData::Era(a)),
-        Err(_) => Err(ParserError::Decoding(ParserDecodingError::Era)),
+struct HuskedType {
+    info: Vec<Info>,
+    is_compact: bool,
+    last_symbol: UntrackedSymbol<std::any::TypeId>,
+}
+
+fn husk_type(entry_symbol: &UntrackedSymbol<std::any::TypeId>, meta_v14: &RuntimeMetadataV14) -> Result<HuskedType, ParserError> {
+    
+    let mut last_symbol = entry_symbol.to_owned();
+    let mut info: Vec<Info> = Vec::new();
+    let mut is_compact = false;
+    
+    loop {
+        let ty = match meta_v14.types.resolve(entry_symbol.id()) {
+            Some(a) => a,
+            None => return Err(ParserError::Decoding(ParserDecodingError::V14TypeNotResolved))
+        };
+        let info_ty = Info::from_ty(ty);
+        if !info_ty.is_empty() {info.push(info_ty)}
+        
+        match ty.type_def() {
+            TypeDef::Composite(x) => {
+                let fields = x.fields();
+                if fields.len() == 1 {
+                    last_symbol = *fields[0].ty();
+                }
+                else {break}
+            },
+            TypeDef::Compact(x) => {
+                is_compact = true;
+                last_symbol = *x.type_param();
+            },
+            _ => break,
+        }
     }
+
+    Ok(HuskedType{
+        info,
+        is_compact,
+        last_symbol,
+    })
 }
