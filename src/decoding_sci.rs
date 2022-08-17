@@ -13,11 +13,11 @@ use scale_info::{
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{H160, H512};
 
-use crate::cards::{ParsedData, Call, ExtendedData, FieldData, Info, SequenceRawData, VariantData};
+use crate::cards::{ParsedData, Call, ExtendedData, FieldData, Info, SequenceData, SequenceRawData, VariantData};
 use crate::compacts::{cut_compact, get_compact};
 use crate::error::{ParserDecodingError, ParserError};
 use crate::special_indicators::{/*Hint, */Lead, Propagated, SpecialtyField, SpecialtySet};
-use crate::special_types::{special_case_account_id32, special_case_h256, SpecialArray, StLenCheckCompact, StLenCheckSpecialtyCompact, special_case_era};
+use crate::special_types::{special_case_account_id32, special_case_h256, wrap_sequence, SpecialArray, StLenCheckCompact, StLenCheckSpecialtyCompact, special_case_era};
 
 enum FoundBitOrder {
     Lsb0,
@@ -574,7 +574,10 @@ pub fn decode_elements_set(element: &UntrackedSymbol<std::any::TypeId>, number_o
                 )?;
                 out.push(element_extended_data.data);
             }
-            ParsedData::SequenceRaw(SequenceRawData{info: husked.info, data: out})
+            match wrap_sequence(&out) {
+                Some(sequence) => ParsedData::Sequence(SequenceData{info: husked.info, data: sequence}),
+                None => ParsedData::SequenceRaw(SequenceRawData{info: husked.info, data: out}),
+            }
         }
     };
     Ok(ExtendedData{
