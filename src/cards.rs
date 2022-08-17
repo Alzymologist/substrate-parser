@@ -97,7 +97,9 @@ pub struct SequenceData {
 pub enum Sequence {
     U8(Vec<u8>),
     U16(Vec<u16>),
-    Bool(Vec<bool>),
+    U32(Vec<u32>),
+    U64(Vec<u64>),
+    U128(Vec<u128>),
     VecU8(Vec<Vec<u8>>),
 }
 
@@ -113,11 +115,27 @@ impl Sequence {
                 }
                 out
             }
-            Sequence::Bool(a) => {
+            Sequence::U32(a) => {
                 let mut out = String::new();
                 for (i, x) in a.iter().enumerate() {
                     if i>0 {out.push('\n')}
-                    out.push_str(&readable(indent, "bool", &x.to_string()));
+                    out.push_str(&readable(indent, "u32", &x.to_string()));
+                }
+                out
+            },
+            Sequence::U64(a) => {
+                let mut out = String::new();
+                for (i, x) in a.iter().enumerate() {
+                    if i>0 {out.push('\n')}
+                    out.push_str(&readable(indent, "u64", &x.to_string()));
+                }
+                out
+            },
+            Sequence::U128(a) => {
+                let mut out = String::new();
+                for (i, x) in a.iter().enumerate() {
+                    if i>0 {out.push('\n')}
+                    out.push_str(&readable(indent, "u128", &x.to_string()));
                 }
                 out
             },
@@ -140,7 +158,7 @@ pub enum ParsedData {
     Tuple(Vec<ExtendedData>), // tuples
     Variant(VariantData),
     Option(Option<Box<ParsedData>>),
-    SequenceHusked(SequenceData),
+    Sequence(SequenceData),
     SequenceRaw(SequenceRawData),
     PrimitiveBool(bool),
     PrimitiveChar(char),
@@ -252,7 +270,7 @@ impl ParsedData {
                     None => readable(indent, "none", ""),
                 }
             },
-            ParsedData::SequenceHusked(sequence_data) => {
+            ParsedData::Sequence(sequence_data) => {
                 sequence_data.data.show(indent)
             },
             ParsedData::SequenceRaw(sequence_raw_data) => {

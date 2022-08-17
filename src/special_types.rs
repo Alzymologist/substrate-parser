@@ -7,11 +7,11 @@ use sp_core::{crypto::AccountId32, H160, H256, H512};
 use sp_runtime::generic::Era;
 use std::{convert::TryInto, mem::size_of};
 
-use crate::cards::ParsedData;
+use crate::cards::{ParsedData, Sequence, SequenceData, SequenceRawData};
 use crate::compacts::get_compact;
 use crate::error::{ParserDecodingError, ParserError};
 use crate::printing_balance::AsBalance;
-use crate::special_indicators::{SpecialtyH256, SpecialtySet};
+use crate::special_indicators::{SpecialtyH256, SpecialtyPrimitive, SpecialtySet};
 
 pub(crate) trait StLen: Sized {
     fn decode_value(data: &mut Vec<u8>) -> Result<Self, ParserError>;
@@ -187,6 +187,72 @@ impl_block_compact!(i64, PrimitiveI64);
 impl_block_compact!(i128, PrimitiveI128);
 impl_block_compact!(BigInt, PrimitiveI256);
 impl_block_compact!(BigUint, PrimitiveU256);
+
+pub trait Collectable: Sized {
+    fn husk_set(sequence_raw_data: &SequenceRawData) -> Result<ParsedData, &'static str>;
+}
+
+macro_rules! impl_collect_vec {
+    ($($ty: ty, $enum_variant_input: ident, $enum_variant_output: ident), *) => {
+        $(
+            impl Collectable for $ty {
+                fn husk_set(sequence_raw_data: &SequenceRawData) -> Result<ParsedData, &'static str> {
+                    let mut out: Vec<Self> = Vec::new();
+                    for x in sequence_raw_data.data.iter() {
+                        if let ParsedData::$enum_variant_input{value: a, specialty: SpecialtyPrimitive::None} = x {out.push(*a)}
+                        else {return Err("Not uniform set.")}
+                    }
+                    let sequence_data = SequenceData {
+                        info: sequence_raw_data.info.to_owned(),
+                        data: Sequence::$enum_variant_output(out),
+                    };
+                    Ok(ParsedData::Sequence(sequence_data))
+                }
+            }
+        )*
+    }
+}
+
+impl_collect_vec!(u8, PrimitiveU8, U8);
+impl_collect_vec!(u16, PrimitiveU16, U16);
+impl_collect_vec!(u32, PrimitiveU32, U32);
+impl_collect_vec!(u64, PrimitiveU64, U64);
+impl_collect_vec!(u128, PrimitiveU128, U128);
+
+macro_rules! impl_collect_double_vec {
+    ($($ty: ty, $enum_variant_input: ident, $enum_variant_output: ident), *) => {
+        $(
+            impl Collectable for $ty {
+                fn husk_set(sequence_raw_data: &SequenceRawData) -> Result<ParsedData, &'static str> {
+                    let mut out: Vec<Self> = Vec::new();
+                    let mut info = sequence_raw_data.info.to_owned();
+
+                    for x in sequence_raw_data.data.iter() {
+                        match x {
+                            ParsedData::Sequence(sequence_data) => {
+                                if !sequence_data.info.is_empty() {info.extend_from_slice(&sequence_data.info)}
+                                if let Sequence::$enum_variant_input(a) = &sequence_data.data {out.push(a.clone())}
+                                else {return Err("Not uniform set.")}
+                            },
+                            ParsedData::SequenceRaw(a) => {
+                                if a.data.is_empty() {out.push(Vec::new())}
+                                else {return Err("Not uniform set.")}
+                            }
+                            _ => {return Err("Not uniform set.")}
+                        }
+                    }
+                    let sequence_data = SequenceData {
+                        info,
+                        data: Sequence::$enum_variant_output(out),
+                    };
+                    Ok(ParsedData::Sequence(sequence_data))
+                }
+            }
+        )*
+    }
+}
+
+impl_collect_double_vec!(Vec<u8>, U8, VecU8);
 
 /// Function to decode of AccountId special case and transform the result into base58 format.
 ///
