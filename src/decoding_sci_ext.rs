@@ -1,20 +1,14 @@
 //! Decode extensions using metadata [`RuntimeMetadataV14`]
 //!
 use frame_metadata::v14::RuntimeMetadataV14;
-/*
-use parity_scale_codec::Decode;
-use scale_info::{form::PortableForm, Type};
-*/
 use sp_core::H256;
 use sp_runtime::generic::Era;
 
-
 use crate::cards::{ExtendedData, ParsedData};
-use crate::decoding_sci::decode_with_type;
+use crate::decoding_sci::{decode_with_type, Ty};
 use crate::error::{ParserDecodingError, ParserError, ParserMetadataError};
 use crate::special_indicators::{Propagated, SpecialtyPrimitive};
 use crate::special_types::StLenCheckSpecialtyCompact;
-
 
 pub fn decode_ext_attempt(
     data: &mut Vec<u8>,
@@ -24,10 +18,10 @@ pub fn decode_ext_attempt(
 ) -> Result<Vec<ExtendedData>, ParserError> {
     let mut extensions: Vec<ExtendedData> = Vec::new();
     for signed_extensions_metadata in meta_v14.extrinsic.signed_extensions.iter() {
-        extensions.push(decode_with_type(&signed_extensions_metadata.ty, data, meta_v14, Propagated::from_ext_meta(signed_extensions_metadata))?)
+        extensions.push(decode_with_type(&Ty::Symbol(&signed_extensions_metadata.ty), data, meta_v14, Propagated::from_ext_meta(signed_extensions_metadata))?)
     }
     for signed_extensions_metadata in meta_v14.extrinsic.signed_extensions.iter() {
-        extensions.push(decode_with_type(&signed_extensions_metadata.additional_signed, data, meta_v14, Propagated::from_ext_meta(signed_extensions_metadata))?)
+        extensions.push(decode_with_type(&Ty::Symbol(&signed_extensions_metadata.additional_signed), data, meta_v14, Propagated::from_ext_meta(signed_extensions_metadata))?)
     }
     if !data.is_empty() {
         return Err(ParserError::Decoding(

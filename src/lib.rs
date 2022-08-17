@@ -170,7 +170,7 @@ use cards::{Call, ExtendedData};
 pub mod compacts;
 use compacts::get_compact;
 mod decoding_sci;
-pub use decoding_sci::{decode_as_call_v14, decode_with_type};
+pub use decoding_sci::{decode_as_call_v14, decode_with_type, Ty};
 mod decoding_sci_ext;
 pub use decoding_sci_ext::decode_ext_attempt;
 pub mod error;
@@ -276,7 +276,7 @@ pub fn display_transaction(
 /// No check here for all data being used. This check must be added elsewhere.
 pub fn decode_blob_as_type(ty_symbol: &UntrackedSymbol<std::any::TypeId>, data: &mut Vec<u8>, meta_v14: &RuntimeMetadataV14) -> Result<ExtendedData, ParserError> {
     decode_with_type(
-        ty_symbol,
+        &Ty::Symbol(ty_symbol),
         data,
         meta_v14,
         Propagated::new(),

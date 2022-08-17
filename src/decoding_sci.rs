@@ -328,10 +328,13 @@ macro_rules! impl_documented {
 
 impl_documented!(Type<PortableForm>, Field<PortableForm>, Variant<PortableForm>);
 
-pub fn decode_with_type(ty_symbol: &UntrackedSymbol<std::any::TypeId>, data: &mut Vec<u8>, meta_v14: &RuntimeMetadataV14, mut propagated: Propagated) -> Result<ExtendedData, ParserError> {
-    let ty = match meta_v14.types.resolve(ty_symbol.id()) {
-        Some(a) => a,
-        None => return Err(ParserError::Decoding(ParserDecodingError::V14TypeNotResolved))
+pub fn decode_with_type(ty_input: &Ty, data: &mut Vec<u8>, meta_v14: &RuntimeMetadataV14, mut propagated: Propagated) -> Result<ExtendedData, ParserError> {
+    let ty = match ty_input {
+        Ty::Resolved(resolved) => resolved,
+        Ty::Symbol(ty_symbol) => match meta_v14.types.resolve(ty_symbol.id()) {
+            Some(a) => a,
+            None => return Err(ParserError::Decoding(ParserDecodingError::V14TypeNotResolved))
+        }
     };
     let info_ty = Info::from_ty(ty);
     propagated.add_info(&info_ty);
@@ -365,7 +368,7 @@ pub fn decode_with_type(ty_symbol: &UntrackedSymbol<std::any::TypeId>, data: &mu
                 let mut tuple_data_set: Vec<ExtendedData> = Vec::new();
                 for inner_ty_symbol in inner_types_set.iter() {
                     let tuple_data_element = decode_with_type(
-                        inner_ty_symbol,
+                        &Ty::Symbol(inner_ty_symbol),
                         data,
                         meta_v14,
                         Propagated::with_specialty_set(propagated.specialty_set),
@@ -386,7 +389,7 @@ pub fn decode_with_type(ty_symbol: &UntrackedSymbol<std::any::TypeId>, data: &mu
             TypeDef::Compact(x) => {
                 propagated.specialty_set.is_compact = true;
                 decode_with_type(
-                    x.type_param(),
+                    &Ty::Symbol(x.type_param()),
                     data,
                     meta_v14,
                     propagated,
@@ -467,7 +470,7 @@ pub fn decode_with_type(ty_symbol: &UntrackedSymbol<std::any::TypeId>, data: &mu
                     },
                     Some(1) => {
                         *data = data[1..].to_vec();
-                        let extended_option_data = decode_with_type(ty_symbol, data, meta_v14, Propagated::new())?;
+                        let extended_option_data = decode_with_type(&Ty::Resolved(param_ty), data, meta_v14, Propagated::new())?;
                         propagated.add_info_slice(&extended_option_data.info);
                         Ok(ExtendedData{
                             info: propagated.info,
@@ -521,7 +524,7 @@ pub fn decode_fields(fields: &[Field<PortableForm>], data: &mut Vec<u8>, meta_v1
                         }
                     },
                     Err(_) => decode_with_type(
-                        field.ty(),
+                        &Ty::Symbol(field.ty()),
                         data,
                         meta_v14,
                         Propagated::with_specialty_set(specialty_set),
@@ -529,13 +532,13 @@ pub fn decode_fields(fields: &[Field<PortableForm>], data: &mut Vec<u8>, meta_v1
                 }
             },
             SpecialtyField::Hint(hint) => decode_with_type(
-                field.ty(),
+                &Ty::Symbol(field.ty()),
                 data,
                 meta_v14,
                 Propagated::with_specialty_set_updated(specialty_set, hint),
             )?,
             SpecialtyField::None => decode_with_type(
-                field.ty(),
+                &Ty::Symbol(field.ty()),
                 data,
                 meta_v14,
                 Propagated::with_specialty_set(specialty_set),
@@ -554,24 +557,24 @@ pub fn decode_fields(fields: &[Field<PortableForm>], data: &mut Vec<u8>, meta_v1
 pub fn decode_elements_set(element: &UntrackedSymbol<std::any::TypeId>, number_of_elements: u32, data: &mut Vec<u8>, meta_v14: &RuntimeMetadataV14, propagated: Propagated) -> Result<ExtendedData, ParserError> {
     propagated.specialty_set.reject_compact()?;
     
-    let husked_type = husk_type(element, meta_v14)?;
+    let husked = husk_type(element, meta_v14)?;
 
     let data = {
         if number_of_elements == 0 {
-            ParsedData::SequenceRaw(SequenceRawData{info: husked_type.info, data: Vec::new()})
+            ParsedData::SequenceRaw(SequenceRawData{info: husked.info, data: Vec::new()})
         }
         else {
             let mut out: Vec<ParsedData> = Vec::new();
             for _i in 0..number_of_elements {
                 let element_extended_data = decode_with_type(
-                    &husked_type.last_symbol,
+                    &Ty::Resolved(husked.ty),
                     data,
                     meta_v14,
-                    Propagated::with_compact(husked_type.is_compact),
+                    Propagated::with_compact(husked.is_compact),
                 )?;
                 out.push(element_extended_data.data);
             }
-            ParsedData::SequenceRaw(SequenceRawData{info: husked_type.info, data: out})
+            ParsedData::SequenceRaw(SequenceRawData{info: husked.info, data: out})
         }
     };
     Ok(ExtendedData{
@@ -702,45 +705,45 @@ fn decode_type_def_bit_sequence(
     }.map_err(|_| ParserError::Decoding(ParserDecodingError::BitVecFailure))
 }
 
-struct HuskedType {
+struct HuskedType<'a> {
     info: Vec<Info>,
     is_compact: bool,
-    last_symbol: UntrackedSymbol<std::any::TypeId>,
+    ty: &'a Type<PortableForm>,
 }
 
-fn husk_type(entry_symbol: &UntrackedSymbol<std::any::TypeId>, meta_v14: &RuntimeMetadataV14) -> Result<HuskedType, ParserError> {
+fn husk_type<'a>(entry_symbol: &'a UntrackedSymbol<std::any::TypeId>, meta_v14: &'a RuntimeMetadataV14) -> Result<HuskedType<'a>, ParserError> {
     
-    let mut last_symbol = entry_symbol.to_owned();
-    let mut info: Vec<Info> = Vec::new();
     let mut is_compact = false;
     
-    loop {
-        let ty = match meta_v14.types.resolve(entry_symbol.id()) {
+    let mut ty = match meta_v14.types.resolve(entry_symbol.id()) {
+        Some(a) => a,
+        None => return Err(ParserError::Decoding(ParserDecodingError::V14TypeNotResolved))
+    };
+    
+    let info_ty = Info::from_ty(ty);
+    let mut info = {
+        if info_ty.is_empty() {Vec::new()}
+        else {vec![info_ty]}
+    };
+        
+    if let TypeDef::Compact(x) = ty.type_def() {
+        is_compact = true;
+        ty = match meta_v14.types.resolve(x.type_param().id()) {
             Some(a) => a,
             None => return Err(ParserError::Decoding(ParserDecodingError::V14TypeNotResolved))
         };
         let info_ty = Info::from_ty(ty);
         if !info_ty.is_empty() {info.push(info_ty)}
-        
-        match ty.type_def() {
-            TypeDef::Composite(x) => {
-                let fields = x.fields();
-                if fields.len() == 1 {
-                    last_symbol = *fields[0].ty();
-                }
-                else {break}
-            },
-            TypeDef::Compact(x) => {
-                is_compact = true;
-                last_symbol = *x.type_param();
-            },
-            _ => break,
-        }
     }
-
+    
     Ok(HuskedType{
         info,
         is_compact,
-        last_symbol,
+        ty,
     })
+}
+
+pub enum Ty<'a> {
+    Resolved(&'a Type<PortableForm>),
+    Symbol(&'a UntrackedSymbol<std::any::TypeId>),
 }
