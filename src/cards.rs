@@ -100,7 +100,7 @@ pub enum Sequence {
     U32(Vec<u32>),
     U64(Vec<u64>),
     U128(Vec<u128>),
-    VecU8(Vec<Vec<u8>>),
+    VecU8(Vec<Vec<u8>>), // assumed here that no reasonably needed info is ever accompanying each u8 element
 }
 
 impl Sequence {

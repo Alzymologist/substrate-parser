@@ -7,7 +7,7 @@ use sp_core::{crypto::AccountId32, H160, H256, H512};
 use sp_runtime::generic::Era;
 use std::{convert::TryInto, mem::size_of};
 
-use crate::cards::{ParsedData, Sequence, SequenceData, SequenceRawData};
+use crate::cards::{ParsedData, Sequence, SequenceData};
 use crate::compacts::get_compact;
 use crate::error::{ParserDecodingError, ParserError};
 use crate::printing_balance::AsBalance;
@@ -189,24 +189,20 @@ impl_block_compact!(BigInt, PrimitiveI256);
 impl_block_compact!(BigUint, PrimitiveU256);
 
 pub trait Collectable: Sized {
-    fn husk_set(sequence_raw_data: &SequenceRawData) -> Result<ParsedData, &'static str>;
+    fn husk_set(parsed_data_set: &[ParsedData]) -> Option<Sequence>;
 }
 
 macro_rules! impl_collect_vec {
     ($($ty: ty, $enum_variant_input: ident, $enum_variant_output: ident), *) => {
         $(
             impl Collectable for $ty {
-                fn husk_set(sequence_raw_data: &SequenceRawData) -> Result<ParsedData, &'static str> {
+                fn husk_set(parsed_data_set: &[ParsedData]) -> Option<Sequence> {
                     let mut out: Vec<Self> = Vec::new();
-                    for x in sequence_raw_data.data.iter() {
+                    for x in parsed_data_set.iter() {
                         if let ParsedData::$enum_variant_input{value: a, specialty: SpecialtyPrimitive::None} = x {out.push(*a)}
-                        else {return Err("Not uniform set.")}
+                        else {return None}
                     }
-                    let sequence_data = SequenceData {
-                        info: sequence_raw_data.info.to_owned(),
-                        data: Sequence::$enum_variant_output(out),
-                    };
-                    Ok(ParsedData::Sequence(sequence_data))
+                    Some(Sequence::$enum_variant_output(out))
                 }
             }
         )*
@@ -223,29 +219,23 @@ macro_rules! impl_collect_double_vec {
     ($($ty: ty, $enum_variant_input: ident, $enum_variant_output: ident), *) => {
         $(
             impl Collectable for $ty {
-                fn husk_set(sequence_raw_data: &SequenceRawData) -> Result<ParsedData, &'static str> {
+                fn husk_set(parsed_data_set: &[ParsedData]) -> Option<Sequence> {
                     let mut out: Vec<Self> = Vec::new();
-                    let mut info = sequence_raw_data.info.to_owned();
 
-                    for x in sequence_raw_data.data.iter() {
+                    for x in parsed_data_set.iter() {
                         match x {
                             ParsedData::Sequence(sequence_data) => {
-                                if !sequence_data.info.is_empty() {info.extend_from_slice(&sequence_data.info)}
                                 if let Sequence::$enum_variant_input(a) = &sequence_data.data {out.push(a.clone())}
-                                else {return Err("Not uniform set.")}
+                                else {return None}
                             },
                             ParsedData::SequenceRaw(a) => {
                                 if a.data.is_empty() {out.push(Vec::new())}
-                                else {return Err("Not uniform set.")}
-                            }
-                            _ => {return Err("Not uniform set.")}
+                                else {return None}
+                            },
+                            _ => return None,
                         }
                     }
-                    let sequence_data = SequenceData {
-                        info,
-                        data: Sequence::$enum_variant_output(out),
-                    };
-                    Ok(ParsedData::Sequence(sequence_data))
+                    Some(Sequence::$enum_variant_output(out))
                 }
             }
         )*
@@ -253,6 +243,18 @@ macro_rules! impl_collect_double_vec {
 }
 
 impl_collect_double_vec!(Vec<u8>, U8, VecU8);
+
+pub fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
+    match set.get(0) {
+        Some(ParsedData::PrimitiveU8{..}) => u8::husk_set(set),
+        Some(ParsedData::PrimitiveU16{..}) => u16::husk_set(set),
+        Some(ParsedData::PrimitiveU32{..}) => u32::husk_set(set),
+        Some(ParsedData::PrimitiveU64{..}) => u64::husk_set(set),
+        Some(ParsedData::PrimitiveU128{..}) => u128::husk_set(set),
+        Some(ParsedData::Sequence(SequenceData{info: _, data: Sequence::U8(_)})) => <Vec<u8>>::husk_set(set),
+        _ => None
+    }
+}
 
 /// Function to decode of AccountId special case and transform the result into base58 format.
 ///
