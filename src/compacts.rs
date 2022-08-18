@@ -58,4 +58,3 @@ where
     };
     Ok(cut_compact.compact_found)
 }
-

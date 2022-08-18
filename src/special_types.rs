@@ -136,10 +136,7 @@ impl_check_specialty_compact!(u64, PrimitiveU64);
 impl_check_specialty_compact!(u128, PrimitiveU128);
 
 pub(crate) trait StLenCheckCompact: StLen {
-    fn decode_checked(
-        data: &mut Vec<u8>,
-        is_compact: bool,
-    ) -> Result<ParsedData, ParserError>;
+    fn decode_checked(data: &mut Vec<u8>, is_compact: bool) -> Result<ParsedData, ParserError>;
 }
 
 macro_rules! impl_allow_compact {
@@ -246,13 +243,16 @@ impl_collect_double_vec!(Vec<u8>, U8, VecU8);
 
 pub fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
     match set.get(0) {
-        Some(ParsedData::PrimitiveU8{..}) => u8::husk_set(set),
-        Some(ParsedData::PrimitiveU16{..}) => u16::husk_set(set),
-        Some(ParsedData::PrimitiveU32{..}) => u32::husk_set(set),
-        Some(ParsedData::PrimitiveU64{..}) => u64::husk_set(set),
-        Some(ParsedData::PrimitiveU128{..}) => u128::husk_set(set),
-        Some(ParsedData::Sequence(SequenceData{info: _, data: Sequence::U8(_)})) => <Vec<u8>>::husk_set(set),
-        _ => None
+        Some(ParsedData::PrimitiveU8 { .. }) => u8::husk_set(set),
+        Some(ParsedData::PrimitiveU16 { .. }) => u16::husk_set(set),
+        Some(ParsedData::PrimitiveU32 { .. }) => u32::husk_set(set),
+        Some(ParsedData::PrimitiveU64 { .. }) => u64::husk_set(set),
+        Some(ParsedData::PrimitiveU128 { .. }) => u128::husk_set(set),
+        Some(ParsedData::Sequence(SequenceData {
+            info: _,
+            data: Sequence::U8(_),
+        })) => <Vec<u8>>::husk_set(set),
+        _ => None,
     }
 }
 
@@ -280,7 +280,7 @@ pub(crate) fn special_case_account_id32(data: &mut Vec<u8>) -> Result<ParsedData
     }
 }
 
-pub(crate) trait SpecialArray: {
+pub(crate) trait SpecialArray {
     fn cut_and_decode(data: &mut Vec<u8>) -> Result<ParsedData, ParserError>;
 }
 
@@ -306,7 +306,10 @@ macro_rules! impl_special_array_h {
 
 impl_special_array_h!(H160, H512);
 
-pub fn special_case_h256(data: &mut Vec<u8>, specialty_hash: SpecialtyH256) -> Result<ParsedData, ParserError> {
+pub fn special_case_h256(
+    data: &mut Vec<u8>,
+    specialty_hash: SpecialtyH256,
+) -> Result<ParsedData, ParserError> {
     let length = H256::len_bytes();
     match data.get(..length) {
         Some(slice) => {
@@ -317,8 +320,8 @@ pub fn special_case_h256(data: &mut Vec<u8>, specialty_hash: SpecialtyH256) -> R
                 SpecialtyH256::BlockHash => Ok(ParsedData::BlockHash(out_data)),
                 SpecialtyH256::None => Ok(ParsedData::H256(out_data)),
             }
-        },
-        None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort))
+        }
+        None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
     }
 }
 

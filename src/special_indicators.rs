@@ -21,10 +21,13 @@
 //!
 //!
 
-use frame_metadata::v14::SignedExtensionMetadata;
-use scale_info::{Field, form::PortableForm};
+use frame_metadata::v14::{RuntimeMetadataV14, SignedExtensionMetadata};
+use scale_info::{
+    form::PortableForm, interner::UntrackedSymbol, Field, Path, Type, TypeDef, Variant,
+};
 
 use crate::cards::Info;
+use crate::decoding_sci::pick_variant;
 use crate::error::{ParserDecodingError, ParserError};
 
 #[derive(Clone, Copy, Debug)]
@@ -103,8 +106,9 @@ impl SpecialtySet {
             Err(ParserError::Decoding(
                 ParserDecodingError::UnexpectedCompactInsides,
             ))
+        } else {
+            Ok(())
         }
-        else {Ok(())}
     }
     pub fn primitive(&self) -> SpecialtyPrimitive {
         self.hint.primitive()
@@ -133,14 +137,14 @@ pub struct Propagated {
 
 impl Propagated {
     pub fn new() -> Self {
-        Self{
+        Self {
             specialty_set: SpecialtySet::new(),
             info: Vec::new(),
         }
     }
     pub fn with_compact(is_compact: bool) -> Self {
-        Self{
-            specialty_set: SpecialtySet{
+        Self {
+            specialty_set: SpecialtySet {
                 is_compact,
                 hint: Hint::None,
             },
@@ -148,7 +152,7 @@ impl Propagated {
         }
     }
     pub fn with_specialty_set(specialty_set: SpecialtySet) -> Self {
-        Self{
+        Self {
             specialty_set,
             info: Vec::new(),
         }
@@ -157,13 +161,15 @@ impl Propagated {
         if let Hint::None = specialty_set.hint {
             specialty_set.hint = hint;
         }
-        Self{
+        Self {
             specialty_set,
             info: Vec::new(),
         }
     }
     pub fn add_info(&mut self, info_update: &Info) {
-        if !info_update.is_empty() {self.info.push(info_update.clone())}
+        if !info_update.is_empty() {
+            self.info.push(info_update.clone())
+        }
     }
     pub fn add_info_slice(&mut self, info_update_slice: &[Info]) {
         self.info.extend_from_slice(info_update_slice)
@@ -178,8 +184,8 @@ impl Propagated {
             "ChargeTransactionPayment" => Hint::ChargeTransactionPayment,
             _ => Hint::None,
         };
-        Self{
-            specialty_set: SpecialtySet{
+        Self {
+            specialty_set: SpecialtySet {
                 is_compact: false,
                 hint,
             },
@@ -217,13 +223,10 @@ impl SpecialtyField {
         if let Self::None = out {
             if let Some(type_name) = field.type_name() {
                 out = match type_name.as_str() {
-                    "Balance"
-                        | "T::Balance"
-                        | "BalanceOf<T>"
-                        | "ExtendedBalance"
-                        | "BalanceOf<T, I>"
-                        | "DepositBalance"
-                        | "PalletBalanceOf<T>" => Self::Hint(Hint::FieldBalance),
+                    "Balance" | "T::Balance" | "BalanceOf<T>" | "ExtendedBalance"
+                    | "BalanceOf<T, I>" | "DepositBalance" | "PalletBalanceOf<T>" => {
+                        Self::Hint(Hint::FieldBalance)
+                    }
                     _ => Self::None,
                 };
             }
@@ -232,15 +235,177 @@ impl SpecialtyField {
     }
 }
 
-
-/*
-pub enum Lead {
-    Call,
+/// Specialty found from `path` of the [`Type`].
+///
+/// Allows to decode data as as custom known types and to display data better.
+///
+/// Becomes other than `None` if a [`Type`] has recognizable `ident` component
+/// of the [`Path`].
+///
+/// If found, **tries** sending decoding through a special decoding route.
+///
+/// Gets checked each time a new type is encountered.
+pub enum SpecialtyTypeHinted {
+    None,
+    AccountId32,
+    Era,
+    H160,
+    H256,
+    H512,
     Option,
+    PalletSpecific(PalletSpecificItem),
+    Perbill,
+    Percent,
+    Permill,
+    Perquintill,
+    PerU16,
 }
 
-pub enum Specialty {
-
+#[derive(Debug, PartialEq)]
+pub enum PalletSpecificItem {
+    Call,
+    Event,
 }
 
-*/
+impl SpecialtyTypeHinted {
+    pub fn from_path(path: &Path<PortableForm>) -> Self {
+        match path.ident() {
+            Some(a) => match a.as_str() {
+                "AccountId32" => Self::AccountId32,
+                "Call" => Self::PalletSpecific(PalletSpecificItem::Call),
+                "Era" => Self::Era,
+                "Event" => Self::PalletSpecific(PalletSpecificItem::Event),
+                "H160" => Self::H160,
+                "H256" => Self::H256,
+                "H512" => Self::H512,
+                "Option" => Self::Option,
+                "Perbill" => Self::Perbill,
+                "Percent" => Self::Percent,
+                "Permill" => Self::Permill,
+                "Perquintill" => Self::Perquintill,
+                "PerU16" => Self::PerU16,
+                _ => Self::None,
+            },
+            None => Self::None,
+        }
+    }
+}
+
+pub enum SpecialtyTypeChecked<'a> {
+    None,
+    AccountId32,
+    Era,
+    H160,
+    H256,
+    H512,
+    Option(&'a UntrackedSymbol<std::any::TypeId>),
+    PalletSpecific {
+        pallet_name: String,
+        pallet_info: Info,
+        variants: &'a [Variant<PortableForm>],
+        item: PalletSpecificItem,
+    },
+    Perbill,
+    Percent,
+    Permill,
+    Perquintill,
+    PerU16,
+}
+
+impl<'a> SpecialtyTypeChecked<'a> {
+    pub fn from_type(
+        ty: &'a Type<PortableForm>,
+        data: &mut Vec<u8>,
+        meta_v14: &'a RuntimeMetadataV14,
+    ) -> Self {
+        match SpecialtyTypeHinted::from_path(ty.path()) {
+            SpecialtyTypeHinted::AccountId32 => Self::AccountId32,
+            SpecialtyTypeHinted::Era => Self::Era,
+            SpecialtyTypeHinted::H160 => Self::H160,
+            SpecialtyTypeHinted::H256 => Self::H256,
+            SpecialtyTypeHinted::H512 => Self::H512,
+            SpecialtyTypeHinted::Option => {
+                if let TypeDef::Variant(x) = ty.type_def() {
+                    let params = ty.type_params();
+                    if params.len() == 1 {
+                        if let Some(ty_symbol) = params[0].ty() {
+                            let mut has_none = false;
+                            let mut has_some = false;
+                            for variant in x.variants() {
+                                if variant.index() == 0 && variant.name() == "None" {
+                                    has_none = true
+                                }
+                                if variant.index() == 1 && variant.name() == "Some" {
+                                    has_some = true
+                                }
+                            }
+                            if has_none && has_some && (x.variants().len() == 2) {
+                                Self::Option(ty_symbol)
+                            } else {
+                                Self::None
+                            }
+                        } else {
+                            Self::None
+                        }
+                    } else {
+                        Self::None
+                    }
+                } else {
+                    Self::None
+                }
+            }
+            SpecialtyTypeHinted::PalletSpecific(item) => {
+                if let TypeDef::Variant(x) = ty.type_def() {
+                    // found specific variant corresponding to pallet,
+                    // get pallet name from here
+                    match pick_variant(x.variants(), data) {
+                        Ok(pallet_variant) => {
+                            let pallet_name = pallet_variant.name().to_owned();
+                            let pallet_fields = pallet_variant.fields();
+                            if pallet_fields.len() == 1 {
+                                match meta_v14.types.resolve(pallet_fields[0].ty().id()) {
+                                    Some(variants_ty) => {
+                                        if let SpecialtyTypeHinted::PalletSpecific(item_repeated) =
+                                            SpecialtyTypeHinted::from_path(variants_ty.path())
+                                        {
+                                            if item != item_repeated {
+                                                Self::None
+                                            } else if let TypeDef::Variant(var) =
+                                                variants_ty.type_def()
+                                            {
+                                                let pallet_info = Info::from_ty(variants_ty);
+                                                *data = data[1..].to_vec();
+                                                Self::PalletSpecific {
+                                                    pallet_name,
+                                                    pallet_info,
+                                                    variants: var.variants(),
+                                                    item,
+                                                }
+                                            } else {
+                                                Self::None
+                                            }
+                                        } else {
+                                            Self::None
+                                        }
+                                    }
+                                    None => Self::None,
+                                }
+                            } else {
+                                Self::None
+                            }
+                        }
+                        Err(_) => Self::None,
+                    }
+                } else {
+                    Self::None
+                }
+            }
+            SpecialtyTypeHinted::Perbill => Self::Perbill,
+            SpecialtyTypeHinted::Percent => Self::Percent,
+            SpecialtyTypeHinted::Permill => Self::Permill,
+            SpecialtyTypeHinted::Perquintill => Self::Perquintill,
+            SpecialtyTypeHinted::PerU16 => Self::PerU16,
+            SpecialtyTypeHinted::None => Self::None,
+        }
+    }
+}
