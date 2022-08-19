@@ -15,17 +15,18 @@ use sp_core::{H160, H512};
 
 use crate::cards::{
     Call, Documented, Event, ExtendedData, FieldData, Info, PalletSpecificData, ParsedData,
-    SequenceData, SequenceRawData, VariantData,
+    Sequence, SequenceData, SequenceRawData, VariantData,
 };
 use crate::compacts::{cut_compact, get_compact};
 use crate::error::{ParserDecodingError, ParserError};
 use crate::special_indicators::{
-    Lead, PalletSpecificItem, Propagated, SpecialtyField, SpecialtySet, SpecialtyTypeChecked,
-    SpecialtyTypeHinted,
+    Hint, PalletSpecificItem, Propagated, SpecialtySet, SpecialtyTypeChecked, SpecialtyTypeHinted,
 };
 use crate::special_types::{
-    special_case_account_id32, special_case_era, special_case_h256, wrap_sequence, SpecialArray,
-    StLenCheckCompact, StLenCheckSpecialtyCompact,
+    special_case_account_id32, special_case_ecdsa_public, special_case_ecdsa_signature,
+    special_case_ed25519_public, special_case_ed25519_signature, special_case_era,
+    special_case_h256, special_case_sr25519_public, special_case_sr25519_signature, wrap_sequence,
+    SpecialArray, StLenCheckCompact, StLenCheckSpecialtyCompact,
 };
 
 enum FoundBitOrder {
@@ -397,6 +398,30 @@ pub fn decode_with_type(
             info: propagated.info,
             data: PerU16::decode_checked(data, propagated.specialty_set.is_compact)?,
         }),
+        SpecialtyTypeChecked::PublicEd25519 => Ok(ExtendedData {
+            info: propagated.info,
+            data: special_case_ed25519_public(data)?,
+        }),
+        SpecialtyTypeChecked::PublicSr25519 => Ok(ExtendedData {
+            info: propagated.info,
+            data: special_case_sr25519_public(data)?,
+        }),
+        SpecialtyTypeChecked::PublicEcdsa => Ok(ExtendedData {
+            info: propagated.info,
+            data: special_case_ecdsa_public(data)?,
+        }),
+        SpecialtyTypeChecked::SignatureEd25519 => Ok(ExtendedData {
+            info: propagated.info,
+            data: special_case_ed25519_signature(data)?,
+        }),
+        SpecialtyTypeChecked::SignatureSr25519 => Ok(ExtendedData {
+            info: propagated.info,
+            data: special_case_sr25519_signature(data)?,
+        }),
+        SpecialtyTypeChecked::SignatureEcdsa => Ok(ExtendedData {
+            info: propagated.info,
+            data: special_case_ecdsa_signature(data)?,
+        }),
     }
 }
 
@@ -413,38 +438,12 @@ pub fn decode_fields(
     for field in fields.iter() {
         let field_name = field.name().map(|name| name.to_owned());
         let type_name = field.type_name().map(|name| name.to_owned());
-        let this_field_data = match SpecialtyField::from_field(field) {
-            SpecialtyField::Lead(Lead::Text) => {
-                let mut temp_data_clone = data.clone();
-                match decode_str(&mut temp_data_clone) {
-                    Ok(parsed_data) => {
-                        *data = temp_data_clone;
-                        ExtendedData {
-                            info: Vec::new(),
-                            data: parsed_data,
-                        }
-                    }
-                    Err(_) => decode_with_type(
-                        &Ty::Symbol(field.ty()),
-                        data,
-                        meta_v14,
-                        Propagated::with_specialty_set(specialty_set),
-                    )?,
-                }
-            }
-            SpecialtyField::Hint(hint) => decode_with_type(
-                &Ty::Symbol(field.ty()),
-                data,
-                meta_v14,
-                Propagated::with_specialty_set_updated(specialty_set, hint),
-            )?,
-            SpecialtyField::None => decode_with_type(
-                &Ty::Symbol(field.ty()),
-                data,
-                meta_v14,
-                Propagated::with_specialty_set(specialty_set),
-            )?,
-        };
+        let this_field_data = decode_with_type(
+            &Ty::Symbol(field.ty()),
+            data,
+            meta_v14,
+            Propagated::with_specialty_set_updated(specialty_set, Hint::from_field(field)),
+        )?;
         out.push(FieldData {
             field_name,
             type_name,
@@ -484,10 +483,22 @@ pub fn decode_elements_set(
                 out.push(element_extended_data.data);
             }
             match wrap_sequence(&out) {
-                Some(sequence) => ParsedData::Sequence(SequenceData {
-                    info: husked.info,
-                    data: sequence,
-                }),
+                Some(sequence) => {
+                    if let Sequence::U8(ref vec_u8_data) = sequence {
+                        match String::from_utf8(vec_u8_data.to_owned()) {
+                            Ok(string_u8_data) => ParsedData::Text(string_u8_data),
+                            Err(_) => ParsedData::Sequence(SequenceData {
+                                info: husked.info,
+                                data: sequence,
+                            }),
+                        }
+                    } else {
+                        ParsedData::Sequence(SequenceData {
+                            info: husked.info,
+                            data: sequence,
+                        })
+                    }
+                }
                 None => ParsedData::SequenceRaw(SequenceRawData {
                     info: husked.info,
                     data: out,

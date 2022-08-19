@@ -61,6 +61,28 @@ pub enum Hint {
 }
 
 impl Hint {
+    pub fn from_field(field: &Field<PortableForm>) -> Self {
+        let mut out = match field.name() {
+            Some(name) => match name.as_str() {
+                "nonce" => Self::FieldNonce,
+                _ => Self::None,
+            },
+            None => Self::None,
+        };
+        if let Self::None = out {
+            if let Some(type_name) = field.type_name() {
+                out = match type_name.as_str() {
+                    "Balance" | "T::Balance" | "BalanceOf<T>" | "ExtendedBalance"
+                    | "BalanceOf<T, I>" | "DepositBalance" | "PalletBalanceOf<T>" => {
+                        Self::FieldBalance
+                    }
+                    _ => Self::None,
+                };
+            }
+        }
+        out
+    }
+
     /// Propagated [`Hint`] has reached the primitive decoding.
     ///
     /// If hint is compatible with the primitive type encountered, it is used.
@@ -200,41 +222,6 @@ impl Default for Propagated {
     }
 }
 
-pub enum Lead {
-    Text,
-}
-
-pub enum SpecialtyField {
-    Lead(Lead),
-    Hint(Hint),
-    None,
-}
-
-impl SpecialtyField {
-    pub fn from_field(field: &Field<PortableForm>) -> Self {
-        let mut out = match field.name() {
-            Some(name) => match name.as_str() {
-                "remark" | "remark_with_event" => Self::Lead(Lead::Text),
-                "nonce" => Self::Hint(Hint::FieldNonce),
-                _ => Self::None,
-            },
-            None => Self::None,
-        };
-        if let Self::None = out {
-            if let Some(type_name) = field.type_name() {
-                out = match type_name.as_str() {
-                    "Balance" | "T::Balance" | "BalanceOf<T>" | "ExtendedBalance"
-                    | "BalanceOf<T, I>" | "DepositBalance" | "PalletBalanceOf<T>" => {
-                        Self::Hint(Hint::FieldBalance)
-                    }
-                    _ => Self::None,
-                };
-            }
-        }
-        out
-    }
-}
-
 /// Specialty found from `path` of the [`Type`].
 ///
 /// Allows to decode data as as custom known types and to display data better.
@@ -247,18 +234,8 @@ impl SpecialtyField {
 /// Gets checked each time a new type is encountered.
 pub enum SpecialtyTypeHinted {
     None,
-    AccountId32,
-    Era,
-    H160,
-    H256,
-    H512,
     Option,
     PalletSpecific(PalletSpecificItem),
-    Perbill,
-    Percent,
-    Permill,
-    Perquintill,
-    PerU16,
 }
 
 #[derive(Debug, PartialEq)]
@@ -271,19 +248,9 @@ impl SpecialtyTypeHinted {
     pub fn from_path(path: &Path<PortableForm>) -> Self {
         match path.ident() {
             Some(a) => match a.as_str() {
-                "AccountId32" => Self::AccountId32,
                 "Call" => Self::PalletSpecific(PalletSpecificItem::Call),
-                "Era" => Self::Era,
                 "Event" => Self::PalletSpecific(PalletSpecificItem::Event),
-                "H160" => Self::H160,
-                "H256" => Self::H256,
-                "H512" => Self::H512,
                 "Option" => Self::Option,
-                "Perbill" => Self::Perbill,
-                "Percent" => Self::Percent,
-                "Permill" => Self::Permill,
-                "Perquintill" => Self::Perquintill,
-                "PerU16" => Self::PerU16,
                 _ => Self::None,
             },
             None => Self::None,
@@ -310,6 +277,12 @@ pub enum SpecialtyTypeChecked<'a> {
     Permill,
     Perquintill,
     PerU16,
+    PublicEd25519,
+    PublicSr25519,
+    PublicEcdsa,
+    SignatureEd25519,
+    SignatureSr25519,
+    SignatureEcdsa,
 }
 
 impl<'a> SpecialtyTypeChecked<'a> {
@@ -318,12 +291,8 @@ impl<'a> SpecialtyTypeChecked<'a> {
         data: &mut Vec<u8>,
         meta_v14: &'a RuntimeMetadataV14,
     ) -> Self {
-        match SpecialtyTypeHinted::from_path(ty.path()) {
-            SpecialtyTypeHinted::AccountId32 => Self::AccountId32,
-            SpecialtyTypeHinted::Era => Self::Era,
-            SpecialtyTypeHinted::H160 => Self::H160,
-            SpecialtyTypeHinted::H256 => Self::H256,
-            SpecialtyTypeHinted::H512 => Self::H512,
+        let path = ty.path();
+        match SpecialtyTypeHinted::from_path(path) {
             SpecialtyTypeHinted::Option => {
                 if let TypeDef::Variant(x) = ty.type_def() {
                     let params = ty.type_params();
@@ -400,12 +369,52 @@ impl<'a> SpecialtyTypeChecked<'a> {
                     Self::None
                 }
             }
-            SpecialtyTypeHinted::Perbill => Self::Perbill,
-            SpecialtyTypeHinted::Percent => Self::Percent,
-            SpecialtyTypeHinted::Permill => Self::Permill,
-            SpecialtyTypeHinted::Perquintill => Self::Perquintill,
-            SpecialtyTypeHinted::PerU16 => Self::PerU16,
-            SpecialtyTypeHinted::None => Self::None,
+            SpecialtyTypeHinted::None => match path.ident() {
+                Some(a) => match a.as_str() {
+                    "AccountId32" => Self::AccountId32,
+                    "Era" => Self::Era,
+                    "H160" => Self::H160,
+                    "H256" => Self::H256,
+                    "H512" => Self::H512,
+                    "Perbill" => Self::Perbill,
+                    "Percent" => Self::Percent,
+                    "Permill" => Self::Permill,
+                    "Perquintill" => Self::Perquintill,
+                    "PerU16" => Self::PerU16,
+                    "Public" => match path.namespace() {
+                        [part1, part2] => {
+                            if part1 == "sp_core" {
+                                match part2.as_str() {
+                                    "ed25519" => Self::PublicEd25519,
+                                    "sr25519" => Self::PublicSr25519,
+                                    "ecdsa" => Self::PublicEcdsa,
+                                    _ => Self::None,
+                                }
+                            } else {
+                                Self::None
+                            }
+                        }
+                        _ => Self::None,
+                    },
+                    "Signature" => match path.namespace() {
+                        [part1, part2] => {
+                            if part1 == "sp_core" {
+                                match part2.as_str() {
+                                    "ed25519" => Self::SignatureEd25519,
+                                    "sr25519" => Self::SignatureSr25519,
+                                    "ecdsa" => Self::SignatureEcdsa,
+                                    _ => Self::None,
+                                }
+                            } else {
+                                Self::None
+                            }
+                        }
+                        _ => Self::None,
+                    },
+                    _ => Self::None,
+                },
+                None => Self::None,
+            },
         }
     }
 }

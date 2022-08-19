@@ -241,6 +241,27 @@ macro_rules! impl_collect_double_vec {
 
 impl_collect_double_vec!(Vec<u8>, U8, VecU8);
 
+impl Collectable for String {
+    fn husk_set(parsed_data_set: &[ParsedData]) -> Option<Sequence> {
+        let mut out: Vec<Self> = Vec::new();
+
+        for x in parsed_data_set.iter() {
+            match x {
+                ParsedData::Text(text_data) => out.push(text_data.clone()),
+                ParsedData::SequenceRaw(a) => {
+                    if a.data.is_empty() {
+                        out.push(String::new())
+                    } else {
+                        return None;
+                    }
+                }
+                _ => return None,
+            }
+        }
+        Some(Sequence::Text(out))
+    }
+}
+
 pub fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
     match set.get(0) {
         Some(ParsedData::PrimitiveU8 { .. }) => u8::husk_set(set),
@@ -252,6 +273,7 @@ pub fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
             info: _,
             data: Sequence::U8(_),
         })) => <Vec<u8>>::husk_set(set),
+        Some(ParsedData::Text(_)) => String::husk_set(set),
         _ => None,
     }
 }
@@ -279,6 +301,60 @@ pub(crate) fn special_case_account_id32(data: &mut Vec<u8>) -> Result<ParsedData
         None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
     }
 }
+
+macro_rules! crypto_type_decoder {
+    ($func:ident, $module:ident, $target:ident, $len:literal, $enum_variant: ident) => {
+        pub(crate) fn $func(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
+            match data.get(0..$len) {
+                Some(a) => {
+                    let array_decoded: [u8; $len] =
+                        a.try_into().expect("constant length, always fits");
+                    *data = data[$len..].to_vec();
+                    let public = sp_core::$module::$target::from_raw(array_decoded);
+                    Ok(ParsedData::$enum_variant(public))
+                }
+                None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+            }
+        }
+    };
+}
+
+crypto_type_decoder!(
+    special_case_ed25519_public,
+    ed25519,
+    Public,
+    32,
+    PublicEd25519
+);
+crypto_type_decoder!(
+    special_case_sr25519_public,
+    sr25519,
+    Public,
+    32,
+    PublicSr25519
+);
+crypto_type_decoder!(special_case_ecdsa_public, ecdsa, Public, 33, PublicEcdsa);
+crypto_type_decoder!(
+    special_case_ed25519_signature,
+    ed25519,
+    Signature,
+    64,
+    SignatureEd25519
+);
+crypto_type_decoder!(
+    special_case_sr25519_signature,
+    sr25519,
+    Signature,
+    64,
+    SignatureSr25519
+);
+crypto_type_decoder!(
+    special_case_ecdsa_signature,
+    ecdsa,
+    Signature,
+    65,
+    SignatureEcdsa
+);
 
 pub(crate) trait SpecialArray {
     fn cut_and_decode(data: &mut Vec<u8>) -> Result<ParsedData, ParserError>;

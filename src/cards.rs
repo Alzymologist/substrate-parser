@@ -5,7 +5,7 @@ use scale_info::{form::PortableForm, Field, Path, Type, Variant};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{
     crypto::{AccountId32, Ss58AddressFormat, Ss58Codec},
-    H160, H256, H512,
+    ecdsa, ed25519, sr25519, H160, H256, H512,
 };
 use sp_runtime::generic::Era;
 
@@ -160,6 +160,7 @@ pub enum Sequence {
     U32(Vec<u32>),
     U64(Vec<u64>),
     U128(Vec<u128>),
+    Text(Vec<String>),
     VecU8(Vec<Vec<u8>>), // assumed here that no reasonably needed info is ever accompanying each u8 element
 }
 
@@ -204,6 +205,16 @@ impl Sequence {
                         out.push('\n')
                     }
                     out.push_str(&readable(indent, "u128", &x.to_string()));
+                }
+                out
+            }
+            Sequence::Text(a) => {
+                let mut out = String::new();
+                for (i, x) in a.iter().enumerate() {
+                    if i > 0 {
+                        out.push('\n')
+                    }
+                    out.push_str(&readable(indent, "text", x));
                 }
                 out
             }
@@ -270,6 +281,12 @@ pub enum ParsedData {
     H160(H160),
     H256(H256),
     H512(H512),
+    PublicEd25519(ed25519::Public),
+    PublicSr25519(sr25519::Public),
+    PublicEcdsa(ecdsa::Public),
+    SignatureEd25519(ed25519::Signature),
+    SignatureSr25519(sr25519::Signature),
+    SignatureEcdsa(ecdsa::Signature),
     None,
     IdentityField(String),
     BitVec(String), // String from printing BitVec
@@ -362,7 +379,7 @@ impl ParsedData {
             }
             ParsedData::Option(option_data) => match option_data {
                 Some(parsed_data) => parsed_data.show(indent, short_specs, display_balance),
-                None => readable(indent, "none", ""),
+                None => readable(indent, "option", "none"),
             },
             ParsedData::Sequence(sequence_data) => sequence_data.data.show(indent),
             ParsedData::SequenceRaw(sequence_raw_data) => {
@@ -435,6 +452,33 @@ impl ParsedData {
             ParsedData::H160(h) => readable(indent, "H160", &hex::encode(h.0)),
             ParsedData::H256(h) => readable(indent, "H256", &hex::encode(h.0)),
             ParsedData::H512(h) => readable(indent, "H512", &hex::encode(h.0)),
+            ParsedData::PublicEd25519(public) => readable(
+                indent,
+                "Public Ed25519",
+                &public
+                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix)),
+            ),
+            ParsedData::PublicSr25519(public) => readable(
+                indent,
+                "Public Sr25519",
+                &public
+                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix)),
+            ),
+            ParsedData::PublicEcdsa(public) => readable(
+                indent,
+                "Public Ecdsa",
+                &public
+                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix)),
+            ),
+            ParsedData::SignatureEd25519(signature) => {
+                readable(indent, "Signature Ed25519", &hex::encode(signature.0))
+            }
+            ParsedData::SignatureSr25519(signature) => {
+                readable(indent, "Signature Sr25519", &hex::encode(signature.0))
+            }
+            ParsedData::SignatureEcdsa(signature) => {
+                readable(indent, "Signature Ecdsa", &hex::encode(signature.0))
+            }
             ParsedData::None => readable(indent, "none", ""),
             ParsedData::IdentityField(variant) => readable(indent, "identity_field", variant),
             ParsedData::BitVec(bv) => readable(indent, "bitvec", bv),
