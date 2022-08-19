@@ -224,7 +224,6 @@ pub fn parse_transaction(
     version: u32,
     genesis_hash: H256,
 ) -> Result<TransactionParsed, ParserError> {
-
     // if unable to separate method date and extensions, then some fundamental flaw is in transaction itself
     let (mut call_data, mut extensions_data) = cut_method_extensions(data)?;
 
@@ -234,7 +233,7 @@ pub fn parse_transaction(
     // try parsing method
     let call_result = decode_as_call_v14(&mut call_data, meta_v14);
 
-    Ok(TransactionParsed{
+    Ok(TransactionParsed {
         call_result,
         extensions,
     })
@@ -249,16 +248,19 @@ pub fn display_transaction(
     version: u32,
     short_specs: &ShortSpecs,
 ) -> Result<String, String> {
-
-    let parsed = parse_transaction(data, meta_v14, version, short_specs.genesis_hash).map_err(|e| Error::Parser(e).show())?;
+    let parsed = parse_transaction(data, meta_v14, version, short_specs.genesis_hash)
+        .map_err(|e| Error::Parser(e).show())?;
     let mut extensions_printed = String::new();
     let indent = 0;
-    let printed_extensions = parsed.extensions
+    let printed_extensions = parsed
+        .extensions
         .iter()
         .map(|x| x.data.show(indent, short_specs, true))
         .filter(|x| !x.is_empty());
     for (i, x) in printed_extensions.enumerate() {
-        if i>0 {extensions_printed.push('\n')}
+        if i > 0 {
+            extensions_printed.push('\n')
+        }
         extensions_printed.push_str(&x);
     }
     let call_printed = match parsed.call_result {
@@ -274,12 +276,10 @@ pub fn display_transaction(
 /// Decoder for random blob.
 ///
 /// No check here for all data being used. This check must be added elsewhere.
-pub fn decode_blob_as_type(ty_symbol: &UntrackedSymbol<std::any::TypeId>, data: &mut Vec<u8>, meta_v14: &RuntimeMetadataV14) -> Result<ExtendedData, ParserError> {
-    decode_with_type(
-        &Ty::Symbol(ty_symbol),
-        data,
-        meta_v14,
-        Propagated::new(),
-    )
+pub fn decode_blob_as_type(
+    ty_symbol: &UntrackedSymbol<std::any::TypeId>,
+    data: &mut Vec<u8>,
+    meta_v14: &RuntimeMetadataV14,
+) -> Result<ExtendedData, ParserError> {
+    decode_with_type(&Ty::Symbol(ty_symbol), data, meta_v14, Propagated::new())
 }
-

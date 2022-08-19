@@ -27,8 +27,13 @@ fn specs() -> ShortSpecs {
 #[test]
 fn tr_1() {
     let mut data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
-    let reply =
-        display_transaction(&mut data, &metadata("for_tests/westend9111"), 9111, &specs()).unwrap();
+    let reply = display_transaction(
+        &mut data,
+        &metadata("for_tests/westend9111"),
+        9111,
+        &specs(),
+    )
+    .unwrap();
     let reply_known = r#"
 Call:
 
@@ -75,8 +80,13 @@ block_hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff"#;
 #[test]
 fn tr_2() {
     let mut data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
-    let reply =
-        display_transaction(&mut data, &metadata("for_tests/westend9120"), 9120, &specs()).unwrap_err();
+    let reply = display_transaction(
+        &mut data,
+        &metadata("for_tests/westend9120"),
+        9120,
+        &specs(),
+    )
+    .unwrap_err();
     let reply_known = "Network spec version decoded from extensions (9111) differs from the version in metadata (9120).";
     assert!(
         reply == reply_known,
@@ -122,8 +132,13 @@ block_hash: 538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f33";
 #[test]
 fn tr_4() {
     let mut data = hex::decode("9c0403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480284d717d5031504025a62029723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84").unwrap();
-    let reply =
-        display_transaction(&mut data, &metadata("for_tests/westend9111"), 9111, &specs()).unwrap();
+    let reply = display_transaction(
+        &mut data,
+        &metadata("for_tests/westend9111"),
+        9111,
+        &specs(),
+    )
+    .unwrap();
     let reply_known = "
 Call:
 
@@ -156,8 +171,13 @@ block_hash: 98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84";
 #[test]
 fn tr_5() {
     let mut data = hex::decode("2509000115094c6f72656d20697073756d20646f6c6f722073697420616d65742c20636f6e73656374657475722061646970697363696e6720656c69742c2073656420646f20656975736d6f642074656d706f7220696e6369646964756e74207574206c61626f726520657420646f6c6f7265206d61676e6120616c697175612e20436f6e67756520657520636f6e7365717561742061632066656c697320646f6e65632e20547572706973206567657374617320696e7465676572206567657420616c6971756574206e696268207072616573656e742e204e6571756520636f6e76616c6c6973206120637261732073656d70657220617563746f72206e657175652e204e65747573206574206d616c6573756164612066616d6573206163207475727069732065676573746173207365642074656d7075732e2050656c6c656e746573717565206861626974616e74206d6f726269207472697374697175652073656e6563747573206574206e657475732065742e205072657469756d2076756c7075746174652073617069656e206e656320736167697474697320616c697175616d2e20436f6e76616c6c69732061656e65616e20657420746f72746f7220617420726973757320766976657272612e20566976616d757320617263752066656c697320626962656e64756d207574207472697374697175652065742065676573746173207175697320697073756d2e204d616c6573756164612070726f696e206c696265726f206e756e6320636f6e73657175617420696e74657264756d207661726975732e2045022c00a223000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e1b2b0a177ad4f3f93f9a56dae700e938a40201a5beabbda160a74c70e612c66a").unwrap();
-    let reply =
-        display_transaction(&mut data, &metadata("for_tests/westend9122"), 9122, &specs()).unwrap();
+    let reply = display_transaction(
+        &mut data,
+        &metadata("for_tests/westend9122"),
+        9122,
+        &specs(),
+    )
+    .unwrap();
     let reply_known = "
 Call:
 
@@ -198,8 +218,13 @@ fn tr_6() {
         name: "acala".to_string(),
         unit: "ACA".to_string(),
     };
-    let reply =
-        display_transaction(&mut data, &metadata("for_tests/acala2012"), 2012, &specs_acala).unwrap();
+    let reply = display_transaction(
+        &mut data,
+        &metadata("for_tests/acala2012"),
+        2012,
+        &specs_acala,
+    )
+    .unwrap();
     let reply_known = r#"
 Call:
 
@@ -228,4 +253,3 @@ block_hash: 5cfeb3e46c080274613bdb80809a3e84fe782ac31ea91e2c778de996f738e620"#;
         reply
     );
 }
-

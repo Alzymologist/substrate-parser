@@ -1,7 +1,7 @@
 //! Parsed cards to display decoded call and extensions data
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use num_bigint::{BigInt, BigUint};
-use scale_info::{Path, form::PortableForm};
+use scale_info::{form::PortableForm, Field, Path, Type, Variant};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{
     crypto::{AccountId32, Ss58AddressFormat, Ss58Codec},
@@ -9,9 +9,9 @@ use sp_core::{
 };
 use sp_runtime::generic::Era;
 
-use crate::ShortSpecs;
-use crate::special_indicators::SpecialtyPrimitive;
+use crate::special_indicators::{PalletSpecificItem, SpecialtyPrimitive};
 use crate::special_types::StLenCheckSpecialtyCompact;
+use crate::ShortSpecs;
 
 #[derive(Clone, Debug)]
 pub struct Info {
@@ -21,9 +21,42 @@ pub struct Info {
 
 impl Info {
     pub fn is_empty(&self) -> bool {
-        self.docs.is_empty()&&self.path.is_empty()
+        self.docs.is_empty() && self.path.is_empty()
+    }
+    pub fn from_ty(ty: &Type<PortableForm>) -> Self {
+        Self {
+            docs: ty.collect_docs(),
+            path: ty.path().to_owned(),
+        }
     }
 }
+
+pub trait Documented {
+    fn collect_docs(&self) -> String;
+}
+
+macro_rules! impl_documented {
+    ($($ty: ty), *) => {
+        $(
+            impl Documented for $ty {
+                fn collect_docs(&self) -> String {
+                    let mut docs = String::new();
+                    for (i, docs_line) in self.docs().iter().enumerate() {
+                        if i > 0 {docs.push('\n')}
+                        docs.push_str(docs_line);
+                    }
+                    docs
+                }
+            }
+        )*
+    }
+}
+
+impl_documented!(
+    Type<PortableForm>,
+    Field<PortableForm>,
+    Variant<PortableForm>
+);
 
 /// Each decoding results in `ExtendedData`
 #[derive(Clone, Debug)]
@@ -33,34 +66,61 @@ pub struct ExtendedData {
 }
 
 #[derive(Clone, Debug)]
-pub struct Call {
-    pub info_pallet: Info,
-    pub docs_call: String,
-    pub pallet: String,
-    pub call: String,
+pub struct PalletSpecificData {
+    pub pallet_info: Info,
+    pub variant_docs: String,
+    pub pallet_name: String,
+    pub variant_name: String,
     pub fields: Vec<FieldData>,
 }
 
-impl Call {
-    pub fn is_balance_display(&self) -> bool {
-        self.pallet == "Balances" || self.pallet == "Staking"
+#[derive(Clone, Debug)]
+pub struct Call(pub PalletSpecificData);
+
+#[derive(Clone, Debug)]
+pub struct Event(pub PalletSpecificData);
+
+impl PalletSpecificData {
+    fn is_balance_display(&self) -> bool {
+        self.pallet_name == "Balances" || self.pallet_name == "Staking"
     }
-    pub fn show(&self, indent: u32, short_specs: &ShortSpecs) -> String {
+    fn show(&self, indent: u32, short_specs: &ShortSpecs, item: PalletSpecificItem) -> String {
+        let identifier = match item {
+            PalletSpecificItem::Call => "call",
+            PalletSpecificItem::Event => "event",
+        };
         let mut out = [
-            readable(indent, "pallet", &self.pallet),
+            readable(indent, "pallet", &self.pallet_name),
             String::from("\n"),
-            readable(indent+1, "call", &self.call),
-        ].concat();
+            readable(indent + 1, identifier, &self.variant_name),
+        ]
+        .concat();
         for (i, field_data) in self.fields.iter().enumerate() {
             out.push('\n');
             match field_data.field_name {
-                Some(ref a) => out.push_str(&readable(indent+2, "field_name", a)),
-                None => out.push_str(&readable(indent+2, "field_number", &i.to_string()))
+                Some(ref a) => out.push_str(&readable(indent + 2, "field_name", a)),
+                None => out.push_str(&readable(indent + 2, "field_number", &i.to_string())),
             }
             out.push('\n');
-            out.push_str(&field_data.data.data.show(indent+3, short_specs, self.is_balance_display()))
+            out.push_str(&field_data.data.data.show(
+                indent + 3,
+                short_specs,
+                self.is_balance_display(),
+            ))
         }
         out
+    }
+}
+
+impl Call {
+    pub fn show(&self, indent: u32, short_specs: &ShortSpecs) -> String {
+        self.0.show(indent, short_specs, PalletSpecificItem::Call)
+    }
+}
+
+impl Event {
+    pub fn show(&self, indent: u32, short_specs: &ShortSpecs) -> String {
+        self.0.show(indent, short_specs, PalletSpecificItem::Event)
     }
 }
 
@@ -110,7 +170,9 @@ impl Sequence {
             Sequence::U16(a) => {
                 let mut out = String::new();
                 for (i, x) in a.iter().enumerate() {
-                    if i>0 {out.push('\n')}
+                    if i > 0 {
+                        out.push('\n')
+                    }
                     out.push_str(&readable(indent, "u16", &x.to_string()));
                 }
                 out
@@ -118,35 +180,43 @@ impl Sequence {
             Sequence::U32(a) => {
                 let mut out = String::new();
                 for (i, x) in a.iter().enumerate() {
-                    if i>0 {out.push('\n')}
+                    if i > 0 {
+                        out.push('\n')
+                    }
                     out.push_str(&readable(indent, "u32", &x.to_string()));
                 }
                 out
-            },
+            }
             Sequence::U64(a) => {
                 let mut out = String::new();
                 for (i, x) in a.iter().enumerate() {
-                    if i>0 {out.push('\n')}
+                    if i > 0 {
+                        out.push('\n')
+                    }
                     out.push_str(&readable(indent, "u64", &x.to_string()));
                 }
                 out
-            },
+            }
             Sequence::U128(a) => {
                 let mut out = String::new();
                 for (i, x) in a.iter().enumerate() {
-                    if i>0 {out.push('\n')}
+                    if i > 0 {
+                        out.push('\n')
+                    }
                     out.push_str(&readable(indent, "u128", &x.to_string()));
                 }
                 out
-            },
+            }
             Sequence::VecU8(a) => {
                 let mut out = String::new();
                 for (i, x) in a.iter().enumerate() {
-                    if i>0 {out.push('\n')}
+                    if i > 0 {
+                        out.push('\n')
+                    }
                     out.push_str(&readable(indent, "sequence u8", &hex::encode(x)));
                 }
                 out
-            },
+            }
         }
     }
 }
@@ -154,8 +224,9 @@ impl Sequence {
 #[derive(Clone, Debug)]
 pub enum ParsedData {
     Call(Call),
+    Event(Event),
     Composite(Vec<FieldData>), // structs
-    Tuple(Vec<ExtendedData>), // tuples
+    Tuple(Vec<ExtendedData>),  // tuples
     Variant(VariantData),
     Option(Option<Box<ParsedData>>),
     Sequence(SequenceData),
@@ -219,85 +290,128 @@ impl ParsedData {
     pub fn show(&self, indent: u32, short_specs: &ShortSpecs, display_balance: bool) -> String {
         match &self {
             ParsedData::Call(call) => call.show(indent, short_specs),
+            ParsedData::Event(event) => event.show(indent, short_specs),
             ParsedData::Composite(field_data_set) => {
-                if (field_data_set.len() == 1)&&(field_data_set[0].field_name.is_none()) {
-                    field_data_set[0].data.data.show(indent, short_specs, display_balance)
-                }
-                else {
+                if (field_data_set.len() == 1) && (field_data_set[0].field_name.is_none()) {
+                    field_data_set[0]
+                        .data
+                        .data
+                        .show(indent, short_specs, display_balance)
+                } else {
                     let mut out = String::new();
                     for (i, field_data) in field_data_set.iter().enumerate() {
-                        if i>0 {out.push('\n')}
+                        if i > 0 {
+                            out.push('\n')
+                        }
                         match field_data.field_name {
                             Some(ref a) => out.push_str(&readable(indent, "field_name", a)),
-                            None => out.push_str(&readable(indent, "field_number", &i.to_string()))
+                            None => out.push_str(&readable(indent, "field_number", &i.to_string())),
                         }
                         out.push('\n');
-                        out.push_str(&field_data.data.data.show(indent+1, short_specs, display_balance))
+                        out.push_str(&field_data.data.data.show(
+                            indent + 1,
+                            short_specs,
+                            display_balance,
+                        ))
                     }
                     out
                 }
-            },
+            }
             ParsedData::Tuple(extended_data_set) => {
                 let mut out = String::new();
                 for (i, extended_data) in extended_data_set.iter().enumerate() {
-                    if i>0 {out.push('\n')}
-                    out.push_str(&extended_data.data.show(indent, short_specs, display_balance))
+                    if i > 0 {
+                        out.push('\n')
+                    }
+                    out.push_str(
+                        &extended_data
+                            .data
+                            .show(indent, short_specs, display_balance),
+                    )
                 }
                 out
-            },
+            }
             ParsedData::Variant(variant_data) => {
                 let mut out = readable(indent, "enum_variant_name", &variant_data.variant_name);
-                if (variant_data.fields.len() == 1)&&(variant_data.fields[0].field_name.is_none()) {
+                if (variant_data.fields.len() == 1) && (variant_data.fields[0].field_name.is_none())
+                {
                     out.push('\n');
-                    out.push_str(&variant_data.fields[0].data.data.show(indent+1, short_specs, display_balance))
-                }
-                else {
+                    out.push_str(&variant_data.fields[0].data.data.show(
+                        indent + 1,
+                        short_specs,
+                        display_balance,
+                    ))
+                } else {
                     for (i, field_data) in variant_data.fields.iter().enumerate() {
                         out.push('\n');
                         match field_data.field_name {
-                            Some(ref a) => out.push_str(&readable(indent+1, "field_name", a)),
-                            None => out.push_str(&readable(indent+1, "field_number", &i.to_string()))
+                            Some(ref a) => out.push_str(&readable(indent + 1, "field_name", a)),
+                            None => {
+                                out.push_str(&readable(indent + 1, "field_number", &i.to_string()))
+                            }
                         }
                         out.push('\n');
-                        out.push_str(&field_data.data.data.show(indent+2, short_specs, display_balance))
+                        out.push_str(&field_data.data.data.show(
+                            indent + 2,
+                            short_specs,
+                            display_balance,
+                        ))
                     }
                 }
                 out
+            }
+            ParsedData::Option(option_data) => match option_data {
+                Some(parsed_data) => parsed_data.show(indent, short_specs, display_balance),
+                None => readable(indent, "none", ""),
             },
-            ParsedData::Option(option_data) => {
-                match option_data {
-                    Some(parsed_data) => parsed_data.show(indent, short_specs, display_balance),
-                    None => readable(indent, "none", ""),
-                }
-            },
-            ParsedData::Sequence(sequence_data) => {
-                sequence_data.data.show(indent)
-            },
+            ParsedData::Sequence(sequence_data) => sequence_data.data.show(indent),
             ParsedData::SequenceRaw(sequence_raw_data) => {
                 let mut out = String::new();
                 for (i, x) in sequence_raw_data.data.iter().enumerate() {
-                    if i>0 {out.push('\n')}
+                    if i > 0 {
+                        out.push('\n')
+                    }
                     out.push_str(&x.show(indent, short_specs, display_balance))
                 }
                 out
-            },
+            }
             ParsedData::PrimitiveBool(a) => readable(indent, "bool", &a.to_string()),
             ParsedData::PrimitiveChar(a) => readable(indent, "char", &a.to_string()),
-            ParsedData::PrimitiveU8 { value, specialty } => {
-                display_with_specialty::<u8>(*value, indent, *specialty, short_specs, display_balance)
-            }
-            ParsedData::PrimitiveU16 { value, specialty } => {
-                display_with_specialty::<u16>(*value, indent, *specialty, short_specs, display_balance)
-            }
-            ParsedData::PrimitiveU32 { value, specialty } => {
-                display_with_specialty::<u32>(*value, indent, *specialty, short_specs, display_balance)
-            }
-            ParsedData::PrimitiveU64 { value, specialty } => {
-                display_with_specialty::<u64>(*value, indent, *specialty, short_specs, display_balance)
-            }
-            ParsedData::PrimitiveU128 { value, specialty } => {
-                display_with_specialty::<u128>(*value, indent, *specialty, short_specs, display_balance)
-            }
+            ParsedData::PrimitiveU8 { value, specialty } => display_with_specialty::<u8>(
+                *value,
+                indent,
+                *specialty,
+                short_specs,
+                display_balance,
+            ),
+            ParsedData::PrimitiveU16 { value, specialty } => display_with_specialty::<u16>(
+                *value,
+                indent,
+                *specialty,
+                short_specs,
+                display_balance,
+            ),
+            ParsedData::PrimitiveU32 { value, specialty } => display_with_specialty::<u32>(
+                *value,
+                indent,
+                *specialty,
+                short_specs,
+                display_balance,
+            ),
+            ParsedData::PrimitiveU64 { value, specialty } => display_with_specialty::<u64>(
+                *value,
+                indent,
+                *specialty,
+                short_specs,
+                display_balance,
+            ),
+            ParsedData::PrimitiveU128 { value, specialty } => display_with_specialty::<u128>(
+                *value,
+                indent,
+                *specialty,
+                short_specs,
+                display_balance,
+            ),
             ParsedData::PrimitiveU256(a) => readable(indent, "u256", &a.to_string()),
             ParsedData::PrimitiveI8(a) => readable(indent, "i8", &a.to_string()),
             ParsedData::PrimitiveI16(a) => readable(indent, "i16", &a.to_string()),
@@ -377,13 +491,8 @@ fn display_with_specialty<T: StLenCheckSpecialtyCompact>(
                     "balance",
                     &format!("{} {}", balance.number, balance.units),
                 )
-            }
-            else {
-                readable(
-                    indent,
-                    "balance_raw",
-                    &value.to_string(),
-                )
+            } else {
+                readable(indent, "balance_raw", &value.to_string())
             }
         }
         SpecialtyPrimitive::Tip => {

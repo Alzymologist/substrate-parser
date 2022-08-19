@@ -38,7 +38,7 @@ pub enum ParserError {
         /// constant in `System` pallet of the metadata
         in_metadata: u32,
     },
-    
+
     NotReady,
 }
 
@@ -298,10 +298,10 @@ pub enum ParserDecodingError {
 /// To be compatible with signable transactions, metadata extensions must
 /// include:
 ///
-/// - `Era` (once)
-/// - block hash (once)
-/// - metadata version (once)
-/// - network genesis hash (at most, once)
+/// - `Era` (at most, once)
+/// - block hash (at most, once)
+/// - metadata version (exactly once)
+/// - network genesis hash (exactly once)
 ///
 /// If the metadata does not follow those criteria, transactons could not be
 /// parsed, and therefore, could not be signed.
@@ -384,7 +384,7 @@ impl ParserError {
 
 pub enum Error {
     Parser(ParserError),
-//    Arguments(ArgumentsError), // errors related to metadata and short_specs arguments input by user
+    //    Arguments(ArgumentsError), // errors related to metadata and short_specs arguments input by user
 }
 /*
 pub enum ArgumentsError {
@@ -401,17 +401,17 @@ impl Error {
     pub fn show(&self) -> String {
         match &self {
             Error::Parser(x) => x.show(),
-/*
-            Error::Arguments(x) => {
-                let insert = match x {
-                    ArgumentsError::Metadata(e) => format!("Bad metadata. {}", e.show()),
-                    ArgumentsError::NetworkNameMismatch {name_metadata, name_network_specs} => format!("Network name mismatch. In metadata: {}, in network specs: {}", name_metadata, name_network_specs),
-                    ArgumentsError::NoTypes => String::from("Decoding transactions with metadata V12 and V13 uses pre-existing types info. Loaded default types info is empty."),
-                    ArgumentsError::DefaultTypes => String::from("Decoding transactions with metadata V12 and V13 uses pre-existing types info. Error generating default types info."),
-                };
-                format!("Arguments error. {}", insert)
-            }
-*/
+            /*
+                        Error::Arguments(x) => {
+                            let insert = match x {
+                                ArgumentsError::Metadata(e) => format!("Bad metadata. {}", e.show()),
+                                ArgumentsError::NetworkNameMismatch {name_metadata, name_network_specs} => format!("Network name mismatch. In metadata: {}, in network specs: {}", name_metadata, name_network_specs),
+                                ArgumentsError::NoTypes => String::from("Decoding transactions with metadata V12 and V13 uses pre-existing types info. Loaded default types info is empty."),
+                                ArgumentsError::DefaultTypes => String::from("Decoding transactions with metadata V12 and V13 uses pre-existing types info. Error generating default types info."),
+                            };
+                            format!("Arguments error. {}", insert)
+                        }
+            */
         }
     }
 }
