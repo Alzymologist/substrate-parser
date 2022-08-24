@@ -241,27 +241,6 @@ macro_rules! impl_collect_double_vec {
 
 impl_collect_double_vec!(Vec<u8>, U8, VecU8);
 
-impl Collectable for String {
-    fn husk_set(parsed_data_set: &[ParsedData]) -> Option<Sequence> {
-        let mut out: Vec<Self> = Vec::new();
-
-        for x in parsed_data_set.iter() {
-            match x {
-                ParsedData::Text(text_data) => out.push(text_data.clone()),
-                ParsedData::SequenceRaw(a) => {
-                    if a.data.is_empty() {
-                        out.push(String::new())
-                    } else {
-                        return None;
-                    }
-                }
-                _ => return None,
-            }
-        }
-        Some(Sequence::Text(out))
-    }
-}
-
 pub fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
     match set.get(0) {
         Some(ParsedData::PrimitiveU8 { .. }) => u8::husk_set(set),
@@ -273,7 +252,6 @@ pub fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
             info: _,
             data: Sequence::U8(_),
         })) => <Vec<u8>>::husk_set(set),
-        Some(ParsedData::Text(_)) => String::husk_set(set),
         _ => None,
     }
 }

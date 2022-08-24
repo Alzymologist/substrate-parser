@@ -15,7 +15,7 @@ use sp_core::{H160, H512};
 
 use crate::cards::{
     Call, Documented, Event, ExtendedData, FieldData, Info, PalletSpecificData, ParsedData,
-    Sequence, SequenceData, SequenceRawData, VariantData,
+    SequenceData, SequenceRawData, VariantData,
 };
 use crate::compacts::{cut_compact, get_compact};
 use crate::error::{ParserDecodingError, ParserError};
@@ -483,22 +483,10 @@ pub fn decode_elements_set(
                 out.push(element_extended_data.data);
             }
             match wrap_sequence(&out) {
-                Some(sequence) => {
-                    if let Sequence::U8(ref vec_u8_data) = sequence {
-                        match String::from_utf8(vec_u8_data.to_owned()) {
-                            Ok(string_u8_data) => ParsedData::Text(string_u8_data),
-                            Err(_) => ParsedData::Sequence(SequenceData {
-                                info: husked.info,
-                                data: sequence,
-                            }),
-                        }
-                    } else {
-                        ParsedData::Sequence(SequenceData {
-                            info: husked.info,
-                            data: sequence,
-                        })
-                    }
-                }
+                Some(sequence) => ParsedData::Sequence(SequenceData {
+                    info: husked.info,
+                    data: sequence,
+                }),
                 None => ParsedData::SequenceRaw(SequenceRawData {
                     info: husked.info,
                     data: out,
