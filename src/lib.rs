@@ -166,7 +166,7 @@ use sp_core::H256;
 //use definitions::metadata::info_from_metadata;
 
 pub mod cards;
-use cards::{Call, ExtendedData};
+use cards::{Call, ExtendedCard, ExtendedData};
 pub mod compacts;
 use compacts::get_compact;
 mod decoding_sci;
@@ -250,21 +250,33 @@ pub fn display_transaction(
 ) -> Result<String, String> {
     let parsed = parse_transaction(data, meta_v14, version, short_specs.genesis_hash)
         .map_err(|e| Error::Parser(e).show())?;
-    let mut extensions_printed = String::new();
+    
     let indent = 0;
-    let printed_extensions = parsed
-        .extensions
-        .iter()
-        .map(|x| x.data.show(indent, short_specs, true))
-        .filter(|x| !x.is_empty());
-    for (i, x) in printed_extensions.enumerate() {
+    let mut extensions_set: Vec<ExtendedCard> = Vec::new();
+    for extension in parsed.extensions.iter() {
+        let addition_set = extension.card(indent, true, short_specs);
+        if !addition_set.is_empty() {extensions_set.extend_from_slice(&addition_set)}
+    }
+
+    let mut extensions_printed = String::new();
+    for (i, x) in extensions_set.iter().enumerate() {
         if i > 0 {
             extensions_printed.push('\n')
         }
-        extensions_printed.push_str(&x);
+        extensions_printed.push_str(&x.show());
     }
     let call_printed = match parsed.call_result {
-        Ok(call_parsed) => call_parsed.show(indent, short_specs),
+        Ok(call_parsed) => {
+            let call_set = call_parsed.card(indent, short_specs);
+            let mut call_out = String::new();
+            for (i, x) in call_set.iter().enumerate() {
+                if i > 0 {
+                    call_out.push('\n')
+                }
+                call_out.push_str(&x.show());
+            }
+            call_out
+        },
         Err(e) => e.show(),
     };
     Ok(format!(

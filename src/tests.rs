@@ -37,38 +37,40 @@ fn tr_1() {
     let reply_known = r#"
 Call:
 
-pallet: Utility
-  call: batch_all
-    field_name: calls
-      pallet: Staking
-        call: bond
-          field_name: controller
-            enum_variant_name: Id
-              Id: 5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV
-          field_name: value
-            balance: 1.061900000000 WND
-          field_name: payee
-            enum_variant_name: Staked
-      pallet: Staking
-        call: nominate
-          field_name: targets
-            enum_variant_name: Id
-              Id: 5CFPcUJgYgWryPaV1aYjSbTpbTLu42V32Ytw1L9rfoMAsfGh
-            enum_variant_name: Id
-              Id: 5G1ojzh47Yt8KoYhuAjXpHcazvsoCXe3G8LZchKDvumozJJJ
-            enum_variant_name: Id
-              Id: 5FZoQhgUCmqBxnkHX7jCqThScS2xQWiwiF61msg63CFL3Y8f
+Pallet: Utility
+  Call: batch_all
+    Field Name: calls
+      Sequence: 2 element(s)
+        Pallet: Staking
+          Call: bond
+            Field Name: controller
+              Enum Variant Name: Id
+                Id: 5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV
+            Field Name: value
+              Balance: 1.061900000000 WND
+            Field Name: payee
+              Enum Variant Name: Staked
+        Pallet: Staking
+          Call: nominate
+            Field Name: targets
+              Sequence: 3 element(s)
+                Enum Variant Name: Id
+                  Id: 5CFPcUJgYgWryPaV1aYjSbTpbTLu42V32Ytw1L9rfoMAsfGh
+                Enum Variant Name: Id
+                  Id: 5G1ojzh47Yt8KoYhuAjXpHcazvsoCXe3G8LZchKDvumozJJJ
+                Enum Variant Name: Id
+                  Id: 5FZoQhgUCmqBxnkHX7jCqThScS2xQWiwiF61msg63CFL3Y8f
 
 
 Extensions:
 
-era: Mortal, phase: 5, period: 64
-nonce: 2
-tip: 0 pWND
-network: westend9111
-tx_version: 7
-genesis_hash: e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e
-block_hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff"#;
+Era: Mortal, phase: 5, period: 64
+Nonce: 2
+Tip: 0 pWND
+Network: westend9111
+Tx Version: 7
+Genesis Hash: e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e
+Block Hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff"#;
     assert!(
         reply == reply_known,
         "Expected: {}\nReceived: {}",
@@ -142,24 +144,24 @@ fn tr_4() {
     let reply_known = "
 Call:
 
-pallet: Balances
-  call: transfer_keep_alive
-    field_name: dest
-      enum_variant_name: Id
+Pallet: Balances
+  Call: transfer_keep_alive
+    Field Name: dest
+      Enum Variant Name: Id
         Id: 5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty
-    field_name: value
-      balance: 100.000000 uWND
+    Field Name: value
+      Balance: 100.000000 uWND
 
 
 Extensions:
 
-era: Mortal, phase: 61, period: 64
-nonce: 261
-tip: 10.000000 uWND
-network: westend9111
-tx_version: 7
-genesis_hash: e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e
-block_hash: 98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84";
+Era: Mortal, phase: 61, period: 64
+Nonce: 261
+Tip: 10.000000 uWND
+Network: westend9111
+Tx Version: 7
+Genesis Hash: e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e
+Block Hash: 98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84";
     assert!(
         reply == reply_known,
         "Expected: {}\nReceived: {}",
@@ -181,21 +183,21 @@ fn tr_5() {
     let reply_known = "
 Call:
 
-pallet: System
-  call: remark
-    field_name: remark
-      text: Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Congue eu consequat ac felis donec. Turpis egestas integer eget aliquet nibh praesent. Neque convallis a cras semper auctor neque. Netus et malesuada fames ac turpis egestas sed tempus. Pellentesque habitant morbi tristique senectus et netus et. Pretium vulputate sapien nec sagittis aliquam. Convallis aenean et tortor at risus viverra. Vivamus arcu felis bibendum ut tristique et egestas quis ipsum. Malesuada proin libero nunc consequat interdum varius. 
+Pallet: System
+  Call: remark
+    Field Name: remark
+      Text: Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Congue eu consequat ac felis donec. Turpis egestas integer eget aliquet nibh praesent. Neque convallis a cras semper auctor neque. Netus et malesuada fames ac turpis egestas sed tempus. Pellentesque habitant morbi tristique senectus et netus et. Pretium vulputate sapien nec sagittis aliquam. Convallis aenean et tortor at risus viverra. Vivamus arcu felis bibendum ut tristique et egestas quis ipsum. Malesuada proin libero nunc consequat interdum varius. 
 
 
 Extensions:
 
-era: Mortal, phase: 36, period: 64
-nonce: 11
-tip: 0 pWND
-network: westend9122
-tx_version: 7
-genesis_hash: e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e
-block_hash: 1b2b0a177ad4f3f93f9a56dae700e938a40201a5beabbda160a74c70e612c66a";
+Era: Mortal, phase: 36, period: 64
+Nonce: 11
+Tip: 0 pWND
+Network: westend9122
+Tx Version: 7
+Genesis Hash: e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e
+Block Hash: 1b2b0a177ad4f3f93f9a56dae700e938a40201a5beabbda160a74c70e612c66a";
     assert!(
         reply == reply_known,
         "Expected: {}\nReceived: {}",
@@ -228,24 +230,24 @@ fn tr_6() {
     let reply_known = r#"
 Call:
 
-pallet: Balances
-  call: transfer
-    field_name: dest
-      enum_variant_name: Id
+Pallet: Balances
+  Call: transfer
+    Field Name: dest
+      Enum Variant Name: Id
         Id: 25rZGFcFEWz1d81xB98PJN8LQu5cCwjyazAerGkng5NDuk9C
-    field_name: value
-      balance: 100.000000000000 ACA
+    Field Name: value
+      Balance: 100.000000000000 ACA
 
 
 Extensions:
 
-era: Mortal, phase: 18, period: 32
-nonce: 0
-tip: 0 pACA
-network: acala2012
-tx_version: 1
-genesis_hash: fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c
-block_hash: 5cfeb3e46c080274613bdb80809a3e84fe782ac31ea91e2c778de996f738e620"#;
+Era: Mortal, phase: 18, period: 32
+Nonce: 0
+Tip: 0 pACA
+Network: acala2012
+Tx Version: 1
+Genesis Hash: fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c
+Block Hash: 5cfeb3e46c080274613bdb80809a3e84fe782ac31ea91e2c778de996f738e620"#;
     assert!(
         reply == reply_known,
         "Expected: {}\nReceived: {}",

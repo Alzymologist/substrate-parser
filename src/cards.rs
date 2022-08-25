@@ -1,6 +1,7 @@
 //! Parsed cards to display decoded call and extensions data
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use num_bigint::{BigInt, BigUint};
+use plot_icon::generate_png_scaled_default;
 use scale_info::{form::PortableForm, Field, Path, Type, Variant};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{
@@ -11,7 +12,6 @@ use sp_runtime::generic::Era;
 
 use crate::printing_balance::{AsBalance, Currency};
 use crate::special_indicators::{PalletSpecificItem, SpecialtyPrimitive};
-use crate::special_types::StLenCheckSpecialtyCompact;
 use crate::ShortSpecs;
 
 #[derive(Clone, Debug)]
@@ -121,7 +121,7 @@ impl PalletSpecificData {
         for (i, field_data) in self.fields.iter().enumerate() {
             let parser_card = match field_data.field_name {
                 Some(ref a) => ParserCard::FieldName(a.to_owned()),
-                None => ParserCard::FieldNumber(i.to_string()),
+                None => ParserCard::FieldNumber(i),
             };
             out.push(ExtendedCard{
                 parser_card,
@@ -136,47 +136,15 @@ impl PalletSpecificData {
         }
         out
     }
-    fn show(&self, indent: u32, short_specs: &ShortSpecs, item: PalletSpecificItem) -> String {
-        let identifier = match item {
-            PalletSpecificItem::Call => "call",
-            PalletSpecificItem::Event => "event",
-        };
-        let mut out = [
-            readable(indent, "pallet", &self.pallet_name),
-            String::from("\n"),
-            readable(indent + 1, identifier, &self.variant_name),
-        ]
-        .concat();
-        for (i, field_data) in self.fields.iter().enumerate() {
-            out.push('\n');
-            match field_data.field_name {
-                Some(ref a) => out.push_str(&readable(indent + 2, "field_name", a)),
-                None => out.push_str(&readable(indent + 2, "field_number", &i.to_string())),
-            }
-            out.push('\n');
-            out.push_str(&field_data.data.data.show(
-                indent + 3,
-                short_specs,
-                self.is_balance_display(),
-            ))
-        }
-        out
-    }
 }
 
 impl Call {
-    pub fn show(&self, indent: u32, short_specs: &ShortSpecs) -> String {
-        self.0.show(indent, short_specs, PalletSpecificItem::Call)
-    }
     pub fn card(&self, indent: u32, short_specs: &ShortSpecs) -> Vec<ExtendedCard> {
         self.0.card(indent, short_specs, PalletSpecificItem::Call)
     }
 }
 
 impl Event {
-    pub fn show(&self, indent: u32, short_specs: &ShortSpecs) -> String {
-        self.0.show(indent, short_specs, PalletSpecificItem::Event)
-    }
     pub fn card(&self, indent: u32, short_specs: &ShortSpecs) -> Vec<ExtendedCard> {
         self.0.card(indent, short_specs, PalletSpecificItem::Event)
     }
@@ -219,64 +187,6 @@ pub enum Sequence {
     U64(Vec<u64>),
     U128(Vec<u128>),
     VecU8(Vec<Vec<u8>>), // assumed here that no reasonably needed info is ever accompanying each u8 element
-}
-
-impl Sequence {
-    fn show(&self, indent: u32) -> String {
-        match &self {
-            Sequence::U8(a) => readable(indent, "sequence u8", &hex::encode(a)),
-            Sequence::U16(a) => {
-                let mut out = String::new();
-                for (i, x) in a.iter().enumerate() {
-                    if i > 0 {
-                        out.push('\n')
-                    }
-                    out.push_str(&readable(indent, "u16", &x.to_string()));
-                }
-                out
-            }
-            Sequence::U32(a) => {
-                let mut out = String::new();
-                for (i, x) in a.iter().enumerate() {
-                    if i > 0 {
-                        out.push('\n')
-                    }
-                    out.push_str(&readable(indent, "u32", &x.to_string()));
-                }
-                out
-            }
-            Sequence::U64(a) => {
-                let mut out = String::new();
-                for (i, x) in a.iter().enumerate() {
-                    if i > 0 {
-                        out.push('\n')
-                    }
-                    out.push_str(&readable(indent, "u64", &x.to_string()));
-                }
-                out
-            }
-            Sequence::U128(a) => {
-                let mut out = String::new();
-                for (i, x) in a.iter().enumerate() {
-                    if i > 0 {
-                        out.push('\n')
-                    }
-                    out.push_str(&readable(indent, "u128", &x.to_string()));
-                }
-                out
-            }
-            Sequence::VecU8(a) => {
-                let mut out = String::new();
-                for (i, x) in a.iter().enumerate() {
-                    if i > 0 {
-                        out.push('\n')
-                    }
-                    out.push_str(&readable(indent, "sequence u8", &hex::encode(x)));
-                }
-                out
-            }
-        }
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -388,7 +298,7 @@ macro_rules! sequence {
     ($func:ident, $ty:ty, $variant:ident) => {
         fn $func(set: &[$ty], indent: u32, info_flat: Vec<InfoFlat>) -> Vec<ExtendedCard> {
             let mut out = vec![ExtendedCard{
-                parser_card: ParserCard::SequenceAnnounced,
+                parser_card: ParserCard::SequenceAnnounced(set.len()),
                 indent,
                 info_flat,
             }];
@@ -436,7 +346,7 @@ impl ParsedData {
                     for (i, field_data) in field_data_set.iter().enumerate() {
                         let parser_card = match field_data.field_name {
                             Some(ref a) => ParserCard::FieldName(a.to_owned()),
-                            None => ParserCard::FieldNumber(i.to_string()),
+                            None => ParserCard::FieldNumber(i),
                         };
                         out.push(ExtendedCard{
                             parser_card,
@@ -458,7 +368,15 @@ impl ParsedData {
             ParsedData::H160(value) => single_card!(H160, value, indent, info_flat),
             ParsedData::H256(value) => single_card!(H256, value, indent, info_flat),
             ParsedData::H512(value) => single_card!(H512, value, indent, info_flat),
-            ParsedData::Id(value) => single_card!(Id, value, indent, info_flat),
+            ParsedData::Id(value) => {
+                let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
+                let identicon = generate_png_scaled_default(&<[u8; 32]>::from(value.to_owned()));
+                vec![ExtendedCard{
+                    parser_card: ParserCard::Id(IdData{base58, identicon}),
+                    indent,
+                    info_flat,
+                }]
+            },
             ParsedData::Option(option) => match option {
                 None => vec![ExtendedCard{
                     parser_card: ParserCard::None,
@@ -491,9 +409,33 @@ impl ParsedData {
             ParsedData::PrimitiveU128 { value, specialty } => 
                 specialty_card!(u128, PrimitiveU128, value, display_balance, indent, info_flat, short_specs, specialty),
             ParsedData::PrimitiveU256(value) => single_card!(PrimitiveU256, value, indent, info_flat),
-            ParsedData::PublicEd25519(value) => single_card!(PublicEd25519, value, indent, info_flat),
-            ParsedData::PublicSr25519(value) => single_card!(PublicSr25519, value, indent, info_flat),
-            ParsedData::PublicEcdsa(value) => single_card!(PublicEcdsa, value, indent, info_flat),
+            ParsedData::PublicEd25519(value) => {
+                let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
+                let identicon = generate_png_scaled_default(&value.0);
+                vec![ExtendedCard{
+                    parser_card: ParserCard::PublicEd25519(IdData{base58, identicon}),
+                    indent,
+                    info_flat,
+                }]
+            },
+            ParsedData::PublicSr25519(value) => {
+                let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
+                let identicon = generate_png_scaled_default(&value.0);
+                vec![ExtendedCard{
+                    parser_card: ParserCard::PublicSr25519(IdData{base58, identicon}),
+                    indent,
+                    info_flat,
+                }]
+            },
+            ParsedData::PublicEcdsa(value) => {
+                let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
+                let identicon = generate_png_scaled_default(&value.0);
+                vec![ExtendedCard{
+                    parser_card: ParserCard::PublicEcdsa(IdData{base58, identicon}),
+                    indent,
+                    info_flat,
+                }]
+            },
             ParsedData::Sequence(sequence) => {
                 let mut new_info_flat = info_flat;
                 let sequence_info_flat: Vec<InfoFlat> = sequence.info.iter().map(|x| x.flatten()).collect();
@@ -516,7 +458,7 @@ impl ParsedData {
                     Sequence::U128(vec) => seq_u128(vec, indent, new_info_flat),
                     Sequence::VecU8(vec) => {
                         let mut out = vec![ExtendedCard{
-                            parser_card: ParserCard::SequenceAnnounced,
+                            parser_card: ParserCard::SequenceAnnounced(vec.len()),
                             indent,
                             info_flat: new_info_flat,
                         }];
@@ -540,12 +482,12 @@ impl ParsedData {
                 let sequence_info_flat: Vec<InfoFlat> = sequence_raw.info.iter().map(|x| x.flatten()).collect();
                 new_info_flat.extend_from_slice(&sequence_info_flat);
                 let mut out = vec![ExtendedCard{
-                    parser_card: ParserCard::SequenceAnnounced,
+                    parser_card: ParserCard::SequenceAnnounced(sequence_raw.data.len()),
                     indent,
                     info_flat: new_info_flat,
                 }];
                 for element in sequence_raw.data.iter() {
-                    out.extend_from_slice(&element.card(Vec::new(), indent, display_balance, short_specs))
+                    out.extend_from_slice(&element.card(Vec::new(), indent+1, display_balance, short_specs))
                 }
                 out
             },
@@ -580,7 +522,7 @@ impl ParsedData {
                     for (i, field_data) in variant_data.fields.iter().enumerate() {
                         let parser_card = match field_data.field_name {
                             Some(ref a) => ParserCard::FieldName(a.to_owned()),
-                            None => ParserCard::FieldNumber(i.to_string()),
+                            None => ParserCard::FieldNumber(i),
                         };
                         out.push(ExtendedCard{
                             parser_card,
@@ -598,206 +540,6 @@ impl ParsedData {
             },
         }
     }
-
-    pub fn show(&self, indent: u32, short_specs: &ShortSpecs, display_balance: bool) -> String {
-        match &self {
-            ParsedData::BitVecU8Lsb0(a) => readable(indent, "BitVec<u8, Lsb0>", &a.to_string()),
-            ParsedData::BitVecU16Lsb0(a) => readable(indent, "BitVec<u16, Lsb0>", &a.to_string()),
-            ParsedData::BitVecU32Lsb0(a) => readable(indent, "BitVec<u32, Lsb0>", &a.to_string()),
-            ParsedData::BitVecU64Lsb0(a) => readable(indent, "BitVec<u64, Lsb0>", &a.to_string()),
-            ParsedData::BitVecU8Msb0(a) => readable(indent, "BitVec<u8, Msb0>", &a.to_string()),
-            ParsedData::BitVecU16Msb0(a) => readable(indent, "BitVec<u16, Msb0>", &a.to_string()),
-            ParsedData::BitVecU32Msb0(a) => readable(indent, "BitVec<u32, Msb0>", &a.to_string()),
-            ParsedData::BitVecU64Msb0(a) => readable(indent, "BitVec<u64, Msb0>", &a.to_string()),
-            ParsedData::BlockHash(block_hash) => {
-                readable(indent, "block_hash", &hex::encode(block_hash))
-            }
-            ParsedData::Call(call) => call.show(indent, short_specs),
-            ParsedData::Composite(field_data_set) => {
-                if (field_data_set.len() == 1) && (field_data_set[0].field_name.is_none()) {
-                    field_data_set[0]
-                        .data
-                        .data
-                        .show(indent, short_specs, display_balance)
-                } else {
-                    let mut out = String::new();
-                    for (i, field_data) in field_data_set.iter().enumerate() {
-                        if i > 0 {
-                            out.push('\n')
-                        }
-                        match field_data.field_name {
-                            Some(ref a) => out.push_str(&readable(indent, "field_name", a)),
-                            None => out.push_str(&readable(indent, "field_number", &i.to_string())),
-                        }
-                        out.push('\n');
-                        out.push_str(&field_data.data.data.show(
-                            indent + 1,
-                            short_specs,
-                            display_balance,
-                        ))
-                    }
-                    out
-                }
-            }
-            ParsedData::Era(era) => match era {
-                Era::Immortal => readable(indent, "era", "Immortal"),
-                Era::Mortal(period, phase) => readable(
-                    indent,
-                    "era",
-                    &format!("Mortal, phase: {}, period: {}", phase, period),
-                ),
-            },
-            ParsedData::Event(event) => event.show(indent, short_specs),
-            ParsedData::GenesisHash(genesis_hash) => {
-                readable(indent, "genesis_hash", &hex::encode(genesis_hash))
-            }
-            ParsedData::H160(h) => readable(indent, "H160", &hex::encode(h.0)),
-            ParsedData::H256(h) => readable(indent, "H256", &hex::encode(h.0)),
-            ParsedData::H512(h) => readable(indent, "H512", &hex::encode(h.0)),
-            ParsedData::Id(id) => readable(
-                indent,
-                "Id",
-                &id.to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix)),
-            ),
-            ParsedData::Option(option_data) => match option_data {
-                Some(parsed_data) => parsed_data.show(indent, short_specs, display_balance),
-                None => readable(indent, "option", "none"),
-            },
-            ParsedData::Sequence(sequence_data) => sequence_data.data.show(indent),
-            ParsedData::SequenceRaw(sequence_raw_data) => {
-                let mut out = String::new();
-                for (i, x) in sequence_raw_data.data.iter().enumerate() {
-                    if i > 0 {
-                        out.push('\n')
-                    }
-                    out.push_str(&x.show(indent, short_specs, display_balance))
-                }
-                out
-            }
-            ParsedData::PerU16(a) => readable(indent, "per_u16", &a.deconstruct().to_string()),
-            ParsedData::Percent(a) => readable(indent, "percent", &a.deconstruct().to_string()),
-            ParsedData::Permill(a) => readable(indent, "permill", &a.deconstruct().to_string()),
-            ParsedData::Perbill(a) => readable(indent, "perbill", &a.deconstruct().to_string()),
-            ParsedData::Perquintill(a) => {
-                readable(indent, "perquintill", &a.deconstruct().to_string())
-            }
-            ParsedData::PrimitiveBool(a) => readable(indent, "bool", &a.to_string()),
-            ParsedData::PrimitiveChar(a) => readable(indent, "char", &a.to_string()),
-            ParsedData::PrimitiveI8(a) => readable(indent, "i8", &a.to_string()),
-            ParsedData::PrimitiveI16(a) => readable(indent, "i16", &a.to_string()),
-            ParsedData::PrimitiveI32(a) => readable(indent, "i32", &a.to_string()),
-            ParsedData::PrimitiveI64(a) => readable(indent, "i64", &a.to_string()),
-            ParsedData::PrimitiveI128(a) => readable(indent, "i128", &a.to_string()),
-            ParsedData::PrimitiveI256(a) => readable(indent, "i256", &a.to_string()),
-            ParsedData::PrimitiveU8 { value, specialty } => display_with_specialty::<u8>(
-                *value,
-                indent,
-                *specialty,
-                short_specs,
-                display_balance,
-            ),
-            ParsedData::PrimitiveU16 { value, specialty } => display_with_specialty::<u16>(
-                *value,
-                indent,
-                *specialty,
-                short_specs,
-                display_balance,
-            ),
-            ParsedData::PrimitiveU32 { value, specialty } => display_with_specialty::<u32>(
-                *value,
-                indent,
-                *specialty,
-                short_specs,
-                display_balance,
-            ),
-            ParsedData::PrimitiveU64 { value, specialty } => display_with_specialty::<u64>(
-                *value,
-                indent,
-                *specialty,
-                short_specs,
-                display_balance,
-            ),
-            ParsedData::PrimitiveU128 { value, specialty } => display_with_specialty::<u128>(
-                *value,
-                indent,
-                *specialty,
-                short_specs,
-                display_balance,
-            ),
-            ParsedData::PrimitiveU256(a) => readable(indent, "u256", &a.to_string()),
-            ParsedData::PublicEd25519(public) => readable(
-                indent,
-                "Public Ed25519",
-                &public
-                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix)),
-            ),
-            ParsedData::PublicSr25519(public) => readable(
-                indent,
-                "Public Sr25519",
-                &public
-                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix)),
-            ),
-            ParsedData::PublicEcdsa(public) => readable(
-                indent,
-                "Public Ecdsa",
-                &public
-                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix)),
-            ),
-            ParsedData::SignatureEd25519(signature) => {
-                readable(indent, "Signature Ed25519", &hex::encode(signature.0))
-            }
-            ParsedData::SignatureSr25519(signature) => {
-                readable(indent, "Signature Sr25519", &hex::encode(signature.0))
-            }
-            ParsedData::SignatureEcdsa(signature) => {
-                readable(indent, "Signature Ecdsa", &hex::encode(signature.0))
-            }
-            ParsedData::Text(decoded_text) => readable(indent, "text", decoded_text),
-            ParsedData::Tuple(extended_data_set) => {
-                let mut out = String::new();
-                for (i, extended_data) in extended_data_set.iter().enumerate() {
-                    if i > 0 {
-                        out.push('\n')
-                    }
-                    out.push_str(
-                        &extended_data
-                            .data
-                            .show(indent, short_specs, display_balance),
-                    )
-                }
-                out
-            }
-            ParsedData::Variant(variant_data) => {
-                let mut out = readable(indent, "enum_variant_name", &variant_data.variant_name);
-                if (variant_data.fields.len() == 1) && (variant_data.fields[0].field_name.is_none())
-                {
-                    out.push('\n');
-                    out.push_str(&variant_data.fields[0].data.data.show(
-                        indent + 1,
-                        short_specs,
-                        display_balance,
-                    ))
-                } else {
-                    for (i, field_data) in variant_data.fields.iter().enumerate() {
-                        out.push('\n');
-                        match field_data.field_name {
-                            Some(ref a) => out.push_str(&readable(indent + 1, "field_name", a)),
-                            None => {
-                                out.push_str(&readable(indent + 1, "field_number", &i.to_string()))
-                            }
-                        }
-                        out.push('\n');
-                        out.push_str(&field_data.data.data.show(
-                            indent + 2,
-                            short_specs,
-                            display_balance,
-                        ))
-                    }
-                }
-                out
-            }
-        }
-    }
 }
 
 fn readable(indent: u32, card_type: &str, card_payload: &str) -> String {
@@ -807,40 +549,6 @@ fn readable(indent: u32, card_type: &str, card_payload: &str) -> String {
         card_type,
         card_payload
     )
-}
-
-fn display_with_specialty<T: StLenCheckSpecialtyCompact>(
-    value: T,
-    indent: u32,
-    specialty: SpecialtyPrimitive,
-    short_specs: &ShortSpecs,
-    display_balance: bool,
-) -> String {
-    match specialty {
-        SpecialtyPrimitive::None => readable(indent, T::default_card_name(), &value.to_string()),
-        SpecialtyPrimitive::Balance => {
-            if display_balance {
-                let balance =
-                    <T>::convert_balance_pretty(value, short_specs.decimals, &short_specs.unit);
-                readable(
-                    indent,
-                    "balance",
-                    &format!("{} {}", balance.number, balance.units),
-                )
-            } else {
-                readable(indent, "balance_raw", &value.to_string())
-            }
-        }
-        SpecialtyPrimitive::Tip => {
-            let tip = <T>::convert_balance_pretty(value, short_specs.decimals, &short_specs.unit);
-            readable(indent, "tip", &format!("{} {}", tip.number, tip.units))
-        }
-        SpecialtyPrimitive::Nonce => readable(indent, "nonce", &value.to_string()),
-        SpecialtyPrimitive::SpecVersion => {
-            readable(indent, "network", &format!("{}{}", short_specs.name, value))
-        }
-        SpecialtyPrimitive::TxVersion => readable(indent, "tx_version", &value.to_string()),
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -854,6 +562,12 @@ pub struct ExtendedCard {
 pub struct InfoFlat {
     pub docs: String,
     pub path_flat: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct IdData {
+    pub base58: String,
+    pub identicon: Vec<u8>,
 }
 
 #[derive(Clone, Debug)]
@@ -874,12 +588,12 @@ pub enum ParserCard {
     Era(Era),
     EventName(String),
     FieldName(String),
-    FieldNumber(String),
+    FieldNumber(usize),
     GenesisHash(H256),
     H160(H160),
     H256(H256),
     H512(H512),
-    Id(AccountId32),
+    Id(IdData),
     NameSpecVersion { name: String, version: String },
     Nonce(String),
     None,
@@ -903,10 +617,10 @@ pub enum ParserCard {
     PrimitiveU64(u64),
     PrimitiveU128(u128),
     PrimitiveU256(BigUint),
-    PublicEd25519(ed25519::Public),
-    PublicSr25519(sr25519::Public),
-    PublicEcdsa(ecdsa::Public),
-    SequenceAnnounced,
+    PublicEd25519(IdData),
+    PublicSr25519(IdData),
+    PublicEcdsa(IdData),
+    SequenceAnnounced(usize),
     SequenceU8 { hex: String, text: Option<String> },
     SignatureEd25519(ed25519::Signature),
     SignatureSr25519(sr25519::Signature),
@@ -921,19 +635,82 @@ impl ExtendedData {
         let info_flat = self.info.iter().map(|x| x.flatten()).collect();
         self.data.card(info_flat, indent, display_balance, short_specs)
     }
+    pub fn show(&self, indent: u32, display_balance: bool, short_specs: &ShortSpecs) -> String {
+        let cards = self.card(indent, display_balance, short_specs);
+        let mut out = String::new();
+        for (i, x) in cards.iter().enumerate() {
+            if i>0 {out.push('\n')}
+            out.push_str(&x.show())
+        }
+        out
+    }
 }
 
-/*
-pub fn card_extended_data(extended_data_set: &[ExtendedData]) -> Vec<ExtendedCard> {
-    let mut out: Vec<ExtendedData> = Vec::new();
-    let mut start_indent = 0;
-    
-    for extended_data in extended_data_set.iter() {
-        match extended_data.data {
-            
+impl ExtendedCard {
+    pub fn show(&self) -> String {
+        match &self.parser_card {
+            ParserCard::Balance(a) => readable(self.indent, "Balance", &format!("{} {}", a.number, a.units)),
+            ParserCard::BalanceRaw(a) => readable(self.indent, "Balance Raw", a),
+            ParserCard::BitVecU8Lsb0(a) => readable(self.indent, "BitVec<u8, Lsb0>", &a.to_string()),
+            ParserCard::BitVecU16Lsb0(a) => readable(self.indent, "BitVec<u16, Lsb0>", &a.to_string()),
+            ParserCard::BitVecU32Lsb0(a) => readable(self.indent, "BitVec<u32, Lsb0>", &a.to_string()),
+            ParserCard::BitVecU64Lsb0(a) => readable(self.indent, "BitVec<u64, Lsb0>", &a.to_string()),
+            ParserCard::BitVecU8Msb0(a) => readable(self.indent, "BitVec<u8, Msb0>", &a.to_string()),
+            ParserCard::BitVecU16Msb0(a) => readable(self.indent, "BitVec<u16, Msb0>", &a.to_string()),
+            ParserCard::BitVecU32Msb0(a) => readable(self.indent, "BitVec<u32, Msb0>", &a.to_string()),
+            ParserCard::BitVecU64Msb0(a) => readable(self.indent, "BitVec<u64, Msb0>", &a.to_string()),
+            ParserCard::BlockHash(a) => readable(self.indent, "Block Hash", &hex::encode(a)),
+            ParserCard::CallName(a) => readable(self.indent, "Call", a),
+            ParserCard::EnumVariantName(a) => readable(self.indent, "Enum Variant Name", a),
+            ParserCard::Era(a) => match a {
+                Era::Immortal => readable(self.indent, "Era", "Immortal"),
+                Era::Mortal(period, phase) => readable(self.indent, "Era", &format!("Mortal, phase: {}, period: {}", phase, period)),
+            },
+            ParserCard::EventName(a) => readable(self.indent, "Event", a),
+            ParserCard::FieldName(a) => readable(self.indent, "Field Name", a),
+            ParserCard::FieldNumber(a) => readable(self.indent, "Field Number", &a.to_string()),
+            ParserCard::GenesisHash(a) => readable(self.indent, "Genesis Hash", &hex::encode(a)),
+            ParserCard::H160(a) => readable(self.indent, "H160", &hex::encode(a.0)),
+            ParserCard::H256(a) => readable(self.indent, "H256", &hex::encode(a.0)),
+            ParserCard::H512(a) => readable(self.indent, "H512", &hex::encode(a.0)),
+            ParserCard::Id(a) => readable(self.indent, "Id", &a.base58),
+            ParserCard::NameSpecVersion { name, version } => readable(self.indent, "Network", &format!("{}{}", name, version)),
+            ParserCard::Nonce(a) => readable(self.indent, "Nonce", a),
+            ParserCard::None => readable(self.indent, "Option", "None"),
+            ParserCard::PalletName(a) => readable(self.indent, "Pallet", a),
+            ParserCard::PerU16(a) => readable(self.indent, "PerU16", &a.deconstruct().to_string()),
+            ParserCard::Percent(a) => readable(self.indent, "Percent", &a.deconstruct().to_string()),
+            ParserCard::Permill(a) => readable(self.indent, "Permill", &a.deconstruct().to_string()),
+            ParserCard::Perbill(a) => readable(self.indent, "Perbill", &a.deconstruct().to_string()),
+            ParserCard::Perquintill(a) => readable(self.indent, "Perquintill", &a.deconstruct().to_string()),
+            ParserCard::PrimitiveBool(a) => readable(self.indent, "Bool", &a.to_string()),
+            ParserCard::PrimitiveChar(a) => readable(self.indent, "Char", &a.to_string()),
+            ParserCard::PrimitiveI8(a) => readable(self.indent, "i8", &a.to_string()),
+            ParserCard::PrimitiveI16(a) => readable(self.indent, "i16", &a.to_string()),
+            ParserCard::PrimitiveI32(a) => readable(self.indent, "i32", &a.to_string()),
+            ParserCard::PrimitiveI64(a) => readable(self.indent, "i64", &a.to_string()),
+            ParserCard::PrimitiveI128(a) => readable(self.indent, "i128", &a.to_string()),
+            ParserCard::PrimitiveI256(a) => readable(self.indent, "BigInt", &a.to_string()),
+            ParserCard::PrimitiveU8(a) => readable(self.indent, "u8", &a.to_string()),
+            ParserCard::PrimitiveU16(a) => readable(self.indent, "u16", &a.to_string()),
+            ParserCard::PrimitiveU32(a) => readable(self.indent, "u32", &a.to_string()),
+            ParserCard::PrimitiveU64(a) => readable(self.indent, "u64", &a.to_string()),
+            ParserCard::PrimitiveU128(a) => readable(self.indent, "u128", &a.to_string()),
+            ParserCard::PrimitiveU256(a) => readable(self.indent, "BigUint", &a.to_string()),
+            ParserCard::PublicEd25519(a) => readable(self.indent, "PublicKey Ed25519", &a.base58),
+            ParserCard::PublicSr25519(a) => readable(self.indent, "PublicKey Sr25519", &a.base58),
+            ParserCard::PublicEcdsa(a) => readable(self.indent, "PublicKey Ecdsa", &a.base58),
+            ParserCard::SequenceAnnounced(a) => readable(self.indent, "Sequence", &format!("{} element(s)", a)),
+            ParserCard::SequenceU8 {hex, text} => match text {
+                Some(valid_text) => readable(self.indent, "Text", valid_text),
+                None => readable(self.indent, "Sequence u8", hex),
+            },
+            ParserCard::SignatureEd25519(a) => readable(self.indent, "Signature Ed25519", &hex::encode(a.0)),
+            ParserCard::SignatureSr25519(a) => readable(self.indent, "Signature Sr25519", &hex::encode(a.0)),
+            ParserCard::SignatureEcdsa(a) => readable(self.indent, "Signature Ecdsa", &hex::encode(a.0)),
+            ParserCard::Text(a) => readable(self.indent, "Text", a),
+            ParserCard::Tip(a) => readable(self.indent, "Tip", &format!("{} {}", a.number, a.units)),
+            ParserCard::TxVersion(a) => readable(self.indent, "Tx Version", a),
         }
     }
-    
 }
-
-*/
