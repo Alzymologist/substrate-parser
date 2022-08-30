@@ -249,7 +249,7 @@ pub fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
         Some(ParsedData::PrimitiveU64 { .. }) => u64::husk_set(set),
         Some(ParsedData::PrimitiveU128 { .. }) => u128::husk_set(set),
         Some(ParsedData::Sequence(SequenceData {
-            info: _,
+            element_info: _,
             data: Sequence::U8(_),
         })) => <Vec<u8>>::husk_set(set),
         _ => None,

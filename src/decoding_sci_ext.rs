@@ -50,7 +50,10 @@ pub fn check_extensions(
     let mut collected_ext = CollectedExt::new();
     for ext in extensions.iter() {
         match ext.data {
-            ParsedData::Era(era) => collected_ext.add_era(era)?,
+            ParsedData::Era(era) => {
+                println!("detected era");
+                collected_ext.add_era(era)?
+            },
             ParsedData::GenesisHash(h) => collected_ext.add_genesis_hash(h)?,
             ParsedData::BlockHash(h) => collected_ext.add_block_hash(h)?,
             ParsedData::PrimitiveU8 {
@@ -73,6 +76,39 @@ pub fn check_extensions(
                 value,
                 specialty: SpecialtyPrimitive::SpecVersion,
             } => collected_ext.add_spec_version::<u128>(value)?,
+            ParsedData::Composite(ref field_data) => {
+                if field_data.len() == 1 {
+                    match field_data[0].data.data {
+                        ParsedData::Era(era) => {
+                            println!("detected era");
+                            collected_ext.add_era(era)?
+                        },
+                        ParsedData::GenesisHash(h) => collected_ext.add_genesis_hash(h)?,
+                        ParsedData::BlockHash(h) => collected_ext.add_block_hash(h)?,
+                        ParsedData::PrimitiveU8 {
+                            value,
+                            specialty: SpecialtyPrimitive::SpecVersion,
+                        } => collected_ext.add_spec_version::<u8>(value)?,
+                        ParsedData::PrimitiveU16 {
+                            value,
+                            specialty: SpecialtyPrimitive::SpecVersion,
+                        } => collected_ext.add_spec_version::<u16>(value)?,
+                        ParsedData::PrimitiveU32 {
+                            value,
+                            specialty: SpecialtyPrimitive::SpecVersion,
+                        } => collected_ext.add_spec_version::<u32>(value)?,
+                        ParsedData::PrimitiveU64 {
+                            value,
+                            specialty: SpecialtyPrimitive::SpecVersion,
+                        } => collected_ext.add_spec_version::<u64>(value)?,
+                        ParsedData::PrimitiveU128 {
+                            value,
+                            specialty: SpecialtyPrimitive::SpecVersion,
+                        } => collected_ext.add_spec_version::<u128>(value)?,
+                        _ => (),
+                    }
+                }
+            },
             _ => (),
         }
     }

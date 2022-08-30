@@ -1,6 +1,8 @@
-use crate::display_transaction;
+use crate::{display_transaction, parse_transaction};
 use frame_metadata::v14::RuntimeMetadataV14;
 use parity_scale_codec::Decode;
+use sp_core::H256;
+use std::str::FromStr;
 
 use crate::ShortSpecs;
 
@@ -44,22 +46,27 @@ Pallet: Utility
         Pallet: Staking
           Call: bond
             Field Name: controller
-              Enum Variant Name: Id
-                Id: 5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV
+              Enum
+                Enum Variant Name: Id
+                  Id: 5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV
             Field Name: value
               Balance: 1.061900000000 WND
             Field Name: payee
-              Enum Variant Name: Staked
+              Enum
+                Enum Variant Name: Staked
         Pallet: Staking
           Call: nominate
             Field Name: targets
               Sequence: 3 element(s)
-                Enum Variant Name: Id
-                  Id: 5CFPcUJgYgWryPaV1aYjSbTpbTLu42V32Ytw1L9rfoMAsfGh
-                Enum Variant Name: Id
-                  Id: 5G1ojzh47Yt8KoYhuAjXpHcazvsoCXe3G8LZchKDvumozJJJ
-                Enum Variant Name: Id
-                  Id: 5FZoQhgUCmqBxnkHX7jCqThScS2xQWiwiF61msg63CFL3Y8f
+                Enum
+                  Enum Variant Name: Id
+                    Id: 5CFPcUJgYgWryPaV1aYjSbTpbTLu42V32Ytw1L9rfoMAsfGh
+                Enum
+                  Enum Variant Name: Id
+                    Id: 5G1ojzh47Yt8KoYhuAjXpHcazvsoCXe3G8LZchKDvumozJJJ
+                Enum
+                  Enum Variant Name: Id
+                    Id: 5FZoQhgUCmqBxnkHX7jCqThScS2xQWiwiF61msg63CFL3Y8f
 
 
 Extensions:
@@ -69,7 +76,6 @@ Nonce: 2
 Tip: 0 pWND
 Network: westend9111
 Tx Version: 7
-Genesis Hash: e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e
 Block Hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff"#;
     assert!(
         reply == reply_known,
@@ -97,40 +103,121 @@ fn tr_2() {
         reply
     );
 }
-/*
+
 #[test]
 fn tr_3() {
-    let mut data = hex::decode("a40403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480700e8764817b501b8003223000005000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f33").unwrap();
-    let reply =
-        parse_and_display_set(&mut data, &metadata("for_tests/westend9010"), &specs()).unwrap();
-    let reply_known = "
-Call:
+    let mut data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
+    let reply = parse_transaction(
+        &mut data,
+        &metadata("for_tests/westend9111"),
+        9111,
+        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
+    )
+    .unwrap();
+    let call_set = reply.call_result.unwrap().card(0u32, &specs());
+    let mut call_printed = String::new();
+    for x in call_set.iter() {
+        call_printed.push('\n');
+        call_printed.push_str(&x.show_with_docs());
+    }
+    let call_known = r#"
+Pallet: Utility
+(docs: Contains one variant per dispatchable that can be called by an extrinsic., path: pallet_utility >> pallet >> Call)
+  Call: batch_all
+  (docs: Send a batch of dispatch calls and atomically execute them.
+The whole transaction will rollback and fail if any of the calls failed.
 
-pallet: Balances,
-  call: transfer_keep_alive,
-    varname: dest,
-      enum_variant_name: Id,
-        Id: 5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty,
-    varname: value,
-      balance: 100.000000000 mWND
+May be called from any origin.
 
+- `calls`: The calls to be dispatched from the same origin. The number of call must not
+  exceed the constant: `batched_calls_limit` (available in constant metadata).
 
-Extensions:
+If origin is root then call are dispatch without checking origin filter. (This includes
+bypassing `frame_system::Config::BaseCallFilter`).
 
-era: Mortal, phase: 27, period: 64,
-nonce: 46,
-tip: 0 pWND,
-network: westend9010,
-tx_version: 5,
-block_hash: 538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f33";
+# <weight>
+- Complexity: O(C) where C is the number of calls to be batched.
+# </weight>, path: None)
+    Field Name: calls
+    (docs: None, path: None)
+      Sequence: 2 element(s), element info: (docs: None, path: westend_runtime >> Call)
+        Pallet: Staking
+        (docs: Contains one variant per dispatchable that can be called by an extrinsic., path: pallet_staking >> pallet >> pallet >> Call)
+          Call: bond
+          (docs: Take the origin account as a stash and lock up `value` of its balance. `controller` will
+be the account that controls it.
+
+`value` must be more than the `minimum_balance` specified by `T::Currency`.
+
+The dispatch origin for this call must be _Signed_ by the stash account.
+
+Emits `Bonded`.
+# <weight>
+- Independent of the arguments. Moderate complexity.
+- O(1).
+- Three extra DB entries.
+
+NOTE: Two of the storage writes (`Self::bonded`, `Self::payee`) are _never_ cleaned
+unless the `origin` falls below _existential deposit_ and gets removed as dust.
+------------------
+# </weight>, path: None)
+            Field Name: controller
+            (docs: None, path: None)
+              Enum
+              (docs: None, path: sp_runtime >> multiaddress >> MultiAddress)
+                Enum Variant Name: Id
+                (docs: None, path: None)
+                  Id: 5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV
+                  (docs: None, path: sp_core >> crypto >> AccountId32)
+            Field Name: value
+            (docs: None, path: None)
+              Balance: 1.061900000000 WND
+            Field Name: payee
+            (docs: None, path: None)
+              Enum
+              (docs: None, path: pallet_staking >> RewardDestination)
+                Enum Variant Name: Staked
+                (docs: None, path: None)
+        Pallet: Staking
+        (docs: Contains one variant per dispatchable that can be called by an extrinsic., path: pallet_staking >> pallet >> pallet >> Call)
+          Call: nominate
+          (docs: Declare the desire to nominate `targets` for the origin controller.
+
+Effects will be felt at the beginning of the next era.
+
+The dispatch origin for this call must be _Signed_ by the controller, not the stash.
+
+# <weight>
+- The transaction's complexity is proportional to the size of `targets` (N)
+which is capped at CompactAssignments::LIMIT (MAX_NOMINATIONS).
+- Both the reads and writes follow a similar pattern.
+# </weight>, path: None)
+            Field Name: targets
+            (docs: None, path: None)
+              Sequence: 3 element(s), element info: (docs: None, path: sp_runtime >> multiaddress >> MultiAddress)
+                Enum
+                  Enum Variant Name: Id
+                  (docs: None, path: None)
+                    Id: 5CFPcUJgYgWryPaV1aYjSbTpbTLu42V32Ytw1L9rfoMAsfGh
+                    (docs: None, path: sp_core >> crypto >> AccountId32)
+                Enum
+                  Enum Variant Name: Id
+                  (docs: None, path: None)
+                    Id: 5G1ojzh47Yt8KoYhuAjXpHcazvsoCXe3G8LZchKDvumozJJJ
+                    (docs: None, path: sp_core >> crypto >> AccountId32)
+                Enum
+                  Enum Variant Name: Id
+                  (docs: None, path: None)
+                    Id: 5FZoQhgUCmqBxnkHX7jCqThScS2xQWiwiF61msg63CFL3Y8f
+                    (docs: None, path: sp_core >> crypto >> AccountId32)"#;
     assert!(
-        reply == reply_known,
+        call_printed == call_known,
         "Expected: {}\nReceived: {}",
-        reply_known,
-        reply
+        call_known,
+        call_printed
     );
 }
-*/
+
 #[test]
 fn tr_4() {
     let mut data = hex::decode("9c0403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480284d717d5031504025a62029723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84").unwrap();
@@ -147,8 +234,9 @@ Call:
 Pallet: Balances
   Call: transfer_keep_alive
     Field Name: dest
-      Enum Variant Name: Id
-        Id: 5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty
+      Enum
+        Enum Variant Name: Id
+          Id: 5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty
     Field Name: value
       Balance: 100.000000 uWND
 
@@ -160,7 +248,6 @@ Nonce: 261
 Tip: 10.000000 uWND
 Network: westend9111
 Tx Version: 7
-Genesis Hash: e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e
 Block Hash: 98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84";
     assert!(
         reply == reply_known,
@@ -196,7 +283,6 @@ Nonce: 11
 Tip: 0 pWND
 Network: westend9122
 Tx Version: 7
-Genesis Hash: e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e
 Block Hash: 1b2b0a177ad4f3f93f9a56dae700e938a40201a5beabbda160a74c70e612c66a";
     assert!(
         reply == reply_known,
@@ -233,8 +319,9 @@ Call:
 Pallet: Balances
   Call: transfer
     Field Name: dest
-      Enum Variant Name: Id
-        Id: 25rZGFcFEWz1d81xB98PJN8LQu5cCwjyazAerGkng5NDuk9C
+      Enum
+        Enum Variant Name: Id
+          Id: 25rZGFcFEWz1d81xB98PJN8LQu5cCwjyazAerGkng5NDuk9C
     Field Name: value
       Balance: 100.000000000000 ACA
 
@@ -246,7 +333,6 @@ Nonce: 0
 Tip: 0 pACA
 Network: acala2012
 Tx Version: 1
-Genesis Hash: fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c
 Block Hash: 5cfeb3e46c080274613bdb80809a3e84fe782ac31ea91e2c778de996f738e620"#;
     assert!(
         reply == reply_known,

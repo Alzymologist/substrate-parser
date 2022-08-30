@@ -468,7 +468,7 @@ pub fn decode_elements_set(
     let data = {
         if number_of_elements == 0 {
             ParsedData::SequenceRaw(SequenceRawData {
-                info: husked.info,
+                element_info: husked.info,
                 data: Vec::new(),
             })
         } else {
@@ -484,11 +484,11 @@ pub fn decode_elements_set(
             }
             match wrap_sequence(&out) {
                 Some(sequence) => ParsedData::Sequence(SequenceData {
-                    info: husked.info,
+                    element_info: husked.info,
                     data: sequence,
                 }),
                 None => ParsedData::SequenceRaw(SequenceRawData {
-                    info: husked.info,
+                    element_info: husked.info,
                     data: out,
                 }),
             }
