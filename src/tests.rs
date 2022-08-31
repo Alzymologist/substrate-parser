@@ -139,7 +139,6 @@ bypassing `frame_system::Config::BaseCallFilter`).
 - Complexity: O(C) where C is the number of calls to be batched.
 # </weight>, path: None)
     Field Name: calls
-    (docs: None, path: None)
       Sequence: 2 element(s), element info: (docs: None, path: westend_runtime >> Call)
         Pallet: Staking
         (docs: Contains one variant per dispatchable that can be called by an extrinsic., path: pallet_staking >> pallet >> pallet >> Call)
@@ -162,22 +161,17 @@ unless the `origin` falls below _existential deposit_ and gets removed as dust.
 ------------------
 # </weight>, path: None)
             Field Name: controller
-            (docs: None, path: None)
               Enum
               (docs: None, path: sp_runtime >> multiaddress >> MultiAddress)
                 Enum Variant Name: Id
-                (docs: None, path: None)
                   Id: 5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV
                   (docs: None, path: sp_core >> crypto >> AccountId32)
             Field Name: value
-            (docs: None, path: None)
               Balance: 1.061900000000 WND
             Field Name: payee
-            (docs: None, path: None)
               Enum
               (docs: None, path: pallet_staking >> RewardDestination)
                 Enum Variant Name: Staked
-                (docs: None, path: None)
         Pallet: Staking
         (docs: Contains one variant per dispatchable that can be called by an extrinsic., path: pallet_staking >> pallet >> pallet >> Call)
           Call: nominate
@@ -193,21 +187,17 @@ which is capped at CompactAssignments::LIMIT (MAX_NOMINATIONS).
 - Both the reads and writes follow a similar pattern.
 # </weight>, path: None)
             Field Name: targets
-            (docs: None, path: None)
               Sequence: 3 element(s), element info: (docs: None, path: sp_runtime >> multiaddress >> MultiAddress)
                 Enum
                   Enum Variant Name: Id
-                  (docs: None, path: None)
                     Id: 5CFPcUJgYgWryPaV1aYjSbTpbTLu42V32Ytw1L9rfoMAsfGh
                     (docs: None, path: sp_core >> crypto >> AccountId32)
                 Enum
                   Enum Variant Name: Id
-                  (docs: None, path: None)
                     Id: 5G1ojzh47Yt8KoYhuAjXpHcazvsoCXe3G8LZchKDvumozJJJ
                     (docs: None, path: sp_core >> crypto >> AccountId32)
                 Enum
                   Enum Variant Name: Id
-                  (docs: None, path: None)
                     Id: 5FZoQhgUCmqBxnkHX7jCqThScS2xQWiwiF61msg63CFL3Y8f
                     (docs: None, path: sp_core >> crypto >> AccountId32)"#;
     assert!(

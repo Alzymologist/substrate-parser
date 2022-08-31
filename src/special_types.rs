@@ -212,34 +212,41 @@ impl_collect_vec!(u32, PrimitiveU32, U32);
 impl_collect_vec!(u64, PrimitiveU64, U64);
 impl_collect_vec!(u128, PrimitiveU128, U128);
 
-macro_rules! impl_collect_double_vec {
-    ($($ty: ty, $enum_variant_input: ident, $enum_variant_output: ident), *) => {
-        $(
-            impl Collectable for $ty {
-                fn husk_set(parsed_data_set: &[ParsedData]) -> Option<Sequence> {
-                    let mut out: Vec<Self> = Vec::new();
+impl Collectable for Vec<u8> {
+    fn husk_set(parsed_data_set: &[ParsedData]) -> Option<Sequence> {
+        let mut out: Vec<Self> = Vec::new();
+        let mut inner_element_info = None;
 
-                    for x in parsed_data_set.iter() {
-                        match x {
-                            ParsedData::Sequence(sequence_data) => {
-                                if let Sequence::$enum_variant_input(a) = &sequence_data.data {out.push(a.clone())}
-                                else {return None}
+        for x in parsed_data_set.iter() {
+            match x {
+                ParsedData::Sequence(sequence_data) => {
+                    if let Sequence::U8(a) = &sequence_data.data {
+                        match inner_element_info {
+                            Some(ref b) => {
+                                if b != &sequence_data.element_info {return None}
                             },
-                            ParsedData::SequenceRaw(a) => {
-                                if a.data.is_empty() {out.push(Vec::new())}
-                                else {return None}
+                            None => {
+                                inner_element_info = Some(sequence_data.element_info.to_owned());
                             },
-                            _ => return None,
                         }
+                        out.push(a.clone())
                     }
-                    Some(Sequence::$enum_variant_output(out))
-                }
+                    else {return None}
+                },
+                ParsedData::SequenceRaw(a) => {
+                    if a.data.is_empty() {out.push(Vec::new())}
+                    else {return None}
+                },
+                _ => return None,
             }
-        )*
+        }
+        let inner_element_info = match inner_element_info {
+            Some(a) => a,
+            None => Vec::new(),
+        };
+        Some(Sequence::VecU8{sequence: out, inner_element_info})
     }
 }
-
-impl_collect_double_vec!(Vec<u8>, U8, VecU8);
 
 pub fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
     match set.get(0) {
