@@ -1,12 +1,11 @@
-//! Decode extensions using metadata [`RuntimeMetadataV14`]
-//!
+//! Decode signable transaction extensions using [`RuntimeMetadataV14`].
 use frame_metadata::v14::RuntimeMetadataV14;
 use sp_core::H256;
 use sp_runtime::generic::Era;
 
 use crate::cards::{ExtendedData, ParsedData};
 use crate::decoding_sci::{decode_with_type, Ty};
-use crate::error::{ParserDecodingError, ParserError, ParserMetadataError};
+use crate::error::{ExtensionsError, SignableError};
 use crate::special_indicators::{Propagated, SpecialtyPrimitive};
 use crate::special_types::StLenCheckSpecialtyCompact;
 
@@ -15,28 +14,32 @@ pub fn decode_ext_attempt(
     meta_v14: &RuntimeMetadataV14,
     network_version: u32,
     genesis_hash: H256,
-) -> Result<Vec<ExtendedData>, ParserError> {
+) -> Result<Vec<ExtendedData>, SignableError> {
     let mut extensions: Vec<ExtendedData> = Vec::new();
     for signed_extensions_metadata in meta_v14.extrinsic.signed_extensions.iter() {
-        extensions.push(decode_with_type(
-            &Ty::Symbol(&signed_extensions_metadata.ty),
-            data,
-            meta_v14,
-            Propagated::from_ext_meta(signed_extensions_metadata),
-        )?)
+        extensions.push(
+            decode_with_type(
+                &Ty::Symbol(&signed_extensions_metadata.ty),
+                data,
+                meta_v14,
+                Propagated::from_ext_meta(signed_extensions_metadata),
+            )
+            .map_err(SignableError::Parsing)?,
+        )
     }
     for signed_extensions_metadata in meta_v14.extrinsic.signed_extensions.iter() {
-        extensions.push(decode_with_type(
-            &Ty::Symbol(&signed_extensions_metadata.additional_signed),
-            data,
-            meta_v14,
-            Propagated::from_ext_meta(signed_extensions_metadata),
-        )?)
+        extensions.push(
+            decode_with_type(
+                &Ty::Symbol(&signed_extensions_metadata.additional_signed),
+                data,
+                meta_v14,
+                Propagated::from_ext_meta(signed_extensions_metadata),
+            )
+            .map_err(SignableError::Parsing)?,
+        )
     }
     if !data.is_empty() {
-        return Err(ParserError::Decoding(
-            ParserDecodingError::SomeDataNotUsedExtensions,
-        ));
+        return Err(SignableError::SomeDataNotUsedExtensions);
     }
     check_extensions(&extensions, network_version, genesis_hash)?;
     Ok(extensions)
@@ -46,14 +49,11 @@ pub fn check_extensions(
     extensions: &[ExtendedData],
     network_version: u32,
     genesis_hash: H256,
-) -> Result<(), ParserError> {
+) -> Result<(), SignableError> {
     let mut collected_ext = CollectedExt::new();
     for ext in extensions.iter() {
         match ext.data {
-            ParsedData::Era(era) => {
-                println!("detected era");
-                collected_ext.add_era(era)?
-            },
+            ParsedData::Era(era) => collected_ext.add_era(era)?,
             ParsedData::GenesisHash(h) => collected_ext.add_genesis_hash(h)?,
             ParsedData::BlockHash(h) => collected_ext.add_block_hash(h)?,
             ParsedData::PrimitiveU8 {
@@ -79,10 +79,7 @@ pub fn check_extensions(
             ParsedData::Composite(ref field_data) => {
                 if field_data.len() == 1 {
                     match field_data[0].data.data {
-                        ParsedData::Era(era) => {
-                            println!("detected era");
-                            collected_ext.add_era(era)?
-                        },
+                        ParsedData::Era(era) => collected_ext.add_era(era)?,
                         ParsedData::GenesisHash(h) => collected_ext.add_genesis_hash(h)?,
                         ParsedData::BlockHash(h) => collected_ext.add_block_hash(h)?,
                         ParsedData::PrimitiveU8 {
@@ -108,45 +105,44 @@ pub fn check_extensions(
                         _ => (),
                     }
                 }
-            },
+            }
             _ => (),
         }
     }
     match collected_ext.spec_version_printed {
         Some(spec_version_found) => {
             if spec_version_found != network_version.to_string() {
-                return Err(ParserError::WrongNetworkVersion {
+                return Err(SignableError::WrongSpecVersion {
                     as_decoded: spec_version_found,
                     in_metadata: network_version,
                 });
             }
         }
         None => {
-            return Err(ParserError::FundamentallyBadV14Metadata(
-                ParserMetadataError::NoVersionExt,
+            return Err(SignableError::ExtensionsList(
+                ExtensionsError::NoSpecVersion,
             ))
         }
     }
     match collected_ext.genesis_hash {
         Some(found_genesis_hash) => {
             if found_genesis_hash != genesis_hash {
-                return Err(ParserError::Decoding(
-                    ParserDecodingError::GenesisHashMismatch,
-                ));
+                return Err(SignableError::WrongGenesisHash {
+                    as_decoded: found_genesis_hash,
+                    expected: genesis_hash,
+                });
             }
         }
         None => {
-            return Err(ParserError::FundamentallyBadV14Metadata(
-                ParserMetadataError::NoGenesisHash,
+            return Err(SignableError::ExtensionsList(
+                ExtensionsError::NoGenesisHash,
             ))
         }
     }
     if let Some(Era::Immortal) = collected_ext.era {
         if let Some(block_hash) = collected_ext.block_hash {
             if genesis_hash != block_hash {
-                return Err(ParserError::Decoding(
-                    ParserDecodingError::ImmortalHashMismatch,
-                ));
+                return Err(SignableError::ImmortalHashMismatch);
             }
         }
     }
@@ -169,30 +165,28 @@ impl CollectedExt {
             spec_version_printed: None,
         }
     }
-    fn add_era(&mut self, era: Era) -> Result<(), ParserError> {
+    fn add_era(&mut self, era: Era) -> Result<(), SignableError> {
         if self.era.is_some() {
-            Err(ParserError::FundamentallyBadV14Metadata(
-                ParserMetadataError::EraTwice,
-            ))
+            Err(SignableError::ExtensionsList(ExtensionsError::EraTwice))
         } else {
             self.era = Some(era);
             Ok(())
         }
     }
-    fn add_genesis_hash(&mut self, genesis_hash: H256) -> Result<(), ParserError> {
+    fn add_genesis_hash(&mut self, genesis_hash: H256) -> Result<(), SignableError> {
         if self.genesis_hash.is_some() {
-            Err(ParserError::FundamentallyBadV14Metadata(
-                ParserMetadataError::GenesisHashTwice,
+            Err(SignableError::ExtensionsList(
+                ExtensionsError::GenesisHashTwice,
             ))
         } else {
             self.genesis_hash = Some(genesis_hash);
             Ok(())
         }
     }
-    fn add_block_hash(&mut self, block_hash: H256) -> Result<(), ParserError> {
+    fn add_block_hash(&mut self, block_hash: H256) -> Result<(), SignableError> {
         if self.block_hash.is_some() {
-            Err(ParserError::FundamentallyBadV14Metadata(
-                ParserMetadataError::BlockHashTwice,
+            Err(SignableError::ExtensionsList(
+                ExtensionsError::BlockHashTwice,
             ))
         } else {
             self.block_hash = Some(block_hash);
@@ -202,10 +196,10 @@ impl CollectedExt {
     fn add_spec_version<T: StLenCheckSpecialtyCompact>(
         &mut self,
         spec_version: T,
-    ) -> Result<(), ParserError> {
+    ) -> Result<(), SignableError> {
         if self.spec_version_printed.is_some() {
-            Err(ParserError::FundamentallyBadV14Metadata(
-                ParserMetadataError::SpecVersionTwice,
+            Err(SignableError::ExtensionsList(
+                ExtensionsError::SpecVersionTwice,
             ))
         } else {
             self.spec_version_printed = Some(spec_version.to_string());

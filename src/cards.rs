@@ -1,4 +1,4 @@
-//! Parsed cards to display decoded call and extensions data
+//! Types for parsed data (nested) and parser cards (flat and formatted).
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use num_bigint::{BigInt, BigUint};
 use plot_icon::generate_png_scaled_default;
@@ -32,12 +32,16 @@ impl Info {
     }
     pub fn flatten(&self) -> InfoFlat {
         let docs = {
-            if self.docs.is_empty() {None}
-            else {Some(self.docs.to_owned())}
+            if self.docs.is_empty() {
+                None
+            } else {
+                Some(self.docs.to_owned())
+            }
         };
         let path_flat = {
-            if self.path.is_empty() {None}
-            else {
+            if self.path.is_empty() {
+                None
+            } else {
                 let mut collect = String::new();
                 for (i, x) in self.path.segments().iter().enumerate() {
                     if i > 0 {
@@ -48,10 +52,7 @@ impl Info {
                 Some(collect)
             }
         };
-        InfoFlat{
-            docs,
-            path_flat,
-        }
+        InfoFlat { docs, path_flat }
     }
 }
 
@@ -108,8 +109,13 @@ impl PalletSpecificData {
     fn is_balance_display(&self) -> bool {
         self.pallet_name == "Balances" || self.pallet_name == "Staking"
     }
-    fn card(&self, indent: u32, short_specs: &ShortSpecs, item: PalletSpecificItem) -> Vec<ExtendedCard> {
-        let mut out = vec![ExtendedCard{
+    fn card(
+        &self,
+        indent: u32,
+        short_specs: &ShortSpecs,
+        item: PalletSpecificItem,
+    ) -> Vec<ExtendedCard> {
+        let mut out = vec![ExtendedCard {
             parser_card: ParserCard::PalletName(self.pallet_name.to_owned()),
             indent,
             info_flat: vec![self.pallet_info.flatten()],
@@ -119,16 +125,30 @@ impl PalletSpecificData {
             PalletSpecificItem::Call => ParserCard::CallName(self.variant_name.to_owned()),
             PalletSpecificItem::Event => ParserCard::EventName(self.variant_name.to_owned()),
         };
-        out.push(ExtendedCard{
+        out.push(ExtendedCard {
             parser_card,
-            indent: indent+1,
+            indent: indent + 1,
             info_flat: info_with_docs_only(&self.variant_docs),
         });
 
         if self.fields.len() == 1 && self.fields[0].field_name.is_none() {
-            card_unnamed_single_field(&mut out, Vec::new(), &self.fields[0], indent+2, self.is_balance_display(), short_specs);
+            card_unnamed_single_field(
+                &mut out,
+                Vec::new(),
+                &self.fields[0],
+                indent + 2,
+                self.is_balance_display(),
+                short_specs,
+            );
+        } else {
+            card_field_set(
+                &mut out,
+                &self.fields,
+                indent + 2,
+                self.is_balance_display(),
+                short_specs,
+            )
         }
-        else {card_field_set(&mut out, &self.fields, indent+2, self.is_balance_display(), short_specs)}
         out
     }
 }
@@ -181,7 +201,10 @@ pub enum Sequence {
     U32(Vec<u32>),
     U64(Vec<u64>),
     U128(Vec<u128>),
-    VecU8{sequence: Vec<Vec<u8>>, inner_element_info: Vec<Info>},
+    VecU8 {
+        sequence: Vec<Vec<u8>>,
+        inner_element_info: Vec<Info>,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -254,59 +277,78 @@ pub enum ParsedData {
 
 macro_rules! single_card {
     ($variant:ident, $value:tt, $indent:tt, $info_flat:tt) => {
-        vec![ExtendedCard{
+        vec![ExtendedCard {
             parser_card: ParserCard::$variant($value.to_owned()),
             $indent,
             $info_flat,
         }]
-    }
+    };
 }
 
 macro_rules! specialty_card {
     ($ty:ty, $variant:ident, $value:tt, $display_balance:tt, $indent:tt, $info_flat:tt, $short_specs:tt, $specialty:tt) => {
-        vec![ExtendedCard{
+        vec![ExtendedCard {
             parser_card: match $specialty {
-            SpecialtyPrimitive::None => ParserCard::$variant($value.to_owned()),
-            SpecialtyPrimitive::Balance => {
-                if $display_balance {
-                    let balance = <$ty>::convert_balance_pretty(*$value, $short_specs.decimals, &$short_specs.unit);
-                    ParserCard::Balance(balance)
-                } else {
-                    ParserCard::BalanceRaw($value.to_string())
+                SpecialtyPrimitive::None => ParserCard::$variant($value.to_owned()),
+                SpecialtyPrimitive::Balance => {
+                    if $display_balance {
+                        let balance = <$ty>::convert_balance_pretty(
+                            *$value,
+                            $short_specs.decimals,
+                            &$short_specs.unit,
+                        );
+                        ParserCard::Balance(balance)
+                    } else {
+                        ParserCard::BalanceRaw($value.to_string())
+                    }
                 }
+                SpecialtyPrimitive::Tip => {
+                    let tip = <$ty>::convert_balance_pretty(
+                        *$value,
+                        $short_specs.decimals,
+                        &$short_specs.unit,
+                    );
+                    ParserCard::Tip(tip)
+                }
+                SpecialtyPrimitive::Nonce => ParserCard::Nonce($value.to_string()),
+                SpecialtyPrimitive::SpecVersion => ParserCard::NameSpecVersion {
+                    name: $short_specs.name.to_owned(),
+                    version: $value.to_string(),
+                },
+                SpecialtyPrimitive::TxVersion => ParserCard::TxVersion($value.to_string()),
             },
-            SpecialtyPrimitive::Tip => {
-                let tip = <$ty>::convert_balance_pretty(*$value, $short_specs.decimals, &$short_specs.unit);
-                ParserCard::Tip(tip)
-            },
-            SpecialtyPrimitive::Nonce => ParserCard::Nonce($value.to_string()),
-            SpecialtyPrimitive::SpecVersion => ParserCard::NameSpecVersion { name: $short_specs.name.to_owned(), version: $value.to_string() },
-            SpecialtyPrimitive::TxVersion => ParserCard::TxVersion($value.to_string()),
-        },
             $indent,
             $info_flat,
         }]
-    }
+    };
 }
 
 macro_rules! sequence {
     ($func:ident, $ty:ty, $variant:ident) => {
-        fn $func(set: &[$ty], indent: u32, info_flat: Vec<InfoFlat>, element_info_flat: Vec<InfoFlat>) -> Vec<ExtendedCard> {
-            let mut out = vec![ExtendedCard{
-                parser_card: ParserCard::SequenceAnnounced{len: set.len(), element_info_flat},
+        fn $func(
+            set: &[$ty],
+            indent: u32,
+            info_flat: Vec<InfoFlat>,
+            element_info_flat: Vec<InfoFlat>,
+        ) -> Vec<ExtendedCard> {
+            let mut out = vec![ExtendedCard {
+                parser_card: ParserCard::SequenceAnnounced {
+                    len: set.len(),
+                    element_info_flat,
+                },
                 indent,
                 info_flat,
             }];
             for element in set.iter() {
-                out.push(ExtendedCard{
+                out.push(ExtendedCard {
                     parser_card: ParserCard::$variant(*element),
-                    indent: indent+1,
+                    indent: indent + 1,
                     info_flat: Vec::new(),
                 })
             }
             out
         }
-    }
+    };
 }
 
 sequence!(seq_u16, u16, PrimitiveU16);
@@ -315,35 +357,66 @@ sequence!(seq_u64, u64, PrimitiveU64);
 sequence!(seq_u128, u128, PrimitiveU128);
 
 impl ParsedData {
-    pub fn card(&self, info_flat: Vec<InfoFlat>, indent: u32, display_balance: bool, short_specs: &ShortSpecs) -> Vec<ExtendedCard> {
+    pub fn card(
+        &self,
+        info_flat: Vec<InfoFlat>,
+        indent: u32,
+        display_balance: bool,
+        short_specs: &ShortSpecs,
+    ) -> Vec<ExtendedCard> {
         match &self {
             ParsedData::BitVecU8Lsb0(value) => single_card!(BitVecU8Lsb0, value, indent, info_flat),
-            ParsedData::BitVecU16Lsb0(value) => single_card!(BitVecU16Lsb0, value, indent, info_flat),
-            ParsedData::BitVecU32Lsb0(value) => single_card!(BitVecU32Lsb0, value, indent, info_flat),
-            ParsedData::BitVecU64Lsb0(value) => single_card!(BitVecU64Lsb0, value, indent, info_flat),
+            ParsedData::BitVecU16Lsb0(value) => {
+                single_card!(BitVecU16Lsb0, value, indent, info_flat)
+            }
+            ParsedData::BitVecU32Lsb0(value) => {
+                single_card!(BitVecU32Lsb0, value, indent, info_flat)
+            }
+            ParsedData::BitVecU64Lsb0(value) => {
+                single_card!(BitVecU64Lsb0, value, indent, info_flat)
+            }
             ParsedData::BitVecU8Msb0(value) => single_card!(BitVecU8Msb0, value, indent, info_flat),
-            ParsedData::BitVecU16Msb0(value) => single_card!(BitVecU16Msb0, value, indent, info_flat),
-            ParsedData::BitVecU32Msb0(value) => single_card!(BitVecU32Msb0, value, indent, info_flat),
-            ParsedData::BitVecU64Msb0(value) => single_card!(BitVecU64Msb0, value, indent, info_flat),
+            ParsedData::BitVecU16Msb0(value) => {
+                single_card!(BitVecU16Msb0, value, indent, info_flat)
+            }
+            ParsedData::BitVecU32Msb0(value) => {
+                single_card!(BitVecU32Msb0, value, indent, info_flat)
+            }
+            ParsedData::BitVecU64Msb0(value) => {
+                single_card!(BitVecU64Msb0, value, indent, info_flat)
+            }
             ParsedData::BlockHash(value) => single_card!(BlockHash, value, indent, info_flat),
             ParsedData::Call(call) => call.card(indent, short_specs),
             ParsedData::Composite(field_data_set) => {
-                if field_data_set.is_empty() {Vec::new()}
-                else if field_data_set.len() == 1 && field_data_set[0].field_name.is_none() {
+                if field_data_set.is_empty() {
+                    Vec::new()
+                } else if field_data_set.len() == 1 && field_data_set[0].field_name.is_none() {
                     let mut out = Vec::new();
-                    card_unnamed_single_field(&mut out, info_flat, &field_data_set[0], indent, display_balance, short_specs);
+                    card_unnamed_single_field(
+                        &mut out,
+                        info_flat,
+                        &field_data_set[0],
+                        indent,
+                        display_balance,
+                        short_specs,
+                    );
                     out
-                }
-                else {
-                    let mut out = vec![ExtendedCard{
+                } else {
+                    let mut out = vec![ExtendedCard {
                         parser_card: ParserCard::CompositeAnnounced(field_data_set.len()),
                         indent,
                         info_flat,
                     }];
-                    card_field_set(&mut out, field_data_set, indent+1, display_balance, short_specs);
+                    card_field_set(
+                        &mut out,
+                        field_data_set,
+                        indent + 1,
+                        display_balance,
+                        short_specs,
+                    );
                     out
                 }
-            },
+            }
             ParsedData::Era(value) => single_card!(Era, value, indent, info_flat),
             ParsedData::Event(event) => event.card(indent, short_specs),
             ParsedData::GenesisHash(_) => Vec::new(),
@@ -351,199 +424,328 @@ impl ParsedData {
             ParsedData::H256(value) => single_card!(H256, value, indent, info_flat),
             ParsedData::H512(value) => single_card!(H512, value, indent, info_flat),
             ParsedData::Id(value) => {
-                let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
+                let base58 = value
+                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
                 let identicon = generate_png_scaled_default(&<[u8; 32]>::from(value.to_owned()));
-                vec![ExtendedCard{
-                    parser_card: ParserCard::Id(IdData{base58, identicon}),
+                vec![ExtendedCard {
+                    parser_card: ParserCard::Id(IdData { base58, identicon }),
                     indent,
                     info_flat,
                 }]
-            },
+            }
             ParsedData::Option(option) => match option {
-                None => vec![ExtendedCard{
+                None => vec![ExtendedCard {
                     parser_card: ParserCard::None,
                     indent,
                     info_flat,
                 }],
-                Some(parsed_data) => parsed_data.card(info_flat, indent, display_balance, short_specs)
+                Some(parsed_data) => {
+                    parsed_data.card(info_flat, indent, display_balance, short_specs)
+                }
             },
             ParsedData::PerU16(value) => single_card!(PerU16, value, indent, info_flat),
             ParsedData::Percent(value) => single_card!(Percent, value, indent, info_flat),
             ParsedData::Permill(value) => single_card!(Permill, value, indent, info_flat),
             ParsedData::Perbill(value) => single_card!(Perbill, value, indent, info_flat),
             ParsedData::Perquintill(value) => single_card!(Perquintill, value, indent, info_flat),
-            ParsedData::PrimitiveBool(value) => single_card!(PrimitiveBool, value, indent, info_flat),
-            ParsedData::PrimitiveChar(value) => single_card!(PrimitiveChar, value, indent, info_flat),
+            ParsedData::PrimitiveBool(value) => {
+                single_card!(PrimitiveBool, value, indent, info_flat)
+            }
+            ParsedData::PrimitiveChar(value) => {
+                single_card!(PrimitiveChar, value, indent, info_flat)
+            }
             ParsedData::PrimitiveI8(value) => single_card!(PrimitiveI8, value, indent, info_flat),
             ParsedData::PrimitiveI16(value) => single_card!(PrimitiveI16, value, indent, info_flat),
             ParsedData::PrimitiveI32(value) => single_card!(PrimitiveI32, value, indent, info_flat),
             ParsedData::PrimitiveI64(value) => single_card!(PrimitiveI64, value, indent, info_flat),
-            ParsedData::PrimitiveI128(value) => single_card!(PrimitiveI128, value, indent, info_flat),
-            ParsedData::PrimitiveI256(value) => single_card!(PrimitiveI256, value, indent, info_flat),
-            ParsedData::PrimitiveU8 { value, specialty } => 
-                specialty_card!(u8, PrimitiveU8, value, display_balance, indent, info_flat, short_specs, specialty),
-            ParsedData::PrimitiveU16 { value, specialty } => 
-                specialty_card!(u16, PrimitiveU16, value, display_balance, indent, info_flat, short_specs, specialty),
-            ParsedData::PrimitiveU32 { value, specialty } => 
-                specialty_card!(u32, PrimitiveU32, value, display_balance, indent, info_flat, short_specs, specialty),
-            ParsedData::PrimitiveU64 { value, specialty } => 
-                specialty_card!(u64, PrimitiveU64, value, display_balance, indent, info_flat, short_specs, specialty),
-            ParsedData::PrimitiveU128 { value, specialty } => 
-                specialty_card!(u128, PrimitiveU128, value, display_balance, indent, info_flat, short_specs, specialty),
-            ParsedData::PrimitiveU256(value) => single_card!(PrimitiveU256, value, indent, info_flat),
+            ParsedData::PrimitiveI128(value) => {
+                single_card!(PrimitiveI128, value, indent, info_flat)
+            }
+            ParsedData::PrimitiveI256(value) => {
+                single_card!(PrimitiveI256, value, indent, info_flat)
+            }
+            ParsedData::PrimitiveU8 { value, specialty } => specialty_card!(
+                u8,
+                PrimitiveU8,
+                value,
+                display_balance,
+                indent,
+                info_flat,
+                short_specs,
+                specialty
+            ),
+            ParsedData::PrimitiveU16 { value, specialty } => specialty_card!(
+                u16,
+                PrimitiveU16,
+                value,
+                display_balance,
+                indent,
+                info_flat,
+                short_specs,
+                specialty
+            ),
+            ParsedData::PrimitiveU32 { value, specialty } => specialty_card!(
+                u32,
+                PrimitiveU32,
+                value,
+                display_balance,
+                indent,
+                info_flat,
+                short_specs,
+                specialty
+            ),
+            ParsedData::PrimitiveU64 { value, specialty } => specialty_card!(
+                u64,
+                PrimitiveU64,
+                value,
+                display_balance,
+                indent,
+                info_flat,
+                short_specs,
+                specialty
+            ),
+            ParsedData::PrimitiveU128 { value, specialty } => specialty_card!(
+                u128,
+                PrimitiveU128,
+                value,
+                display_balance,
+                indent,
+                info_flat,
+                short_specs,
+                specialty
+            ),
+            ParsedData::PrimitiveU256(value) => {
+                single_card!(PrimitiveU256, value, indent, info_flat)
+            }
             ParsedData::PublicEd25519(value) => {
-                let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
+                let base58 = value
+                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
                 let identicon = generate_png_scaled_default(&value.0);
-                vec![ExtendedCard{
-                    parser_card: ParserCard::PublicEd25519(IdData{base58, identicon}),
+                vec![ExtendedCard {
+                    parser_card: ParserCard::PublicEd25519(IdData { base58, identicon }),
                     indent,
                     info_flat,
                 }]
-            },
+            }
             ParsedData::PublicSr25519(value) => {
-                let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
+                let base58 = value
+                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
                 let identicon = generate_png_scaled_default(&value.0);
-                vec![ExtendedCard{
-                    parser_card: ParserCard::PublicSr25519(IdData{base58, identicon}),
+                vec![ExtendedCard {
+                    parser_card: ParserCard::PublicSr25519(IdData { base58, identicon }),
                     indent,
                     info_flat,
                 }]
-            },
+            }
             ParsedData::PublicEcdsa(value) => {
-                let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
+                let base58 = value
+                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
                 let identicon = generate_png_scaled_default(&value.0);
-                vec![ExtendedCard{
-                    parser_card: ParserCard::PublicEcdsa(IdData{base58, identicon}),
+                vec![ExtendedCard {
+                    parser_card: ParserCard::PublicEcdsa(IdData { base58, identicon }),
                     indent,
                     info_flat,
                 }]
-            },
+            }
             ParsedData::Sequence(sequence) => {
-                let element_info_flat: Vec<InfoFlat> = sequence.element_info.iter().map(|x| x.flatten()).collect();
+                let element_info_flat: Vec<InfoFlat> =
+                    sequence.element_info.iter().map(|x| x.flatten()).collect();
                 match &sequence.data {
                     Sequence::U8(vec) => {
                         let text = match String::from_utf8(vec.to_vec()) {
                             Ok(a) => Some(a),
                             Err(_) => None,
                         };
-                        vec![ExtendedCard{
-                            parser_card: ParserCard::SequenceU8{hex: hex::encode(vec), text, element_info_flat},
+                        vec![ExtendedCard {
+                            parser_card: ParserCard::SequenceU8 {
+                                hex: hex::encode(vec),
+                                text,
+                                element_info_flat,
+                            },
                             indent,
                             info_flat,
                         }]
-                    },
+                    }
                     Sequence::U16(vec) => seq_u16(vec, indent, info_flat, element_info_flat),
                     Sequence::U32(vec) => seq_u32(vec, indent, info_flat, element_info_flat),
                     Sequence::U64(vec) => seq_u64(vec, indent, info_flat, element_info_flat),
                     Sequence::U128(vec) => seq_u128(vec, indent, info_flat, element_info_flat),
-                    Sequence::VecU8{sequence, inner_element_info} => {
-                        let mut out = vec![ExtendedCard{
-                            parser_card: ParserCard::SequenceAnnounced{len: sequence.len(), element_info_flat},
+                    Sequence::VecU8 {
+                        sequence,
+                        inner_element_info,
+                    } => {
+                        let mut out = vec![ExtendedCard {
+                            parser_card: ParserCard::SequenceAnnounced {
+                                len: sequence.len(),
+                                element_info_flat,
+                            },
                             indent,
                             info_flat,
                         }];
-                        let inner_element_info_flat: Vec<InfoFlat> = inner_element_info.iter().map(|x| x.flatten()).collect();
+                        let inner_element_info_flat: Vec<InfoFlat> =
+                            inner_element_info.iter().map(|x| x.flatten()).collect();
                         for element in sequence.iter() {
                             let text = match String::from_utf8(element.to_vec()) {
                                 Ok(a) => Some(a),
                                 Err(_) => None,
                             };
-                            out.push(ExtendedCard{
-                                parser_card: ParserCard::SequenceU8{hex: hex::encode(element), text, element_info_flat: inner_element_info_flat.clone()},
-                                indent: indent+1,
+                            out.push(ExtendedCard {
+                                parser_card: ParserCard::SequenceU8 {
+                                    hex: hex::encode(element),
+                                    text,
+                                    element_info_flat: inner_element_info_flat.clone(),
+                                },
+                                indent: indent + 1,
                                 info_flat: Vec::new(),
                             })
                         }
                         out
-                    },
+                    }
                 }
-            },
+            }
             ParsedData::SequenceRaw(sequence_raw) => {
-                let element_info_flat: Vec<InfoFlat> = sequence_raw.element_info.iter().map(|x| x.flatten()).collect();
-                let mut out = vec![ExtendedCard{
-                    parser_card: ParserCard::SequenceAnnounced{len: sequence_raw.data.len(), element_info_flat},
+                let element_info_flat: Vec<InfoFlat> = sequence_raw
+                    .element_info
+                    .iter()
+                    .map(|x| x.flatten())
+                    .collect();
+                let mut out = vec![ExtendedCard {
+                    parser_card: ParserCard::SequenceAnnounced {
+                        len: sequence_raw.data.len(),
+                        element_info_flat,
+                    },
                     indent,
                     info_flat,
                 }];
                 for element in sequence_raw.data.iter() {
-                    out.extend_from_slice(&element.card(Vec::new(), indent+1, display_balance, short_specs))
+                    out.extend_from_slice(&element.card(
+                        Vec::new(),
+                        indent + 1,
+                        display_balance,
+                        short_specs,
+                    ))
                 }
                 out
-            },
-            ParsedData::SignatureEd25519(value) => single_card!(SignatureEd25519, value, indent, info_flat),
-            ParsedData::SignatureSr25519(value) => single_card!(SignatureSr25519, value, indent, info_flat),
-            ParsedData::SignatureEcdsa(value) => single_card!(SignatureEcdsa, value, indent, info_flat),
+            }
+            ParsedData::SignatureEd25519(value) => {
+                single_card!(SignatureEd25519, value, indent, info_flat)
+            }
+            ParsedData::SignatureSr25519(value) => {
+                single_card!(SignatureSr25519, value, indent, info_flat)
+            }
+            ParsedData::SignatureEcdsa(value) => {
+                single_card!(SignatureEcdsa, value, indent, info_flat)
+            }
             ParsedData::Text(value) => single_card!(Text, value, indent, info_flat),
             ParsedData::Tuple(extended_data_set) => {
-                if extended_data_set.is_empty() {Vec::new()}
-                else {
-                    let mut out = vec![ExtendedCard{
+                if extended_data_set.is_empty() {
+                    Vec::new()
+                } else {
+                    let mut out = vec![ExtendedCard {
                         parser_card: ParserCard::TupleAnnounced(extended_data_set.len()),
                         indent,
                         info_flat,
                     }];
                     for extended_data in extended_data_set.iter() {
-                        out.extend_from_slice(&extended_data.card(indent+1, display_balance, short_specs))
+                        out.extend_from_slice(&extended_data.card(
+                            indent + 1,
+                            display_balance,
+                            short_specs,
+                        ))
                     }
                     out
                 }
-            }, 
+            }
             ParsedData::Variant(variant_data) => {
-                let mut out = vec![ExtendedCard{
+                let mut out = vec![ExtendedCard {
                     parser_card: ParserCard::EnumAnnounced,
                     indent,
                     info_flat,
                 }];
-                out.push(ExtendedCard{
+                out.push(ExtendedCard {
                     parser_card: ParserCard::EnumVariantName(variant_data.variant_name.to_owned()),
-                    indent: indent+1,
+                    indent: indent + 1,
                     info_flat: info_with_docs_only(&variant_data.variant_docs),
                 });
                 if variant_data.fields.len() == 1 && variant_data.fields[0].field_name.is_none() {
-                    card_unnamed_single_field(&mut out, Vec::new(), &variant_data.fields[0], indent+2, display_balance, short_specs);
+                    card_unnamed_single_field(
+                        &mut out,
+                        Vec::new(),
+                        &variant_data.fields[0],
+                        indent + 2,
+                        display_balance,
+                        short_specs,
+                    );
+                } else {
+                    card_field_set(
+                        &mut out,
+                        &variant_data.fields,
+                        indent + 2,
+                        display_balance,
+                        short_specs,
+                    )
                 }
-                else {card_field_set(&mut out, &variant_data.fields, indent+2, display_balance, short_specs)}
                 out
-            },
+            }
         }
     }
 }
 
-fn card_unnamed_single_field(out: &mut Vec<ExtendedCard>, mut new_info_flat: Vec<InfoFlat>, field_data: &FieldData, indent: u32, display_balance: bool, short_specs: &ShortSpecs) {
+fn card_unnamed_single_field(
+    out: &mut Vec<ExtendedCard>,
+    mut new_info_flat: Vec<InfoFlat>,
+    field_data: &FieldData,
+    indent: u32,
+    display_balance: bool,
+    short_specs: &ShortSpecs,
+) {
     if !field_data.field_docs.is_empty() {
-        new_info_flat.push(InfoFlat{
+        new_info_flat.push(InfoFlat {
             docs: Some(field_data.field_docs.to_owned()),
             path_flat: None,
         });
     }
-    let inner_ty_info_flat: Vec<InfoFlat> = field_data.data.info.iter().map(|x| x.flatten()).collect();
+    let inner_ty_info_flat: Vec<InfoFlat> =
+        field_data.data.info.iter().map(|x| x.flatten()).collect();
     new_info_flat.extend_from_slice(&inner_ty_info_flat);
-    out.extend_from_slice(
-        &field_data.data
-        .data
-        .card(new_info_flat, indent, display_balance, short_specs)
-    );
+    out.extend_from_slice(&field_data.data.data.card(
+        new_info_flat,
+        indent,
+        display_balance,
+        short_specs,
+    ));
 }
 
-fn card_field_set(out: &mut Vec<ExtendedCard>, fields: &[FieldData], indent: u32, display_balance: bool, short_specs: &ShortSpecs) {
+fn card_field_set(
+    out: &mut Vec<ExtendedCard>,
+    fields: &[FieldData],
+    indent: u32,
+    display_balance: bool,
+    short_specs: &ShortSpecs,
+) {
     for (i, field_data) in fields.iter().enumerate() {
         let parser_card = match field_data.field_name {
             Some(ref a) => ParserCard::FieldName(a.to_owned()),
-            None => ParserCard::FieldNumber(i+1),
+            None => ParserCard::FieldNumber(i + 1),
         };
-        out.push(ExtendedCard{
+        out.push(ExtendedCard {
             parser_card,
             indent,
-            info_flat: info_with_docs_only(&field_data.field_docs)
+            info_flat: info_with_docs_only(&field_data.field_docs),
         });
-        out.extend_from_slice(&field_data.data.card(indent+1, display_balance, short_specs));
+        out.extend_from_slice(
+            &field_data
+                .data
+                .card(indent + 1, display_balance, short_specs),
+        );
     }
 }
 
 fn info_with_docs_only(docs: &str) -> Vec<InfoFlat> {
-    if docs.is_empty() {Vec::new()}
-    else {
-        vec![InfoFlat{
+    if docs.is_empty() {
+        Vec::new()
+    } else {
+        vec![InfoFlat {
             docs: Some(docs.to_owned()),
             path_flat: None,
         }]
@@ -559,7 +761,7 @@ fn readable(indent: u32, card_type: &str, card_payload: &str) -> String {
     )
 }
 
-/// Formatted and flat decoded data, ready to be displayed with Signer and such.
+/// Formatted and flat decoded data, ready to be displayed.
 ///
 /// I suppose it must have as simple fields as possible. To be fixed.
 #[derive(Clone, Debug)]
@@ -618,7 +820,10 @@ pub enum ParserCard {
     H256(H256),
     H512(H512),
     Id(IdData),
-    NameSpecVersion { name: String, version: String },
+    NameSpecVersion {
+        name: String,
+        version: String,
+    },
     Nonce(String),
     None,
     PalletName(String),
@@ -644,8 +849,15 @@ pub enum ParserCard {
     PublicEd25519(IdData),
     PublicSr25519(IdData),
     PublicEcdsa(IdData),
-    SequenceAnnounced{len: usize, element_info_flat: Vec<InfoFlat>},
-    SequenceU8 { hex: String, text: Option<String>, element_info_flat: Vec<InfoFlat> },
+    SequenceAnnounced {
+        len: usize,
+        element_info_flat: Vec<InfoFlat>,
+    },
+    SequenceU8 {
+        hex: String,
+        text: Option<String>,
+        element_info_flat: Vec<InfoFlat>,
+    },
     SignatureEd25519(ed25519::Signature),
     SignatureSr25519(sr25519::Signature),
     SignatureEcdsa(ecdsa::Signature),
@@ -656,24 +868,39 @@ pub enum ParserCard {
 }
 
 impl ExtendedData {
-    pub fn card(&self, indent: u32, display_balance: bool, short_specs: &ShortSpecs) -> Vec<ExtendedCard> {
+    pub fn card(
+        &self,
+        indent: u32,
+        display_balance: bool,
+        short_specs: &ShortSpecs,
+    ) -> Vec<ExtendedCard> {
         let info_flat = self.info.iter().map(|x| x.flatten()).collect();
-        self.data.card(info_flat, indent, display_balance, short_specs)
+        self.data
+            .card(info_flat, indent, display_balance, short_specs)
     }
     pub fn show(&self, indent: u32, display_balance: bool, short_specs: &ShortSpecs) -> String {
         let cards = self.card(indent, display_balance, short_specs);
         let mut out = String::new();
         for (i, x) in cards.iter().enumerate() {
-            if i>0 {out.push('\n')}
+            if i > 0 {
+                out.push('\n')
+            }
             out.push_str(&x.show())
         }
         out
     }
-    pub fn show_with_docs(&self, indent: u32, display_balance: bool, short_specs: &ShortSpecs) -> String {
+    pub fn show_with_docs(
+        &self,
+        indent: u32,
+        display_balance: bool,
+        short_specs: &ShortSpecs,
+    ) -> String {
         let cards = self.card(indent, display_balance, short_specs);
         let mut out = String::new();
         for (i, x) in cards.iter().enumerate() {
-            if i>0 {out.push('\n')}
+            if i > 0 {
+                out.push('\n')
+            }
             out.push_str(&x.show_with_docs())
         }
         out
@@ -683,24 +910,48 @@ impl ExtendedData {
 impl ExtendedCard {
     pub fn show(&self) -> String {
         match &self.parser_card {
-            ParserCard::Balance(a) => readable(self.indent, "Balance", &format!("{} {}", a.number, a.units)),
+            ParserCard::Balance(a) => {
+                readable(self.indent, "Balance", &format!("{} {}", a.number, a.units))
+            }
             ParserCard::BalanceRaw(a) => readable(self.indent, "Balance Raw", a),
-            ParserCard::BitVecU8Lsb0(a) => readable(self.indent, "BitVec<u8, Lsb0>", &a.to_string()),
-            ParserCard::BitVecU16Lsb0(a) => readable(self.indent, "BitVec<u16, Lsb0>", &a.to_string()),
-            ParserCard::BitVecU32Lsb0(a) => readable(self.indent, "BitVec<u32, Lsb0>", &a.to_string()),
-            ParserCard::BitVecU64Lsb0(a) => readable(self.indent, "BitVec<u64, Lsb0>", &a.to_string()),
-            ParserCard::BitVecU8Msb0(a) => readable(self.indent, "BitVec<u8, Msb0>", &a.to_string()),
-            ParserCard::BitVecU16Msb0(a) => readable(self.indent, "BitVec<u16, Msb0>", &a.to_string()),
-            ParserCard::BitVecU32Msb0(a) => readable(self.indent, "BitVec<u32, Msb0>", &a.to_string()),
-            ParserCard::BitVecU64Msb0(a) => readable(self.indent, "BitVec<u64, Msb0>", &a.to_string()),
+            ParserCard::BitVecU8Lsb0(a) => {
+                readable(self.indent, "BitVec<u8, Lsb0>", &a.to_string())
+            }
+            ParserCard::BitVecU16Lsb0(a) => {
+                readable(self.indent, "BitVec<u16, Lsb0>", &a.to_string())
+            }
+            ParserCard::BitVecU32Lsb0(a) => {
+                readable(self.indent, "BitVec<u32, Lsb0>", &a.to_string())
+            }
+            ParserCard::BitVecU64Lsb0(a) => {
+                readable(self.indent, "BitVec<u64, Lsb0>", &a.to_string())
+            }
+            ParserCard::BitVecU8Msb0(a) => {
+                readable(self.indent, "BitVec<u8, Msb0>", &a.to_string())
+            }
+            ParserCard::BitVecU16Msb0(a) => {
+                readable(self.indent, "BitVec<u16, Msb0>", &a.to_string())
+            }
+            ParserCard::BitVecU32Msb0(a) => {
+                readable(self.indent, "BitVec<u32, Msb0>", &a.to_string())
+            }
+            ParserCard::BitVecU64Msb0(a) => {
+                readable(self.indent, "BitVec<u64, Msb0>", &a.to_string())
+            }
             ParserCard::BlockHash(a) => readable(self.indent, "Block Hash", &hex::encode(a)),
             ParserCard::CallName(a) => readable(self.indent, "Call", a),
-            ParserCard::CompositeAnnounced(a) => readable(self.indent, "Struct", &format!("{} field(s)", a)),
+            ParserCard::CompositeAnnounced(a) => {
+                readable(self.indent, "Struct", &format!("{} field(s)", a))
+            }
             ParserCard::EnumAnnounced => format!("{}Enum", "  ".repeat(self.indent as usize)),
             ParserCard::EnumVariantName(a) => readable(self.indent, "Enum Variant Name", a),
             ParserCard::Era(a) => match a {
                 Era::Immortal => readable(self.indent, "Era", "Immortal"),
-                Era::Mortal(period, phase) => readable(self.indent, "Era", &format!("Mortal, phase: {}, period: {}", phase, period)),
+                Era::Mortal(period, phase) => readable(
+                    self.indent,
+                    "Era",
+                    &format!("Mortal, phase: {}, period: {}", phase, period),
+                ),
             },
             ParserCard::EventName(a) => readable(self.indent, "Event", a),
             ParserCard::FieldName(a) => readable(self.indent, "Field Name", a),
@@ -709,15 +960,25 @@ impl ExtendedCard {
             ParserCard::H256(a) => readable(self.indent, "H256", &hex::encode(a.0)),
             ParserCard::H512(a) => readable(self.indent, "H512", &hex::encode(a.0)),
             ParserCard::Id(a) => readable(self.indent, "Id", &a.base58),
-            ParserCard::NameSpecVersion { name, version } => readable(self.indent, "Network", &format!("{}{}", name, version)),
+            ParserCard::NameSpecVersion { name, version } => {
+                readable(self.indent, "Network", &format!("{}{}", name, version))
+            }
             ParserCard::Nonce(a) => readable(self.indent, "Nonce", a),
             ParserCard::None => readable(self.indent, "Option", "None"),
             ParserCard::PalletName(a) => readable(self.indent, "Pallet", a),
             ParserCard::PerU16(a) => readable(self.indent, "PerU16", &a.deconstruct().to_string()),
-            ParserCard::Percent(a) => readable(self.indent, "Percent", &a.deconstruct().to_string()),
-            ParserCard::Permill(a) => readable(self.indent, "Permill", &a.deconstruct().to_string()),
-            ParserCard::Perbill(a) => readable(self.indent, "Perbill", &a.deconstruct().to_string()),
-            ParserCard::Perquintill(a) => readable(self.indent, "Perquintill", &a.deconstruct().to_string()),
+            ParserCard::Percent(a) => {
+                readable(self.indent, "Percent", &a.deconstruct().to_string())
+            }
+            ParserCard::Permill(a) => {
+                readable(self.indent, "Permill", &a.deconstruct().to_string())
+            }
+            ParserCard::Perbill(a) => {
+                readable(self.indent, "Perbill", &a.deconstruct().to_string())
+            }
+            ParserCard::Perquintill(a) => {
+                readable(self.indent, "Perquintill", &a.deconstruct().to_string())
+            }
             ParserCard::PrimitiveBool(a) => readable(self.indent, "Bool", &a.to_string()),
             ParserCard::PrimitiveChar(a) => readable(self.indent, "Char", &a.to_string()),
             ParserCard::PrimitiveI8(a) => readable(self.indent, "i8", &a.to_string()),
@@ -735,17 +996,34 @@ impl ExtendedCard {
             ParserCard::PublicEd25519(a) => readable(self.indent, "PublicKey Ed25519", &a.base58),
             ParserCard::PublicSr25519(a) => readable(self.indent, "PublicKey Sr25519", &a.base58),
             ParserCard::PublicEcdsa(a) => readable(self.indent, "PublicKey Ecdsa", &a.base58),
-            ParserCard::SequenceAnnounced{len, element_info_flat: _} => readable(self.indent, "Sequence", &format!("{} element(s)", len)),
-            ParserCard::SequenceU8 {hex, text, element_info_flat: _} => match text {
+            ParserCard::SequenceAnnounced {
+                len,
+                element_info_flat: _,
+            } => readable(self.indent, "Sequence", &format!("{} element(s)", len)),
+            ParserCard::SequenceU8 {
+                hex,
+                text,
+                element_info_flat: _,
+            } => match text {
                 Some(valid_text) => readable(self.indent, "Text", valid_text),
                 None => readable(self.indent, "Sequence u8", hex),
             },
-            ParserCard::SignatureEd25519(a) => readable(self.indent, "Signature Ed25519", &hex::encode(a.0)),
-            ParserCard::SignatureSr25519(a) => readable(self.indent, "Signature Sr25519", &hex::encode(a.0)),
-            ParserCard::SignatureEcdsa(a) => readable(self.indent, "Signature Ecdsa", &hex::encode(a.0)),
+            ParserCard::SignatureEd25519(a) => {
+                readable(self.indent, "Signature Ed25519", &hex::encode(a.0))
+            }
+            ParserCard::SignatureSr25519(a) => {
+                readable(self.indent, "Signature Sr25519", &hex::encode(a.0))
+            }
+            ParserCard::SignatureEcdsa(a) => {
+                readable(self.indent, "Signature Ecdsa", &hex::encode(a.0))
+            }
             ParserCard::Text(a) => readable(self.indent, "Text", a),
-            ParserCard::Tip(a) => readable(self.indent, "Tip", &format!("{} {}", a.number, a.units)),
-            ParserCard::TupleAnnounced(a) => readable(self.indent, "Tuple", &format!("{} element(s)", a)),
+            ParserCard::Tip(a) => {
+                readable(self.indent, "Tip", &format!("{} {}", a.number, a.units))
+            }
+            ParserCard::TupleAnnounced(a) => {
+                readable(self.indent, "Tuple", &format!("{} element(s)", a))
+            }
             ParserCard::TxVersion(a) => readable(self.indent, "Tx Version", a),
         }
     }
@@ -753,22 +1031,44 @@ impl ExtendedCard {
     pub fn show_with_docs(&self) -> String {
         let mut info_printed = String::new();
         for info_flat in self.info_flat.iter() {
-            info_printed.push_str(&format!("\n{}{}", "  ".repeat(self.indent as usize), info_flat.print()))
+            info_printed.push_str(&format!(
+                "\n{}{}",
+                "  ".repeat(self.indent as usize),
+                info_flat.print()
+            ))
         }
         let card_printed = match &self.parser_card {
-            ParserCard::SequenceAnnounced{len, element_info_flat} => {
+            ParserCard::SequenceAnnounced {
+                len,
+                element_info_flat,
+            } => {
                 let mut element_info_printed = String::new();
                 for (i, info_flat) in element_info_flat.iter().enumerate() {
-                    if i>0 {element_info_printed.push('\n')}
+                    if i > 0 {
+                        element_info_printed.push('\n')
+                    }
                     element_info_printed.push_str(&info_flat.print())
                 }
-                if element_info_printed.is_empty() {readable(self.indent, "Sequence", &format!("{} element(s)", len))}
-                else {readable(self.indent, "Sequence", &format!("{} element(s), element info: {}", len, element_info_printed))}
-            },
-            ParserCard::SequenceU8 {hex, text, element_info_flat} => {
+                if element_info_printed.is_empty() {
+                    readable(self.indent, "Sequence", &format!("{} element(s)", len))
+                } else {
+                    readable(
+                        self.indent,
+                        "Sequence",
+                        &format!("{} element(s), element info: {}", len, element_info_printed),
+                    )
+                }
+            }
+            ParserCard::SequenceU8 {
+                hex,
+                text,
+                element_info_flat,
+            } => {
                 let mut element_info_printed = String::new();
                 for (i, info_flat) in element_info_flat.iter().enumerate() {
-                    if i>0 {element_info_printed.push('\n')}
+                    if i > 0 {
+                        element_info_printed.push('\n')
+                    }
                     element_info_printed.push_str(&info_flat.print())
                 }
                 if element_info_printed.is_empty() {
@@ -776,15 +1076,21 @@ impl ExtendedCard {
                         Some(valid_text) => readable(self.indent, "Text", valid_text),
                         None => readable(self.indent, "Sequence u8", hex),
                     }
-                }
-                else {
+                } else {
                     match text {
-                        Some(valid_text) => readable(self.indent, "Text", &format!("{}, element info: {}", valid_text, element_info_printed)),
-                        None => readable(self.indent, "Sequence u8", &format!("{}, element info: {}", hex, element_info_printed)),
+                        Some(valid_text) => readable(
+                            self.indent,
+                            "Text",
+                            &format!("{}, element info: {}", valid_text, element_info_printed),
+                        ),
+                        None => readable(
+                            self.indent,
+                            "Sequence u8",
+                            &format!("{}, element info: {}", hex, element_info_printed),
+                        ),
                     }
                 }
-                
-            },
+            }
             _ => self.show(),
         };
         format!("{}{}", card_printed, info_printed)

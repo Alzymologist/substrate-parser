@@ -1,4 +1,4 @@
-//! Special decoding triggers and indicators
+//! Special decoding triggers and indicators.
 //!
 //! Although the [`RuntimeMetadataV14`] has all sufficient data to decode the
 //! data for a known type, some types must be treated specially for displaying
@@ -18,9 +18,6 @@
 //!     - definitive decoding route (`Perthing` types, `Era`, `AccountId32`)
 //!     - definitive decoding route if essential inner details are matching the
 //! ones expected (`Call`, `Option`)
-//!
-//!
-
 use frame_metadata::v14::{RuntimeMetadataV14, SignedExtensionMetadata};
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, Path, Type, TypeDef, Variant,
@@ -28,7 +25,7 @@ use scale_info::{
 
 use crate::cards::Info;
 use crate::decoding_sci::pick_variant;
-use crate::error::{ParserDecodingError, ParserError};
+use crate::error::ParserError;
 
 #[derive(Clone, Copy, Debug)]
 pub enum SpecialtyPrimitive {
@@ -98,7 +95,7 @@ impl Hint {
     }
 
     /// Propagated [`Hint`] has reached the decoding as a specialty with
-    /// [`H256`] type.
+    /// `H256` type.
     ///
     /// If hint is compatible with the primitive type encountered, it is used.
     pub fn hash256(&self) -> SpecialtyH256 {
@@ -125,9 +122,7 @@ impl SpecialtySet {
     }
     pub fn reject_compact(&self) -> Result<(), ParserError> {
         if self.is_compact {
-            Err(ParserError::Decoding(
-                ParserDecodingError::UnexpectedCompactInsides,
-            ))
+            Err(ParserError::UnexpectedCompactInsides)
         } else {
             Ok(())
         }
@@ -373,7 +368,7 @@ impl<'a> SpecialtyTypeChecked<'a> {
                 Some(a) => match a.as_str() {
                     "AccountId32" => Self::AccountId32,
                     "Era" => Self::Era,
-                    "H160" => Self::H160,
+                    "H160" | "AccountId20" => Self::H160,
                     "H256" => Self::H256,
                     "H512" => Self::H512,
                     "Perbill" => Self::Perbill,

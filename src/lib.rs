@@ -1,169 +1,100 @@
-//! This crate is a transaction parser used by
-//! [Signer](https://github.com/paritytech/parity-signer).
+//! This crate is a parser for Substrate chain data. It could be used to
+//! decode signable transactions, calls, events, storage items etc. with chain
+//! metadata. Decoded data could be pattern matched or represented in readable
+//! form.
 //!
-//! # Scope
+//! Currently only the most recent `RuntimeMetadata` version `V14` is supported
+//! for the chain metadata, as only the `V14` has conveniently in-built types
+//! database in it, thus allowing to track types using metadata itself without
+//! any additional information.
 //!
-//! Signer allows to sign only the transactions that were successfully parsed
-//! and were approved by user after checking the transaction contents.
+//! # Assumptions
 //!
-//! Transactions are read by the Signer as QR codes with data having following
-//! structure:
+//! Chain data is [SCALE-encoded](https://docs.substrate.io/reference/scale-codec/).
+//! Data blobs entering decoder are expected to be decoded completely: all
+//! provided `Vec<u8>` must be used in decoding with no data remaining.
 //!
-//! <table>
-//!     <tr>
-//!         <td>prelude</td>
-//!         <td>public key</td>
-//!         <td>SCALE-encoded call data</td>
-//!         <td>SCALE-encoded extensions</td>
-//!         <td>network genesis hash</td>
-//!     </tr>
-//! </table>
+//! For decoding the entry type (such as the type of particular storage item) or
+//! the data internal structure used to find the entry type in metadata (as is
+//! the case for signable transactions) must be known.
 //!
-//! This crate deals with decoding and presenting in a readable format the call
-//! data and extensions data, and processes only the
+//! Entry type gets resolved into constituting types with metadata in-built
+//! types registry and appropriate `&[u8]` chunks get cut from input blob and
+//! decoded. The process follows what the `decode` from the
+//! [SCALE codec](parity_scale_codec) does, except the types that go into the
+//! decoder are found dynamically during the decoding itself.
 //!
-//! <table>
-//!     <tr>
-//!         <td>SCALE-encoded call data</td>
-//!         <td>SCALE-encoded extensions</td>
-//!     </tr>
-//! </table>
+//! ## Signable transactions
 //!
-//! part.
+//! Signable transaction consist of the call part and extensions part.
 //!
-//! The ultimate goal here is to show the contents of the call and the
-//! extensions, not perform any operations on them, and this crate is not
-//! intended to keep track of the types used in call generation.
+//! Call part contains double SCALE-encoded call data. This means that the
+//! SCALE-encoded call data is preceded with compact of the encoded call data
+//! length. This length is used to separate encoded call data and extensions
+//! data, and decode them independently.
 //!
-//! # Features
+//! Call data is effectively an enum, and first `u8` of the encoded call is
+//! pallet `index` in [`PalletMetadata`](frame_metadata::v14::PalletMetadata).
+//! Enum describing the calls corresponding to this pallet has type found in
+//! [`PalletCallMetadata`](frame_metadata::v14::PalletCallMetadata). Further
+//! decoding uses the type information found.
 //!
-//! Default feature `"standalone"` allows to operate the parser as a standalone
-//! tool to parse the contents of transactions.
+//! Remaining data is SCALE-encoded set of signable extensions, as declared in
+//! [`ExtrinsicMetadata`](frame_metadata::v14::ExtrinsicMetadata). Chain genesis
+//! hash must be found among the decoded extensions and must match the genesis
+//! hash known for the chain. Spec version must be found among the decoded
+//! extensions and must match the spec version derived from the provided
+//! metadata. This is done to make sure that the correct metadata was used for
+//! parsing.
 //!
-//! Signer itself uses `parser` crate with default features disabled.
+//! ## Storage items
 //!
-//! # How the parser works
+//! Storage items could be queried from chain via rpc calls, and the retrieved
+//! SCALE-encoded data has a type declared in corresponding chain metadata
+//! [`StorageEntryType`](frame_metadata::v14::StorageEntryType).
 //!
-//! Call data and extensions data in transactions are
-//! [SCALE-encoded](https://docs.substrate.io/reference/scale-codec/).
+//! # Parsed data and cards
 //!
-//! Parsing always starts with separating call data and extensions data.
+//! Parsing data with a given type results in [`ExtendedData`]. Parsing data as
+//! a call results in [`Call`]. Both types are complex and may (and usually
+//! do) contain layered parsed data inside. During parsing itself as much as
+//! possible of internal data structure, identifiers and docs are preserved so
+//! that it is easier to find information in parsed items or pattern-match them.
 //!
-//! Call data is `Vec<u8>`. **SCALE-encoded** call data, that is a part of the
-//! transaction data, is the same `Vec<u8>` prefixed with compact of the call
-//! data length. After the first compact is found, the data gets cut into call
-//! data and the extensions data, that get processed separately.
+//! All parsed results may be carded. Cards are **flat** formatted elements,
+//! with type-associated information, that could be printed or otherwise
+//! displayed to user. Each `Call` and `ExtendedData` gets carded into
+//! `Vec<ExtendedCard>`.
 //!
-//! In decoding both call and extensions data the `Vec<u8>` enters the decoder,
-//! and gets pieces cut off byte-by-byte starting from the first. This
-//! processing follows what the `decode` from the [`parity_scale_codec`] does,
-//! however, the types that go into the decoder are found dynamically during the
-//! decoding itself. Generally, first, the type is found from the metadata, then
-//! the bytes corresponding to the encoded value are cut from the entered data,
-//! decoded and transformed into displayable [`OutputCard`].
+//! # Special types
 //!
-//! Notably, the decoding operates differently for different
-//! [`RuntimeMetadata`](frame_metadata::RuntimeMetadata) variants. Signer can
-//! work with metadata `V12`, `V13` and `V14`. Of those, only `V14`, i.e.
-//! [`RuntimeMetadataV14`] has types described inside the metadata itself.
-//! `V12` and `V13` have only type text descriptors, and the types meaning has
-//! to be inferred from elsewhere, therefore, additional types description
-//! dataset is needed to parse transactions made with metadata runtime versions
-//! below `V14`.
+//! Types, as stored in the metadata types registry, have associated
+//! [`Path`](scale_info::Path) information. The `ident` segment of the `Path` is
+//! used to detect the special types.
 //!
-//! ## Decoding extensions
+//! Some `Path` identifiers are used without further checking, such as
+//! well-known array-based types (`AccountId32`, hashes, public keys, signatures
+//! etc) or other types with known or easily determined encoded size, such as
+//! `Era`, `PerThing` items etc.
 //!
-//! Decoding starts with the extensions, as the extensions contain the metadata
-//! version that must match the version of the metadata used to decode both the
-//! extensions and the call data.
+//! Other `Path` identifiers are checked first, and used only if the further
+//! discovered type information matches the expected one, this is the case for
+//! `Call`, `Event` and `Option`. If it does not match, the data is parsed as
+//! is, i.e. without fitting into specific item format.
 //!
-//! Extensions in metadata `V12` and `V13` are described in the metadata as
-//! `ExtrinsicMetadata` in `extrinsic` field of the `RuntimeMetadataV12` and
-//! `RuntimeMetadataV13`. Field `signed_extensions` contain text identifier set
-//! for extensions, that in principle can vary between the metadata. Here for
-//! older metadata static extension set is used, matching the only ever
-//! encountered in Substrate networks extensions.
+//! Enums and structs contain sets of [`Field`](scale_info::Field)s. Field
+//! `name` and `type_name` may also hint at type specialty information, although
+//! less reliably than the `Path`. Such hints do not cause errors in parser flow
+//! if appear unexpectedly, and just get ignored.
 //!
-//! In metadata `V14` the extensions are described in `extrinsic` field of the
-//! `RuntimeMetadataV14`, and have types resolvable in the associated with the
-//! metadata types registry. Set of extensions in `signed_extensions` field of
-//! the [`ExtrinsicMetadata`](frame_metadata::v14::ExtrinsicMetadata) is scanned
-//! twice: first, for the types in field `ty`, then for the types in the field
-//! `additional_signed` of the
-//! [`SignedExtensionsMetadata`](frame_metadata::v14::SignedExtensionMetadata).
-//! The extensions for most `V14` metadata are matching the static ones used for
-//! `V12` and `V13`, however, as the types could be easily interpreted,
-//! potentially changeable construction is used here.
-//!
-//! ## Decoding call data
-//!
-//! Once the extensions are decoded and the metadata version in transaction is
-//! asserted to match the metadata version from the metadata itself, the call
-//! can be decoded.
-//!
-//! Both the call and the extensions decoding must use all the bytes that were
-//! initially in the input.
-//!
-//! The call data always starts with pallet number, the index of the pallet in
-//! which the call was created. In a sense, the call data is encoded enum data
-//! with pallet being the enum variant used. Pallet index is the first byte
-//! of the data, it is declared to be `u8` in `V12`
-//! [`ModuleMetadata`](frame_metadata::v12::ModuleMetadata), `V13`
-//! [`ModuleMetadata`](frame_metadata::v13::ModuleMetadata) and `V14`
-//! [`PalletMetadata`](frame_metadata::v14::PalletMetadata).
-//!
-//! The pallet index is the decoding entry point for all runtime metadata
-//! versions. The pallets available in the metadata are scanned to find the
-//! pallet with correct index.
-//!
-//! ### Metadata `V14`
-//!
-//! For `V14` runtime metadata version the remaining data is then processed as
-//! enum, with the type specified in `calls` field of the
-//! [`PalletMetadata`](frame_metadata::v14::PalletMetadata). Enum variant has
-//! field(s) with specified types, all of which are resolved in the types
-//! registry, get bytes cut off from the remaining call data to decode with the
-//! type found, and produce [`OutputCard`]s that are added to output set.
-//!
-//! ### Metadata `V12` and `V13`
-//!
-//! For `V12` and `V13` runtime metadata version the correct call variant and
-//! its [`FunctionMetadata`](frame_metadata::v12::FunctionMetadata) in is found
-//! by the ordinal number of the call in the vector in `calls` field of
-//! `ModuleMetadata`. Arguments associated with the call (types and variable
-//! names) are found in call-associated set of
-//! [`FunctionArgumentMetadata`](frame_metadata::v12::FunctionMetadata) in
-//! `arguments` field of the `FunctionMetadata`. Arguments are used in the same
-//! order as they are listed.
-//!
-//! The text type descriptors are parsed using Regex (interpreting `Option`,
-//! `Vec`, tuple fields etc) down to types that **have** to be known and then
-//! those are used. The types information that is by default on record in the
-//! Signer, contains description of the types that were used at the time of the
-//! parser drafting in Westend. Polkadot, Kusama and Rococo networks, when those
-//! still used metadata below `V14`. Types pre-`V14` were quite stable, so most
-//! of the trivial transactions are expected to be parsed.
-//!
-//! If one of the encountered type is not described, Signer will not be able to
-//! parse the transaction. In this case users are encouraged to update the types
-//! information.
-//!
-//! For each argument an [`OutputCard`] is produces and added to the output set.
+//! Field could contain currency-related data. When carded and displayed,
+//! currency is displayed with chain decimals and units only if encountered in
+//! a particular set of pallets or in extensions.
 #![deny(unused_crate_dependencies)]
 
 use frame_metadata::v14::RuntimeMetadataV14;
-//#[cfg(feature = "standalone")]
-//use frame_metadata::RuntimeMetadata;
-//use parity_scale_codec::{Decode, DecodeAll, Encode};
-//use scale_info::{form::PortableForm, Type};
 use scale_info::interner::UntrackedSymbol;
 use sp_core::H256;
-//use sp_runtime::generic::Era;
-
-//#[cfg(feature = "standalone")]
-//use defaults::default_types_vec;
-//#[cfg(feature = "standalone")]
-//use definitions::metadata::info_from_metadata;
 
 pub mod cards;
 use cards::{Call, ExtendedCard, ExtendedData};
@@ -174,16 +105,16 @@ pub use decoding_sci::{decode_as_call_v14, decode_with_type, Ty};
 mod decoding_sci_ext;
 pub use decoding_sci_ext::decode_ext_attempt;
 pub mod error;
-#[cfg(feature = "standalone")]
-use error::{Error, ParserError};
+use error::{ParserError, SignableError};
 pub mod printing_balance;
 pub mod special_indicators;
 use special_indicators::Propagated;
 pub mod special_types;
-#[cfg(feature = "standalone")]
+
 #[cfg(test)]
 mod tests;
 
+/// Chain data necessary to display decoded data correctly.
 pub struct ShortSpecs {
     pub base58prefix: u16,
     pub decimals: u8,
@@ -192,45 +123,40 @@ pub struct ShortSpecs {
     pub unit: String,
 }
 
-/// Separate call data and extensions data based on the call data length
-/// declared as a compact.
-pub fn cut_method_extensions(data: &mut Vec<u8>) -> Result<(Vec<u8>, Vec<u8>), ParserError> {
-    let method_length =
-        get_compact::<u32>(data).map_err(|_| ParserError::SeparateMethodExtensions)? as usize;
-    if !data.is_empty() {
-        match data.get(..method_length) {
-            Some(a) => Ok((a.to_vec(), data[method_length..].to_vec())),
-            None => Err(ParserError::SeparateMethodExtensions),
-        }
-    } else if method_length != 0 {
-        Err(ParserError::SeparateMethodExtensions)
-    } else {
-        Ok((Vec::new(), data.to_vec()))
+/// Cut a signable transaction data into call part and extensions part.
+pub fn cut_call_extensions(data: &mut Vec<u8>) -> Result<(Vec<u8>, Vec<u8>), SignableError> {
+    let call_length = get_compact::<u32>(data).map_err(|_| SignableError::CutSignable)? as usize;
+    match data.get(..call_length) {
+        Some(a) => Ok((a.to_vec(), data[call_length..].to_vec())),
+        None => Err(SignableError::CutSignable),
     }
 }
 
+/// Signable transaction parsing outcome.
+///
+/// Extensions must be decoded. Call decoding may be successful or not.
 #[derive(Debug)]
 pub struct TransactionParsed {
-    pub call_result: Result<Call, ParserError>,
+    pub call_result: Result<Call, SignableError>,
     pub extensions: Vec<ExtendedData>,
 }
 
-#[cfg(feature = "standalone")]
-/// Parse transaction with given metadata and network specs. For standalone
-/// parser.
+/// Parse a signable transaction.
 pub fn parse_transaction(
     data: &mut Vec<u8>,
     meta_v14: &RuntimeMetadataV14,
     version: u32,
     genesis_hash: H256,
-) -> Result<TransactionParsed, ParserError> {
-    // if unable to separate method date and extensions, then some fundamental flaw is in transaction itself
-    let (mut call_data, mut extensions_data) = cut_method_extensions(data)?;
+) -> Result<TransactionParsed, SignableError> {
+    // if unable to separate call date and extensions, then there is
+    // some fundamental flaw is in transaction itself
+    let (mut call_data, mut extensions_data) = cut_call_extensions(data)?;
 
-    // try parsing extensions, if is works, the version and extensions are correct
+    // try parsing extensions, check that spec version and genesis hash are
+    // correct
     let extensions = decode_ext_attempt(&mut extensions_data, meta_v14, version, genesis_hash)?;
 
-    // try parsing method
+    // try parsing call data
     let call_result = decode_as_call_v14(&mut call_data, meta_v14);
 
     Ok(TransactionParsed {
@@ -239,9 +165,7 @@ pub fn parse_transaction(
     })
 }
 
-#[cfg(feature = "standalone")]
-/// Parse transaction with given metadata and network specs. For standalone
-/// parser.
+/// Display signable transaction, in readable form.
 pub fn display_transaction(
     data: &mut Vec<u8>,
     meta_v14: &RuntimeMetadataV14,
@@ -249,13 +173,15 @@ pub fn display_transaction(
     short_specs: &ShortSpecs,
 ) -> Result<String, String> {
     let parsed = parse_transaction(data, meta_v14, version, short_specs.genesis_hash)
-        .map_err(|e| Error::Parser(e).show())?;
-    
+        .map_err(|e| e.to_string())?;
+
     let indent = 0;
     let mut extensions_set: Vec<ExtendedCard> = Vec::new();
     for extension in parsed.extensions.iter() {
         let addition_set = extension.card(indent, true, short_specs);
-        if !addition_set.is_empty() {extensions_set.extend_from_slice(&addition_set)}
+        if !addition_set.is_empty() {
+            extensions_set.extend_from_slice(&addition_set)
+        }
     }
 
     let mut extensions_printed = String::new();
@@ -276,8 +202,8 @@ pub fn display_transaction(
                 call_out.push_str(&x.show());
             }
             call_out
-        },
-        Err(e) => e.show(),
+        }
+        Err(e) => e.to_string(),
     };
     Ok(format!(
         "\nCall:\n\n{}\n\n\nExtensions:\n\n{}",
@@ -285,7 +211,7 @@ pub fn display_transaction(
     ))
 }
 
-/// Decoder for random blob.
+/// Decode data blob with known type.
 ///
 /// No check here for all data being used. This check must be added elsewhere.
 pub fn decode_blob_as_type(

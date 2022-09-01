@@ -95,7 +95,7 @@ fn tr_2() {
         &specs(),
     )
     .unwrap_err();
-    let reply_known = "Network spec version decoded from extensions (9111) differs from the version in metadata (9120).";
+    let reply_known = "Wrong metadata spec version. When decoding extensions data with metadata version 9120, the apparent spec version in extensions is 9111.";
     assert!(
         reply == reply_known,
         "Expected: {}\nReceived: {}",

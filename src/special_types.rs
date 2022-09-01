@@ -1,5 +1,4 @@
-//! Decoder elements common for all metadata versions
-//!
+//! Decoders for special types: primitives, `PerThing` items, well-known arrays.
 use num_bigint::{BigInt, BigUint};
 use parity_scale_codec::{Decode, HasCompact};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
@@ -9,7 +8,7 @@ use std::{convert::TryInto, mem::size_of};
 
 use crate::cards::{ParsedData, Sequence, SequenceData};
 use crate::compacts::get_compact;
-use crate::error::{ParserDecodingError, ParserError};
+use crate::error::ParserError;
 use crate::printing_balance::AsBalance;
 use crate::special_indicators::{SpecialtyH256, SpecialtyPrimitive, SpecialtySet};
 
@@ -26,11 +25,11 @@ macro_rules! impl_stable_length_decodable {
                     match data.get(..length) {
                         Some(slice_to_decode) => {
                             let out = <Self>::decode(&mut &slice_to_decode[..])
-                                .map_err(|_| ParserError::Decoding(ParserDecodingError::PrimitiveFailure(stringify!($ty))))?;
+                                .map_err(|_| ParserError::TypeFailure(stringify!($ty)))?;
                             *data = data[length..].to_vec();
                             Ok(out)
                         },
-                        None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort))
+                        None => Err(ParserError::DataTooShort)
                     }
                 }
             }
@@ -68,7 +67,7 @@ macro_rules! impl_stable_length_big {
                             *data = data[32..].to_vec();
                             Ok(out)
                         },
-                        None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+                        None => Err(ParserError::DataTooShort),
                     }
                 }
             }
@@ -91,11 +90,9 @@ impl StLen for char {
                     *data = data[4..].to_vec();
                     Ok(ch)
                 }
-                None => Err(ParserError::Decoding(
-                    ParserDecodingError::PrimitiveFailure("char"),
-                )),
+                None => Err(ParserError::TypeFailure("char")),
             },
-            None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+            None => Err(ParserError::DataTooShort),
         }
     }
 }
@@ -163,9 +160,7 @@ macro_rules! impl_block_compact {
             impl StLenCheckCompact for $ty {
                 fn decode_checked(data: &mut Vec<u8>, is_compact: bool) -> Result<ParsedData, ParserError> {
                     let value = {
-                        if is_compact {return Err(ParserError::Decoding(
-                            ParserDecodingError::UnexpectedCompactInsides,
-                        ))}
+                        if is_compact {return Err(ParserError::UnexpectedCompactInsides)}
                         else {<Self>::decode_value(data)?}
                     };
                     Ok(ParsedData::$enum_variant(value))
@@ -223,20 +218,26 @@ impl Collectable for Vec<u8> {
                     if let Sequence::U8(a) = &sequence_data.data {
                         match inner_element_info {
                             Some(ref b) => {
-                                if b != &sequence_data.element_info {return None}
-                            },
+                                if b != &sequence_data.element_info {
+                                    return None;
+                                }
+                            }
                             None => {
                                 inner_element_info = Some(sequence_data.element_info.to_owned());
-                            },
+                            }
                         }
                         out.push(a.clone())
+                    } else {
+                        return None;
                     }
-                    else {return None}
-                },
+                }
                 ParsedData::SequenceRaw(a) => {
-                    if a.data.is_empty() {out.push(Vec::new())}
-                    else {return None}
-                },
+                    if a.data.is_empty() {
+                        out.push(Vec::new())
+                    } else {
+                        return None;
+                    }
+                }
                 _ => return None,
             }
         }
@@ -244,7 +245,10 @@ impl Collectable for Vec<u8> {
             Some(a) => a,
             None => Vec::new(),
         };
-        Some(Sequence::VecU8{sequence: out, inner_element_info})
+        Some(Sequence::VecU8 {
+            sequence: out,
+            inner_element_info,
+        })
     }
 }
 
@@ -283,7 +287,7 @@ pub(crate) fn special_case_account_id32(data: &mut Vec<u8>) -> Result<ParsedData
             let account_id = AccountId32::new(array_decoded);
             Ok(ParsedData::Id(account_id))
         }
-        None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+        None => Err(ParserError::DataTooShort),
     }
 }
 
@@ -298,7 +302,7 @@ macro_rules! crypto_type_decoder {
                     let public = sp_core::$module::$target::from_raw(array_decoded);
                     Ok(ParsedData::$enum_variant(public))
                 }
-                None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+                None => Err(ParserError::DataTooShort),
             }
         }
     };
@@ -357,7 +361,7 @@ macro_rules! impl_special_array_h {
                             *data = data[length..].to_vec();
                             Ok(ParsedData::$hash(out_data))
                         },
-                        None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort))
+                        None => Err(ParserError::DataTooShort)
                     }
                 }
             }
@@ -382,7 +386,7 @@ pub fn special_case_h256(
                 SpecialtyH256::None => Ok(ParsedData::H256(out_data)),
             }
         }
-        None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+        None => Err(ParserError::DataTooShort),
     }
 }
 
@@ -391,13 +395,13 @@ pub fn special_case_era(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
         Some(0) => (data[0..1].to_vec(), data[1..].to_vec()),
         Some(_) => match data.get(0..2) {
             Some(a) => (a.to_vec(), data[2..].to_vec()),
-            None => return Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+            None => return Err(ParserError::DataTooShort),
         },
-        None => return Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+        None => return Err(ParserError::DataTooShort),
     };
     *data = remaining_vector;
     match Era::decode(&mut &era_data[..]) {
         Ok(a) => Ok(ParsedData::Era(a)),
-        Err(_) => Err(ParserError::Decoding(ParserDecodingError::Era)),
+        Err(_) => Err(ParserError::TypeFailure("Era")),
     }
 }
