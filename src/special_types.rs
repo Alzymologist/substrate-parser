@@ -253,7 +253,7 @@ impl Collectable for Vec<u8> {
 }
 
 pub fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
-    match set.get(0) {
+    match set.first() {
         Some(ParsedData::PrimitiveU8 { .. }) => u8::husk_set(set),
         Some(ParsedData::PrimitiveU16 { .. }) => u16::husk_set(set),
         Some(ParsedData::PrimitiveU32 { .. }) => u32::husk_set(set),
@@ -391,7 +391,7 @@ pub fn special_case_h256(
 }
 
 pub fn special_case_era(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
-    let (era_data, remaining_vector) = match data.get(0) {
+    let (era_data, remaining_vector) = match data.first() {
         Some(0) => (data[0..1].to_vec(), data[1..].to_vec()),
         Some(_) => match data.get(0..2) {
             Some(a) => (a.to_vec(), data[2..].to_vec()),

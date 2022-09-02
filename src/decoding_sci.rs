@@ -100,7 +100,7 @@ pub fn decode_as_call_v14(
     data: &mut Vec<u8>,
     meta_v14: &RuntimeMetadataV14,
 ) -> Result<Call, SignableError> {
-    let pallet_index: u8 = match data.get(0) {
+    let pallet_index: u8 = match data.first() {
         Some(x) => *x,
         None => return Err(SignableError::Parsing(ParserError::DataTooShort)),
     };
@@ -259,7 +259,7 @@ pub fn decode_with_type(
             propagated.specialty_set.reject_compact()?;
             let param_ty = resolve_ty(meta_v14, ty_symbol.id())?;
             match param_ty.type_def() {
-                TypeDef::Primitive(TypeDefPrimitive::Bool) => match data.get(0) {
+                TypeDef::Primitive(TypeDefPrimitive::Bool) => match data.first() {
                     Some(a) => {
                         let parsed_data = match OptionBool::decode(&mut [*a].as_slice()) {
                             Ok(OptionBool(Some(true))) => {
@@ -279,7 +279,7 @@ pub fn decode_with_type(
                     }
                     None => Err(ParserError::DataTooShort),
                 },
-                _ => match data.get(0) {
+                _ => match data.first() {
                     Some(0) => {
                         *data = data[1..].to_vec();
                         Ok(ExtendedData {
@@ -458,7 +458,7 @@ pub(crate) fn pick_variant<'a>(
     variants: &'a [Variant<PortableForm>],
     data: &[u8],
 ) -> Result<&'a Variant<PortableForm>, ParserError> {
-    let enum_index = match data.get(0) {
+    let enum_index = match data.first() {
         Some(x) => *x,
         None => return Err(ParserError::DataTooShort),
     };

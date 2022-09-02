@@ -9,12 +9,13 @@ use sp_core::{
     ecdsa, ed25519, sr25519, H160, H256, H512,
 };
 use sp_runtime::generic::Era;
+use std::fmt::Write;
 
 use crate::printing_balance::{AsBalance, Currency};
 use crate::special_indicators::{PalletSpecificItem, SpecialtyPrimitive};
 use crate::ShortSpecs;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Info {
     pub docs: String,
     pub path: Path<PortableForm>,
@@ -1035,11 +1036,12 @@ impl ExtendedCard {
     pub fn show_with_docs(&self) -> String {
         let mut info_printed = String::new();
         for info_flat in self.info_flat.iter() {
-            info_printed.push_str(&format!(
+            let _ = write!(
+                info_printed, 
                 "\n{}{}",
                 "  ".repeat(self.indent as usize),
                 info_flat.print()
-            ))
+            );
         }
         let card_printed = match &self.parser_card {
             ParserCard::SequenceAnnounced {

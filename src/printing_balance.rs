@@ -32,7 +32,7 @@
 //!
 //! ## Examples
 //! ```
-//! use parser_reworked::printing_balance::AsBalance;
+//! use substrate_parser::printing_balance::AsBalance;
 //!
 //! let balance = <u128>::convert_balance_pretty(1, 12, "WND");
 //! assert!(balance.number == "1");
@@ -108,7 +108,7 @@ struct CutNumber {
     mag: i8,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 /// Formatted balance.
 pub struct Currency {
     /// Balance value with correctly placed point, to match the modified units

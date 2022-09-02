@@ -1,10 +1,13 @@
 [package]
-name = "parser_reworked"
+description = "parser for Substrate chain data"
+license = "GPL-3.0-or-later"
+name = "substrate_parser"
 version = "0.1.0"
-authors = ["vera"]
-edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["Alexander Slesarev <slesarew@gmail.com>", "Vera Abramova <abramova.vera@gmail.com>"]
+edition = "2021"
+repository = "https://github.com/Alzymologist/substrate-parser"
+homepage = "https://github.com/Alzymologist/substrate-parser"
+keywords = ["parser", "substrate"]
 
 [dependencies]
 bitvec = "1.0.0"
@@ -20,5 +23,5 @@ sp-runtime = "6.0.0"
 thiserror = "1.0.33"
 
 [lib]
-name = "parser_reworked"
+name = "substrate_parser"
 crate-type = ["lib"]

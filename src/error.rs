@@ -2,7 +2,7 @@
 use sp_core::H256;
 
 /// Errors in signable transactions parsing.
-#[derive(Debug, PartialEq, thiserror::Error)]
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum SignableError {
     #[error("Unable to separate signable transaction data into call data and extensions data.")]
     CutSignable,
@@ -44,7 +44,7 @@ pub enum SignableError {
 }
 
 /// Errors in data parsing.
-#[derive(Debug, PartialEq, thiserror::Error)]
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ParserError {
     #[error("Remaining data too short for expected content.")]
     DataTooShort,
@@ -90,7 +90,7 @@ pub enum ParserError {
 ///
 /// If `Era` is encountered and immortal, block hash (if encountered) must be
 /// checked to match the genesis hash.
-#[derive(Debug, PartialEq, thiserror::Error)]
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ExtensionsError {
     #[error("Signable transaction extensions contain more than one block hash entry.")]
     BlockHashTwice,

@@ -154,16 +154,41 @@ pub const CHECK_NONCE: &str = "CheckNonce";
 /// Apparently established `identifier` across different chains.
 pub const CHARGE_TRANSACTION_PAYMENT: &str = "ChargeTransactionPayment";
 
+/// Specialty attributed to unsigned integer.
+///
+/// `SpecialtyPrimitive` is stored in unsigned integer `ParsedData` and
+/// determines the card type.
+///
+/// Is determined by propagating [`Hint`] from [`SignedExtensionMetadata`]
+/// identifier or from [`Field`] descriptor.
 #[derive(Clone, Copy, Debug)]
 pub enum SpecialtyPrimitive {
+    /// Regular unsigned integer.
     None,
+
+    /// Value is currency-related, displayed with chain decimals and units for
+    /// appropriate [pallets](crate::cards::PALLETS_BALANCE_VALID).
     Balance,
+
+    /// Value is transaction tip from signable transaction extensions, always
+    /// displayed as currency with chain decimals and units.
     Tip,
+
+    /// Value is nonce.
     Nonce,
+
+    /// Value is metadata spec version from signable transaction extensions.
     SpecVersion,
+
+    /// Value is tx version from signable transaction extensions.
     TxVersion,
 }
 
+/// Specialty attributed to `H256` hashes.
+///
+/// Is used only when parsing signable transaction extensions.
+///
+/// Is determined by propagating [`Hint`] from [`SignedExtensionMetadata`].
 #[derive(Clone, Copy, Debug)]
 pub enum SpecialtyH256 {
     None,
@@ -171,6 +196,14 @@ pub enum SpecialtyH256 {
     BlockHash,
 }
 
+/// Specialty indicator that propagates during the decoding into compacts and
+/// single-field structs and gets used only if suitable type is encountered.
+///
+/// `Hint` can originate from [`SignedExtensionMetadata`] identifier or from
+/// [`Field`] descriptor.
+///
+/// If non-`None` `Hint` is encountered during decoding, it does not get updated
+/// until the extension or the field are decoded through.
 #[derive(Clone, Copy, Debug)]
 pub enum Hint {
     None,
@@ -185,6 +218,8 @@ pub enum Hint {
 }
 
 impl Hint {
+    /// `Hint` for a [`Field`]. Both `name` and `type_name` are used, `name` is
+    /// more reliable and gets checked first.
     pub fn from_field(field: &Field<PortableForm>) -> Self {
         let mut out = match field.name() {
             Some(name) => match name.as_str() {
@@ -204,9 +239,7 @@ impl Hint {
         out
     }
 
-    /// Propagated [`Hint`] has reached the primitive decoding.
-    ///
-    /// If hint is compatible with the primitive type encountered, it is used.
+    /// Apply [`Hint`] on unsigned integer decoding.
     pub fn primitive(&self) -> SpecialtyPrimitive {
         match &self {
             Hint::CheckSpecVersion => SpecialtyPrimitive::SpecVersion,
@@ -218,10 +251,7 @@ impl Hint {
         }
     }
 
-    /// Propagated [`Hint`] has reached the decoding as a specialty with
-    /// `H256` type.
-    ///
-    /// If hint is compatible with the primitive type encountered, it is used.
+    /// Apply [`Hint`] on `H256` decoding.
     pub fn hash256(&self) -> SpecialtyH256 {
         match &self {
             Hint::CheckGenesis => SpecialtyH256::GenesisHash,
@@ -357,7 +387,7 @@ pub enum SpecialtyTypeHinted {
     PalletSpecific(PalletSpecificItem),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum PalletSpecificItem {
     Call,
     Event,
