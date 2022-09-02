@@ -8,6 +8,7 @@ edition = "2021"
 repository = "https://github.com/Alzymologist/substrate-parser"
 homepage = "https://github.com/Alzymologist/substrate-parser"
 keywords = ["parser", "substrate"]
+exclude = ["/for_tests", "/.github"]
 
 [dependencies]
 bitvec = "1.0.0"
