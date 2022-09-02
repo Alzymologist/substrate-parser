@@ -1037,7 +1037,7 @@ impl ExtendedCard {
         let mut info_printed = String::new();
         for info_flat in self.info_flat.iter() {
             let _ = write!(
-                info_printed, 
+                info_printed,
                 "\n{}{}",
                 "  ".repeat(self.indent as usize),
                 info_flat.print()
