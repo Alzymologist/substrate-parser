@@ -1,7 +1,4 @@
-//! Decode call data using metadata [`RuntimeMetadataV14`]
-//!
-//! Metadata [`RuntimeMetadataV14`] contains types description inside, that gets
-//! used for the decoding.
+//! Decode data using [`RuntimeMetadataV14`].
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use frame_metadata::v14::RuntimeMetadataV14;
 use num_bigint::{BigInt, BigUint};
@@ -18,20 +15,16 @@ use crate::cards::{
     SequenceData, SequenceRawData, VariantData,
 };
 use crate::compacts::{cut_compact, get_compact};
-use crate::error::{ParserDecodingError, ParserError};
+use crate::error::{ParserError, SignableError};
 use crate::special_indicators::{
-    Lead, PalletSpecificItem, Propagated, SpecialtyField, SpecialtySet, SpecialtyTypeChecked,
-    SpecialtyTypeHinted,
+    Hint, PalletSpecificItem, Propagated, SpecialtySet, SpecialtyTypeChecked, SpecialtyTypeHinted,
 };
 use crate::special_types::{
-    special_case_account_id32, special_case_era, special_case_h256, wrap_sequence, SpecialArray,
-    StLenCheckCompact, StLenCheckSpecialtyCompact,
+    special_case_account_id32, special_case_ecdsa_public, special_case_ecdsa_signature,
+    special_case_ed25519_public, special_case_ed25519_signature, special_case_era,
+    special_case_h256, special_case_sr25519_public, special_case_sr25519_signature, wrap_sequence,
+    SpecialArray, StLenCheckCompact, StLenCheckSpecialtyCompact,
 };
-
-enum FoundBitOrder {
-    Lsb0,
-    Msb0,
-}
 
 /// Function to decode types that are variants of TypeDefPrimitive enum.
 ///
@@ -88,20 +81,16 @@ fn decode_str(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
             Some(a) => {
                 let text = match String::from_utf8(a.to_vec()) {
                     Ok(b) => b,
-                    Err(_) => {
-                        return Err(ParserError::Decoding(
-                            ParserDecodingError::PrimitiveFailure("str"),
-                        ))
-                    }
+                    Err(_) => return Err(ParserError::TypeFailure("str")),
                 };
                 let out = ParsedData::Text(text);
                 *data = data[str_length..].to_vec();
                 Ok(out)
             }
-            None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+            None => Err(ParserError::DataTooShort),
         }
     } else if str_length != 0 {
-        Err(ParserError::Decoding(ParserDecodingError::DataTooShort))
+        Err(ParserError::DataTooShort)
     } else {
         Ok(ParsedData::Text(String::new()))
     }
@@ -110,10 +99,10 @@ fn decode_str(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
 pub fn decode_as_call_v14(
     data: &mut Vec<u8>,
     meta_v14: &RuntimeMetadataV14,
-) -> Result<Call, ParserError> {
-    let pallet_index: u8 = match data.get(0) {
+) -> Result<Call, SignableError> {
+    let pallet_index: u8 = match data.first() {
         Some(x) => *x,
-        None => return Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+        None => return Err(SignableError::Parsing(ParserError::DataTooShort)),
     };
 
     *data = data[1..].to_vec();
@@ -133,27 +122,14 @@ pub fn decode_as_call_v14(
 
     let pallet_name = match found_pallet_name {
         Some(a) => a,
-        None => {
-            return Err(ParserError::Decoding(ParserDecodingError::PalletNotFound(
-                pallet_index,
-            )))
-        }
+        None => return Err(SignableError::PalletNotFound(pallet_index)),
     };
 
     let calls_in_pallet_type = match found_calls_in_pallet_type_id {
-        Some(calls_in_pallet_symbol) => match meta_v14.types.resolve(calls_in_pallet_symbol.id()) {
-            Some(a) => a,
-            None => {
-                return Err(ParserError::Decoding(
-                    ParserDecodingError::V14TypeNotResolved,
-                ))
-            }
-        },
-        None => {
-            return Err(ParserError::Decoding(ParserDecodingError::NoCallsInPallet(
-                pallet_name,
-            )))
+        Some(calls_in_pallet_symbol) => {
+            resolve_ty(meta_v14, calls_in_pallet_symbol.id()).map_err(SignableError::Parsing)?
         }
+        None => return Err(SignableError::NoCallsInPallet(pallet_name)),
     };
 
     let pallet_info = Info::from_ty(calls_in_pallet_type);
@@ -162,11 +138,10 @@ pub fn decode_as_call_v14(
         if let SpecialtyTypeHinted::PalletSpecific(PalletSpecificItem::Call) =
             SpecialtyTypeHinted::from_path(&pallet_info.path)
         {
-            let variant_data = decode_variant(x.variants(), data, meta_v14)?;
+            let variant_data =
+                decode_variant(x.variants(), data, meta_v14).map_err(SignableError::Parsing)?;
             if !data.is_empty() {
-                Err(ParserError::Decoding(
-                    ParserDecodingError::SomeDataNotUsedMethod,
-                ))
+                Err(SignableError::SomeDataNotUsedCall)
             } else {
                 Ok(Call(PalletSpecificData {
                     pallet_info,
@@ -177,10 +152,10 @@ pub fn decode_as_call_v14(
                 }))
             }
         } else {
-            Err(ParserError::Decoding(ParserDecodingError::NotACall))
+            Err(SignableError::NotACall(pallet_name))
         }
     } else {
-        Err(ParserError::Decoding(ParserDecodingError::NotACall))
+        Err(SignableError::NotACall(pallet_name))
     }
 }
 
@@ -192,14 +167,7 @@ pub fn decode_with_type(
 ) -> Result<ExtendedData, ParserError> {
     let ty = match ty_input {
         Ty::Resolved(resolved) => resolved,
-        Ty::Symbol(ty_symbol) => match meta_v14.types.resolve(ty_symbol.id()) {
-            Some(a) => a,
-            None => {
-                return Err(ParserError::Decoding(
-                    ParserDecodingError::V14TypeNotResolved,
-                ))
-            }
-        },
+        Ty::Symbol(ty_symbol) => resolve_ty(meta_v14, ty_symbol.id())?,
     };
     let info_ty = Info::from_ty(ty);
     propagated.add_info(&info_ty);
@@ -289,16 +257,9 @@ pub fn decode_with_type(
         }),
         SpecialtyTypeChecked::Option(ty_symbol) => {
             propagated.specialty_set.reject_compact()?;
-            let param_ty = match meta_v14.types.resolve(ty_symbol.id()) {
-                Some(a) => a,
-                None => {
-                    return Err(ParserError::Decoding(
-                        ParserDecodingError::V14TypeNotResolved,
-                    ))
-                }
-            };
+            let param_ty = resolve_ty(meta_v14, ty_symbol.id())?;
             match param_ty.type_def() {
-                TypeDef::Primitive(TypeDefPrimitive::Bool) => match data.get(0) {
+                TypeDef::Primitive(TypeDefPrimitive::Bool) => match data.first() {
                     Some(a) => {
                         let parsed_data = match OptionBool::decode(&mut [*a].as_slice()) {
                             Ok(OptionBool(Some(true))) => {
@@ -308,11 +269,7 @@ pub fn decode_with_type(
                                 ParsedData::Option(Some(Box::new(ParsedData::PrimitiveBool(false))))
                             }
                             Ok(OptionBool(None)) => ParsedData::Option(None),
-                            Err(_) => {
-                                return Err(ParserError::Decoding(
-                                    ParserDecodingError::UnexpectedOptionVariant,
-                                ))
-                            }
+                            Err(_) => return Err(ParserError::UnexpectedOptionVariant),
                         };
                         *data = data[1..].to_vec();
                         Ok(ExtendedData {
@@ -320,9 +277,9 @@ pub fn decode_with_type(
                             data: parsed_data,
                         })
                     }
-                    None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+                    None => Err(ParserError::DataTooShort),
                 },
-                _ => match data.get(0) {
+                _ => match data.first() {
                     Some(0) => {
                         *data = data[1..].to_vec();
                         Ok(ExtendedData {
@@ -344,10 +301,8 @@ pub fn decode_with_type(
                             data: ParsedData::Option(Some(Box::new(extended_option_data.data))),
                         })
                     }
-                    Some(_) => Err(ParserError::Decoding(
-                        ParserDecodingError::UnexpectedOptionVariant,
-                    )),
-                    None => Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+                    Some(_) => Err(ParserError::UnexpectedOptionVariant),
+                    None => Err(ParserError::DataTooShort),
                 },
             }
         }
@@ -397,6 +352,30 @@ pub fn decode_with_type(
             info: propagated.info,
             data: PerU16::decode_checked(data, propagated.specialty_set.is_compact)?,
         }),
+        SpecialtyTypeChecked::PublicEd25519 => Ok(ExtendedData {
+            info: propagated.info,
+            data: special_case_ed25519_public(data)?,
+        }),
+        SpecialtyTypeChecked::PublicSr25519 => Ok(ExtendedData {
+            info: propagated.info,
+            data: special_case_sr25519_public(data)?,
+        }),
+        SpecialtyTypeChecked::PublicEcdsa => Ok(ExtendedData {
+            info: propagated.info,
+            data: special_case_ecdsa_public(data)?,
+        }),
+        SpecialtyTypeChecked::SignatureEd25519 => Ok(ExtendedData {
+            info: propagated.info,
+            data: special_case_ed25519_signature(data)?,
+        }),
+        SpecialtyTypeChecked::SignatureSr25519 => Ok(ExtendedData {
+            info: propagated.info,
+            data: special_case_sr25519_signature(data)?,
+        }),
+        SpecialtyTypeChecked::SignatureEcdsa => Ok(ExtendedData {
+            info: propagated.info,
+            data: special_case_ecdsa_signature(data)?,
+        }),
     }
 }
 
@@ -413,38 +392,12 @@ pub fn decode_fields(
     for field in fields.iter() {
         let field_name = field.name().map(|name| name.to_owned());
         let type_name = field.type_name().map(|name| name.to_owned());
-        let this_field_data = match SpecialtyField::from_field(field) {
-            SpecialtyField::Lead(Lead::Text) => {
-                let mut temp_data_clone = data.clone();
-                match decode_str(&mut temp_data_clone) {
-                    Ok(parsed_data) => {
-                        *data = temp_data_clone;
-                        ExtendedData {
-                            info: Vec::new(),
-                            data: parsed_data,
-                        }
-                    }
-                    Err(_) => decode_with_type(
-                        &Ty::Symbol(field.ty()),
-                        data,
-                        meta_v14,
-                        Propagated::with_specialty_set(specialty_set),
-                    )?,
-                }
-            }
-            SpecialtyField::Hint(hint) => decode_with_type(
-                &Ty::Symbol(field.ty()),
-                data,
-                meta_v14,
-                Propagated::with_specialty_set_updated(specialty_set, hint),
-            )?,
-            SpecialtyField::None => decode_with_type(
-                &Ty::Symbol(field.ty()),
-                data,
-                meta_v14,
-                Propagated::with_specialty_set(specialty_set),
-            )?,
-        };
+        let this_field_data = decode_with_type(
+            &Ty::Symbol(field.ty()),
+            data,
+            meta_v14,
+            Propagated::with_specialty_set_updated(specialty_set, Hint::from_field(field)),
+        )?;
         out.push(FieldData {
             field_name,
             type_name,
@@ -469,7 +422,7 @@ pub fn decode_elements_set(
     let data = {
         if number_of_elements == 0 {
             ParsedData::SequenceRaw(SequenceRawData {
-                info: husked.info,
+                element_info: husked.info,
                 data: Vec::new(),
             })
         } else {
@@ -485,11 +438,11 @@ pub fn decode_elements_set(
             }
             match wrap_sequence(&out) {
                 Some(sequence) => ParsedData::Sequence(SequenceData {
-                    info: husked.info,
+                    element_info: husked.info,
                     data: sequence,
                 }),
                 None => ParsedData::SequenceRaw(SequenceRawData {
-                    info: husked.info,
+                    element_info: husked.info,
                     data: out,
                 }),
             }
@@ -505,9 +458,9 @@ pub(crate) fn pick_variant<'a>(
     variants: &'a [Variant<PortableForm>],
     data: &[u8],
 ) -> Result<&'a Variant<PortableForm>, ParserError> {
-    let enum_index = match data.get(0) {
+    let enum_index = match data.first() {
         Some(x) => *x,
-        None => return Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+        None => return Err(ParserError::DataTooShort),
     };
 
     let mut found_variant = None;
@@ -519,9 +472,7 @@ pub(crate) fn pick_variant<'a>(
     }
     match found_variant {
         Some(a) => Ok(a),
-        None => Err(ParserError::Decoding(
-            ParserDecodingError::UnexpectedEnumVariant,
-        )),
+        None => Err(ParserError::UnexpectedEnumVariant),
     }
 }
 
@@ -543,6 +494,14 @@ fn decode_variant(
     })
 }
 
+enum FoundBitOrder {
+    Lsb0,
+    Msb0,
+}
+
+const MSB0: &str = "Msb0";
+const LSB0: &str = "Lsb0";
+
 fn decode_type_def_bit_sequence(
     bit_ty: &TypeDefBitSequence<PortableForm>,
     data: &mut Vec<u8>,
@@ -562,7 +521,7 @@ fn decode_type_def_bit_sequence(
                 *data = data[start + byte_length..].to_vec();
                 into_decode
             }
-            None => return Err(ParserError::Decoding(ParserDecodingError::DataTooShort)),
+            None => return Err(ParserError::DataTooShort),
         },
         None => {
             let into_decode = data.to_vec();
@@ -572,34 +531,21 @@ fn decode_type_def_bit_sequence(
     };
 
     // BitOrder
-    let bitorder = match meta_v14.types.resolve(bit_ty.bit_order_type().id()) {
-        Some(bitorder_type) => match bitorder_type.type_def() {
-            TypeDef::Composite(_) => match bitorder_type.path().ident() {
-                Some(x) => match x.as_str() {
-                    "Lsb0" => FoundBitOrder::Lsb0,
-                    "Msb0" => FoundBitOrder::Msb0,
-                    _ => return Err(ParserError::Decoding(ParserDecodingError::NotBitOrderType)),
-                },
-                None => return Err(ParserError::Decoding(ParserDecodingError::NotBitOrderType)),
+    let bitorder_type = resolve_ty(meta_v14, bit_ty.bit_order_type().id())?;
+    let bitorder = match bitorder_type.type_def() {
+        TypeDef::Composite(_) => match bitorder_type.path().ident() {
+            Some(x) => match x.as_str() {
+                LSB0 => FoundBitOrder::Lsb0,
+                MSB0 => FoundBitOrder::Msb0,
+                _ => return Err(ParserError::NotBitOrderType),
             },
-            _ => return Err(ParserError::Decoding(ParserDecodingError::NotBitOrderType)),
+            None => return Err(ParserError::NotBitOrderType),
         },
-        None => {
-            return Err(ParserError::Decoding(
-                ParserDecodingError::V14TypeNotResolved,
-            ))
-        }
+        _ => return Err(ParserError::NotBitOrderType),
     };
 
     // BitStore
-    let bitstore_type = match meta_v14.types.resolve(bit_ty.bit_store_type().id()) {
-        Some(a) => a,
-        None => {
-            return Err(ParserError::Decoding(
-                ParserDecodingError::V14TypeNotResolved,
-            ))
-        }
-    };
+    let bitstore_type = resolve_ty(meta_v14, bit_ty.bit_store_type().id())?;
 
     match bitstore_type.type_def() {
         TypeDef::Primitive(TypeDefPrimitive::U8) => match bitorder {
@@ -634,9 +580,9 @@ fn decode_type_def_bit_sequence(
                     .map(ParsedData::BitVecU64Msb0),
             }
         }
-        _ => return Err(ParserError::Decoding(ParserDecodingError::NotBitStoreType)),
+        _ => return Err(ParserError::NotBitStoreType),
     }
-    .map_err(|_| ParserError::Decoding(ParserDecodingError::BitVecFailure))
+    .map_err(|_| ParserError::TypeFailure("BitVec"))
 }
 
 struct HuskedType<'a> {
@@ -651,14 +597,7 @@ fn husk_type<'a>(
 ) -> Result<HuskedType<'a>, ParserError> {
     let mut is_compact = false;
 
-    let mut ty = match meta_v14.types.resolve(entry_symbol.id()) {
-        Some(a) => a,
-        None => {
-            return Err(ParserError::Decoding(
-                ParserDecodingError::V14TypeNotResolved,
-            ))
-        }
-    };
+    let mut ty = resolve_ty(meta_v14, entry_symbol.id())?;
 
     let info_ty = Info::from_ty(ty);
     let mut info = {
@@ -671,14 +610,7 @@ fn husk_type<'a>(
 
     if let TypeDef::Compact(x) = ty.type_def() {
         is_compact = true;
-        ty = match meta_v14.types.resolve(x.type_param().id()) {
-            Some(a) => a,
-            None => {
-                return Err(ParserError::Decoding(
-                    ParserDecodingError::V14TypeNotResolved,
-                ))
-            }
-        };
+        ty = resolve_ty(meta_v14, x.type_param().id())?;
         let info_ty = Info::from_ty(ty);
         if !info_ty.is_empty() {
             info.push(info_ty)
@@ -695,4 +627,11 @@ fn husk_type<'a>(
 pub enum Ty<'a> {
     Resolved(&'a Type<PortableForm>),
     Symbol(&'a UntrackedSymbol<std::any::TypeId>),
+}
+
+fn resolve_ty(meta_v14: &RuntimeMetadataV14, id: u32) -> Result<&Type<PortableForm>, ParserError> {
+    match meta_v14.types.resolve(id) {
+        Some(a) => Ok(a),
+        None => Err(ParserError::V14TypeNotResolved(id)),
+    }
 }

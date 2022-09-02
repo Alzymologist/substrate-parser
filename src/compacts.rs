@@ -1,8 +1,7 @@
-//! Decoder elements common for all metadata versions
-//!
+//! [`Compact`] search and processing.
 use parity_scale_codec::{Compact, Decode, HasCompact};
 
-use crate::error::{ParserDecodingError, ParserError};
+use crate::error::ParserError;
 
 /// Struct to store results of searching Vec<u8> for encoded compact:
 /// consists of actual number decoded, and, if it exists, the beginning position for data after the compact
@@ -17,7 +16,7 @@ where
     Compact<T>: Decode,
 {
     if data.is_empty() {
-        return Err(ParserError::Decoding(ParserDecodingError::DataTooShort));
+        return Err(ParserError::DataTooShort);
     }
     let mut out = None;
     for i in 0..data.len() {
@@ -40,7 +39,7 @@ where
     }
     match out {
         Some(c) => Ok(c),
-        None => Err(ParserError::Decoding(ParserDecodingError::NoCompact)),
+        None => Err(ParserError::NoCompact),
     }
 }
 

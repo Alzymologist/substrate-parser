@@ -1,11 +1,5 @@
-//! This crate is part of transcation parsing in the
-//! [Signer](https://github.com/paritytech/parity-signer).
-//!
-//! This crate is used to represent numbers as balance values in given network.
-//! Every network introduced to Signer has characteristic network specs. Among
-//! other parameters, network specs contain decimals and unit, that are used
-//! here to represent integer numbers from transactions as an actual balance
-//! values in the network units.
+//! Display balance-representing integers properly using chain-specific decimals
+//! and units.
 //!
 //! Decimals indicate the order of magnitude, by which the token `unit`
 //! exceeds the integer representing unit. All symbols from the input number
@@ -38,7 +32,7 @@
 //!
 //! ## Examples
 //! ```
-//! use parser_reworked::printing_balance::AsBalance;
+//! use substrate_parser::printing_balance::AsBalance;
 //!
 //! let balance = <u128>::convert_balance_pretty(1, 12, "WND");
 //! assert!(balance.number == "1");
@@ -67,7 +61,7 @@
 /// Trait for correct displaying of balance-related values.
 pub trait AsBalance {
     /// Represent numerical value as a balance.
-    fn convert_balance_pretty(value: Self, decimals: u8, unit: &str) -> PrettyOutput;
+    fn convert_balance_pretty(value: Self, decimals: u8, unit: &str) -> Currency;
 }
 
 /// Implement [`AsBalance`] for all reasonable input types.
@@ -75,7 +69,7 @@ macro_rules! impl_balance {
     ($($uint_type: ty), *) => {
         $(
             impl AsBalance for $uint_type {
-                fn convert_balance_pretty(value: $uint_type, decimals: u8, unit: &str) -> PrettyOutput {
+                fn convert_balance_pretty(value: $uint_type, decimals: u8, unit: &str) -> Currency {
                     convert_balance_string(&value.to_string(), decimals, unit)
                 }
             }
@@ -114,9 +108,9 @@ struct CutNumber {
     mag: i8,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 /// Formatted balance.
-pub struct PrettyOutput {
+pub struct Currency {
     /// Balance value with correctly placed point, to match the modified units
     pub number: String,
 
@@ -149,7 +143,7 @@ fn assist(balance: &str, zeroes_after_point_before_value: u8) -> (String, Option
 }
 
 /// Convert printed to string number into formatted balance.
-fn convert_balance_string(balance: &str, decimals: u8, unit: &str) -> PrettyOutput {
+fn convert_balance_string(balance: &str, decimals: u8, unit: &str) -> Currency {
     // at least one symbol always is there;
     //
     // length of input number without 1 symbol
@@ -362,7 +356,7 @@ fn convert_balance_string(balance: &str, decimals: u8, unit: &str) -> PrettyOutp
         None => transformed_number.before_point.to_string(),
     };
 
-    PrettyOutput {
+    Currency {
         number,
         units: format!("{}{}", unit_prefix, unit),
     }
