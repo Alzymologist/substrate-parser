@@ -105,9 +105,13 @@ pub struct Call(pub PalletSpecificData);
 #[derive(Clone, Debug)]
 pub struct Event(pub PalletSpecificData);
 
+/// List of pallets in which the currency-related value gets displayed with
+/// with chain units and decimals.
+pub const PALLETS_BALANCE_VALID: &[&str] = &["Balances", "Staking"];
+
 impl PalletSpecificData {
     fn is_balance_display(&self) -> bool {
-        self.pallet_name == "Balances" || self.pallet_name == "Staking"
+        PALLETS_BALANCE_VALID.contains(&self.pallet_name.as_str())
     }
     fn card(
         &self,

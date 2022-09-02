@@ -26,11 +26,6 @@ use crate::special_types::{
     SpecialArray, StLenCheckCompact, StLenCheckSpecialtyCompact,
 };
 
-enum FoundBitOrder {
-    Lsb0,
-    Msb0,
-}
-
 /// Function to decode types that are variants of TypeDefPrimitive enum.
 ///
 /// The function decodes only given type found_ty, removes already decoded part of input data Vec<u8>,
@@ -499,6 +494,14 @@ fn decode_variant(
     })
 }
 
+enum FoundBitOrder {
+    Lsb0,
+    Msb0,
+}
+
+const MSB0: &str = "Msb0";
+const LSB0: &str = "Lsb0";
+
 fn decode_type_def_bit_sequence(
     bit_ty: &TypeDefBitSequence<PortableForm>,
     data: &mut Vec<u8>,
@@ -532,8 +535,8 @@ fn decode_type_def_bit_sequence(
     let bitorder = match bitorder_type.type_def() {
         TypeDef::Composite(_) => match bitorder_type.path().ident() {
             Some(x) => match x.as_str() {
-                "Lsb0" => FoundBitOrder::Lsb0,
-                "Msb0" => FoundBitOrder::Msb0,
+                LSB0 => FoundBitOrder::Lsb0,
+                MSB0 => FoundBitOrder::Msb0,
                 _ => return Err(ParserError::NotBitOrderType),
             },
             None => return Err(ParserError::NotBitOrderType),
