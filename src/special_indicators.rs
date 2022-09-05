@@ -313,15 +313,6 @@ impl Propagated {
             info: Vec::new(),
         }
     }
-    pub fn with_compact(is_compact: bool) -> Self {
-        Self {
-            specialty_set: SpecialtySet {
-                is_compact,
-                hint: Hint::None,
-            },
-            info: Vec::new(),
-        }
-    }
     pub fn with_specialty_set(specialty_set: SpecialtySet) -> Self {
         Self {
             specialty_set,
@@ -383,8 +374,24 @@ impl Default for Propagated {
 /// Gets checked each time a new type is encountered.
 pub enum SpecialtyTypeHinted {
     None,
+    AccountId32,
+    Era,
+    H160,
+    H256,
+    H512,
     Option,
     PalletSpecific(PalletSpecificItem),
+    Perbill,
+    Percent,
+    Permill,
+    Perquintill,
+    PerU16,
+    PublicEd25519,
+    PublicSr25519,
+    PublicEcdsa,
+    SignatureEd25519,
+    SignatureSr25519,
+    SignatureEcdsa,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -397,9 +404,43 @@ impl SpecialtyTypeHinted {
     pub fn from_path(path: &Path<PortableForm>) -> Self {
         match path.ident() {
             Some(a) => match a.as_str() {
+                ACCOUNT_ID32 => Self::AccountId32,
                 CALL => Self::PalletSpecific(PalletSpecificItem::Call),
+                ERA => Self::Era,
                 EVENT => Self::PalletSpecific(PalletSpecificItem::Event),
+                a if H160.contains(&a) => Self::H160,
+                H256 => Self::H256,
+                H512 => Self::H512,
                 OPTION => Self::Option,
+                PERBILL => Self::Perbill,
+                PERCENT => Self::Percent,
+                PERMILL => Self::Permill,
+                PERQUINTILL => Self::Perquintill,
+                PERU16 => Self::PerU16,
+                PUBLIC => match path
+                    .namespace()
+                    .iter()
+                    .map(|x| x.as_str())
+                    .collect::<Vec<&str>>()
+                    .as_ref()
+                {
+                    SP_CORE_ED25519 => Self::PublicEd25519,
+                    SP_CORE_SR25519 => Self::PublicSr25519,
+                    SP_CORE_ECDSA => Self::PublicEcdsa,
+                    _ => Self::None,
+                },
+                SIGNATURE => match path
+                    .namespace()
+                    .iter()
+                    .map(|x| x.as_str())
+                    .collect::<Vec<&str>>()
+                    .as_ref()
+                {
+                    SP_CORE_ED25519 => Self::SignatureEd25519,
+                    SP_CORE_SR25519 => Self::SignatureSr25519,
+                    SP_CORE_ECDSA => Self::SignatureEcdsa,
+                    _ => Self::None,
+                },
                 _ => Self::None,
             },
             None => Self::None,
@@ -442,6 +483,12 @@ impl<'a> SpecialtyTypeChecked<'a> {
     ) -> Self {
         let path = ty.path();
         match SpecialtyTypeHinted::from_path(path) {
+            SpecialtyTypeHinted::None => Self::None,
+            SpecialtyTypeHinted::AccountId32 => Self::AccountId32,
+            SpecialtyTypeHinted::Era => Self::Era,
+            SpecialtyTypeHinted::H160 => Self::H160,
+            SpecialtyTypeHinted::H256 => Self::H256,
+            SpecialtyTypeHinted::H512 => Self::H512,
             SpecialtyTypeHinted::Option => {
                 if let TypeDef::Variant(x) = ty.type_def() {
                     let params = ty.type_params();
@@ -518,46 +565,17 @@ impl<'a> SpecialtyTypeChecked<'a> {
                     Self::None
                 }
             }
-            SpecialtyTypeHinted::None => match path.ident() {
-                Some(a) => match a.as_str() {
-                    ACCOUNT_ID32 => Self::AccountId32,
-                    ERA => Self::Era,
-                    a if H160.contains(&a) => Self::H160,
-                    H256 => Self::H256,
-                    H512 => Self::H512,
-                    PERBILL => Self::Perbill,
-                    PERCENT => Self::Percent,
-                    PERMILL => Self::Permill,
-                    PERQUINTILL => Self::Perquintill,
-                    PERU16 => Self::PerU16,
-                    PUBLIC => match path
-                        .namespace()
-                        .iter()
-                        .map(|x| x.as_str())
-                        .collect::<Vec<&str>>()
-                        .as_ref()
-                    {
-                        SP_CORE_ED25519 => Self::PublicEd25519,
-                        SP_CORE_SR25519 => Self::PublicSr25519,
-                        SP_CORE_ECDSA => Self::PublicEcdsa,
-                        _ => Self::None,
-                    },
-                    SIGNATURE => match path
-                        .namespace()
-                        .iter()
-                        .map(|x| x.as_str())
-                        .collect::<Vec<&str>>()
-                        .as_ref()
-                    {
-                        SP_CORE_ED25519 => Self::SignatureEd25519,
-                        SP_CORE_SR25519 => Self::SignatureSr25519,
-                        SP_CORE_ECDSA => Self::SignatureEcdsa,
-                        _ => Self::None,
-                    },
-                    _ => Self::None,
-                },
-                None => Self::None,
-            },
+            SpecialtyTypeHinted::Perbill => Self::Perbill,
+            SpecialtyTypeHinted::Percent => Self::Percent,
+            SpecialtyTypeHinted::Permill => Self::Permill,
+            SpecialtyTypeHinted::Perquintill => Self::Perquintill,
+            SpecialtyTypeHinted::PerU16 => Self::PerU16,
+            SpecialtyTypeHinted::PublicEd25519 => Self::PublicEd25519,
+            SpecialtyTypeHinted::PublicSr25519 => Self::PublicSr25519,
+            SpecialtyTypeHinted::PublicEcdsa => Self::PublicEcdsa,
+            SpecialtyTypeHinted::SignatureEd25519 => Self::SignatureEd25519,
+            SpecialtyTypeHinted::SignatureSr25519 => Self::SignatureSr25519,
+            SpecialtyTypeHinted::SignatureEcdsa => Self::SignatureEcdsa,
         }
     }
 }

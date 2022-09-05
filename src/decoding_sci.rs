@@ -432,7 +432,7 @@ pub fn decode_elements_set(
                     &Ty::Resolved(husked.ty),
                     data,
                     meta_v14,
-                    Propagated::with_compact(husked.is_compact),
+                    Propagated::with_specialty_set(husked.specialty_set),
                 )?;
                 out.push(element_extended_data.data);
             }
@@ -587,39 +587,64 @@ fn decode_type_def_bit_sequence(
 
 struct HuskedType<'a> {
     info: Vec<Info>,
-    is_compact: bool,
+    specialty_set: SpecialtySet,
     ty: &'a Type<PortableForm>,
 }
+
+const HUSKER_DEPTH: u8 = 10;
 
 fn husk_type<'a>(
     entry_symbol: &'a UntrackedSymbol<std::any::TypeId>,
     meta_v14: &'a RuntimeMetadataV14,
 ) -> Result<HuskedType<'a>, ParserError> {
-    let mut is_compact = false;
-
     let mut ty = resolve_ty(meta_v14, entry_symbol.id())?;
+    let mut info: Vec<Info> = Vec::new();
+    let mut is_compact = false;
+    let mut hint = Hint::None;
 
-    let info_ty = Info::from_ty(ty);
-    let mut info = {
-        if info_ty.is_empty() {
-            Vec::new()
-        } else {
-            vec![info_ty]
-        }
-    };
+    let mut husker_counter = 0;
 
-    if let TypeDef::Compact(x) = ty.type_def() {
-        is_compact = true;
-        ty = resolve_ty(meta_v14, x.type_param().id())?;
+    loop {
         let info_ty = Info::from_ty(ty);
         if !info_ty.is_empty() {
             info.push(info_ty)
         }
+
+        if let SpecialtyTypeHinted::None = SpecialtyTypeHinted::from_path(ty.path()) {
+            match ty.type_def() {
+                TypeDef::Composite(x) => {
+                    let fields = x.fields();
+                    if fields.len() == 1 {
+                        ty = resolve_ty(meta_v14, fields[0].ty().id())?;
+                        if let Hint::None = hint {
+                            hint = Hint::from_field(&fields[0])
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                TypeDef::Compact(x) => {
+                    is_compact = true;
+                    ty = resolve_ty(meta_v14, x.type_param().id())?;
+                }
+                _ => break,
+            }
+        } else {
+            break;
+        }
+
+        if husker_counter < HUSKER_DEPTH {
+            husker_counter += 1
+        } else {
+            break;
+        }
     }
+
+    let specialty_set = SpecialtySet { hint, is_compact };
 
     Ok(HuskedType {
         info,
-        is_compact,
+        specialty_set,
         ty,
     })
 }
