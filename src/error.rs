@@ -7,24 +7,24 @@ pub enum SignableError {
     #[error("Unable to separate signable transaction data into call data and extensions data.")]
     CutSignable,
 
-    #[error("(0)")]
+    #[error("{0}")]
     ExtensionsList(ExtensionsError),
 
     #[error("Extensions error. Block hash does not match the chain genesis hash in transaction with immortal `Era`.")]
     ImmortalHashMismatch,
 
     #[error(
-        "Unable to decode the call data of the signable transaction. Pallet (0) has no calls."
+        "Unable to decode the call data of the signable transaction. Pallet {0} has no calls."
     )]
     NoCallsInPallet(String),
 
-    #[error("Unable to decode the call data of the signable transaction. Call type in pallet (0) is not an enum.")]
+    #[error("Unable to decode the call data of the signable transaction. Call type in pallet {0} is not an enum.")]
     NotACall(String),
 
-    #[error("Unable to decode the call data of the signable transaction. Metadata contains no pallet with index (0).")]
+    #[error("Unable to decode the call data of the signable transaction. Metadata contains no pallet with index {0}.")]
     PalletNotFound(u8),
 
-    #[error("Parsing error. (0)")]
+    #[error("Parsing error. {0}")]
     Parsing(ParserError),
 
     #[error("Some call data remained unused after decoding.")]
@@ -58,7 +58,7 @@ pub enum ParserError {
     #[error("Declared type is not suitable BitOrder type for BitVec.")]
     NotBitOrderType,
 
-    #[error("Unable to decode data piece as (0).")]
+    #[error("Unable to decode data piece as {0}.")]
     TypeFailure(&'static str),
 
     #[error("Encountered unexpected Option<_> variant.")]
@@ -70,7 +70,7 @@ pub enum ParserError {
     #[error("Unexpected type inside compact.")]
     UnexpectedCompactInsides,
 
-    #[error("Unable to resolve type id (0) in metadata type registry.")]
+    #[error("Unable to resolve type id {0} in metadata type registry.")]
     V14TypeNotResolved(u32),
 }
 
