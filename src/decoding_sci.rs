@@ -591,6 +591,8 @@ struct HuskedType<'a> {
     ty: &'a Type<PortableForm>,
 }
 
+const HUSKER_DEPTH: u8 = 10;
+
 fn husk_type<'a>(
     entry_symbol: &'a UntrackedSymbol<std::any::TypeId>,
     meta_v14: &'a RuntimeMetadataV14,
@@ -599,6 +601,8 @@ fn husk_type<'a>(
     let mut info: Vec<Info> = Vec::new();
     let mut is_compact = false;
     let mut hint = Hint::None;
+
+    let mut husker_counter = 0;
 
     loop {
         let info_ty = Info::from_ty(ty);
@@ -625,6 +629,12 @@ fn husk_type<'a>(
                 }
                 _ => break,
             }
+        } else {
+            break;
+        }
+
+        if husker_counter < HUSKER_DEPTH {
+            husker_counter += 1
         } else {
             break;
         }
