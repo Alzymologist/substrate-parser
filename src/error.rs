@@ -49,6 +49,9 @@ pub enum ParserError {
     #[error("Remaining data too short for expected content.")]
     DataTooShort,
 
+    #[error("Resolving type id {0} results in cycling.")]
+    CyclicMetadata(u32),
+
     #[error("Expected compact, not found one.")]
     NoCompact,
 

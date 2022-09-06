@@ -17,7 +17,8 @@ use crate::cards::{
 use crate::compacts::{cut_compact, get_compact};
 use crate::error::{ParserError, SignableError};
 use crate::special_indicators::{
-    Hint, PalletSpecificItem, Propagated, SpecialtySet, SpecialtyTypeChecked, SpecialtyTypeHinted,
+    Checker, Hint, PalletSpecificItem, Propagated, SpecialtySet, SpecialtyTypeChecked,
+    SpecialtyTypeHinted,
 };
 use crate::special_types::{
     special_case_account_id32, special_case_ecdsa_public, special_case_ecdsa_signature,
@@ -159,6 +160,36 @@ pub fn decode_as_call_v14(
     }
 }
 
+/// Main decoder function.
+///
+/// Processes input data byte-by-byte, cutting and decoding data chunks.
+///
+/// This function is sometimes used recursively. Specifically, it could be
+/// called on inner element(s) when decoding deals with:
+///
+/// - structs (`TypeDef::Composite(_)`)
+/// - enums (`TypeDef::Variant(_)`)
+/// - vectors (`TypeDef::Sequence(_)`)
+/// - arrays (`TypeDef::Array(_)`)
+/// - tuples (`TypeDef::Tuple(_)`)
+/// - compacts (`TypeDef::Compact(_)`)
+/// - calls and events (`SpecialtyTypeChecked::PalletSpecific{..}`)
+/// - options (`SpecialtyTypeChecked:Option{..}`)
+///
+/// Of those, the input data itself changes on each new iteration for:
+///
+/// - enums (variant index gets cut off)
+/// - vectors (compact vector length gets cut off)
+/// - calls and events, options (also variant index gets cut off)
+///
+/// Thus the potential endless cycling could happen for structs, arrays, tuples,
+/// and compacts. Notably, this *should not* happen in good metadata.
+///
+/// Decoder checks the type sequence encountered when resolving individual
+/// fields, tuple elements, array elements and compacts to make sure there are
+/// no repeating types that would cause an endless cycle. Cycle tracker gets
+/// nullified if data gets cut, e.g. if new enum, vector, primitive or special
+/// type is encountered.
 pub fn decode_with_type(
     ty_input: &Ty,
     data: &mut Vec<u8>,
@@ -174,15 +205,14 @@ pub fn decode_with_type(
     match SpecialtyTypeChecked::from_type(ty, data, meta_v14) {
         SpecialtyTypeChecked::None => match ty.type_def() {
             TypeDef::Composite(x) => {
-                let field_data_set =
-                    decode_fields(x.fields(), data, meta_v14, propagated.specialty_set)?;
+                let field_data_set = decode_fields(x.fields(), data, meta_v14, propagated.checker)?;
                 Ok(ExtendedData {
                     info: propagated.info,
                     data: ParsedData::Composite(field_data_set),
                 })
             }
             TypeDef::Variant(x) => {
-                propagated.specialty_set.reject_compact()?;
+                propagated.reject_compact()?;
                 let variant_data = decode_variant(x.variants(), data, meta_v14)?;
                 Ok(ExtendedData {
                     info: propagated.info,
@@ -191,6 +221,7 @@ pub fn decode_with_type(
             }
             TypeDef::Sequence(x) => {
                 let number_of_elements = get_compact::<u32>(data)?;
+                propagated.checker.drop_cycle_check();
                 decode_elements_set(
                     x.type_param(),
                     number_of_elements,
@@ -205,7 +236,7 @@ pub fn decode_with_type(
             TypeDef::Tuple(x) => {
                 let inner_types_set = x.fields();
                 if inner_types_set.len() > 1 {
-                    propagated.specialty_set.reject_compact()?
+                    propagated.reject_compact()?
                 }
                 let mut tuple_data_set: Vec<ExtendedData> = Vec::new();
                 for inner_ty_symbol in inner_types_set.iter() {
@@ -213,7 +244,7 @@ pub fn decode_with_type(
                         &Ty::Symbol(inner_ty_symbol),
                         data,
                         meta_v14,
-                        Propagated::with_specialty_set(propagated.specialty_set),
+                        Propagated::for_ty_symbol(&propagated.checker, inner_ty_symbol)?,
                     )?;
                     tuple_data_set.push(tuple_data_element);
                 }
@@ -224,39 +255,59 @@ pub fn decode_with_type(
             }
             TypeDef::Primitive(x) => Ok(ExtendedData {
                 info: propagated.info,
-                data: decode_type_def_primitive(x, data, propagated.specialty_set)?,
+                data: decode_type_def_primitive(x, data, propagated.checker.specialty_set)?,
             }),
             TypeDef::Compact(x) => {
-                propagated.specialty_set.is_compact = true;
+                propagated.reject_compact()?;
+                propagated.checker.specialty_set.is_compact = true;
+                propagated.checker.check_id(x.type_param().id())?;
                 decode_with_type(&Ty::Symbol(x.type_param()), data, meta_v14, propagated)
             }
-            TypeDef::BitSequence(x) => Ok(ExtendedData {
-                info: propagated.info,
-                data: decode_type_def_bit_sequence(x, data, meta_v14)?,
-            }),
+            TypeDef::BitSequence(x) => {
+                propagated.reject_compact()?;
+                Ok(ExtendedData {
+                    info: propagated.info,
+                    data: decode_type_def_bit_sequence(x, data, meta_v14)?,
+                })
+            }
         },
-        SpecialtyTypeChecked::AccountId32 => Ok(ExtendedData {
-            info: propagated.info,
-            data: special_case_account_id32(data)?,
-        }),
-        SpecialtyTypeChecked::Era => Ok(ExtendedData {
-            info: propagated.info,
-            data: special_case_era(data)?,
-        }),
-        SpecialtyTypeChecked::H160 => Ok(ExtendedData {
-            info: propagated.info,
-            data: H160::cut_and_decode(data)?,
-        }),
-        SpecialtyTypeChecked::H256 => Ok(ExtendedData {
-            info: propagated.info,
-            data: special_case_h256(data, propagated.specialty_set.hash256())?,
-        }),
-        SpecialtyTypeChecked::H512 => Ok(ExtendedData {
-            info: propagated.info,
-            data: H512::cut_and_decode(data)?,
-        }),
+        SpecialtyTypeChecked::AccountId32 => {
+            propagated.reject_compact()?;
+            Ok(ExtendedData {
+                info: propagated.info,
+                data: special_case_account_id32(data)?,
+            })
+        }
+        SpecialtyTypeChecked::Era => {
+            propagated.reject_compact()?;
+            Ok(ExtendedData {
+                info: propagated.info,
+                data: special_case_era(data)?,
+            })
+        }
+        SpecialtyTypeChecked::H160 => {
+            propagated.reject_compact()?;
+            Ok(ExtendedData {
+                info: propagated.info,
+                data: H160::cut_and_decode(data)?,
+            })
+        }
+        SpecialtyTypeChecked::H256 => {
+            propagated.reject_compact()?;
+            Ok(ExtendedData {
+                info: propagated.info,
+                data: special_case_h256(data, propagated.checker.specialty_set.hash256())?,
+            })
+        }
+        SpecialtyTypeChecked::H512 => {
+            propagated.reject_compact()?;
+            Ok(ExtendedData {
+                info: propagated.info,
+                data: H512::cut_and_decode(data)?,
+            })
+        }
         SpecialtyTypeChecked::Option(ty_symbol) => {
-            propagated.specialty_set.reject_compact()?;
+            propagated.reject_compact()?;
             let param_ty = resolve_ty(meta_v14, ty_symbol.id())?;
             match param_ty.type_def() {
                 TypeDef::Primitive(TypeDefPrimitive::Bool) => match data.first() {
@@ -312,7 +363,7 @@ pub fn decode_with_type(
             variants,
             item,
         } => {
-            propagated.specialty_set.reject_compact()?;
+            propagated.reject_compact()?;
             let variant_data = decode_variant(variants, data, meta_v14)?;
             let pallet_specific_data = PalletSpecificData {
                 pallet_info,
@@ -334,59 +385,77 @@ pub fn decode_with_type(
         }
         SpecialtyTypeChecked::Perbill => Ok(ExtendedData {
             info: propagated.info,
-            data: Perbill::decode_checked(data, propagated.specialty_set.is_compact)?,
+            data: Perbill::decode_checked(data, propagated.checker.specialty_set.is_compact)?,
         }),
         SpecialtyTypeChecked::Percent => Ok(ExtendedData {
             info: propagated.info,
-            data: Percent::decode_checked(data, propagated.specialty_set.is_compact)?,
+            data: Percent::decode_checked(data, propagated.checker.specialty_set.is_compact)?,
         }),
         SpecialtyTypeChecked::Permill => Ok(ExtendedData {
             info: propagated.info,
-            data: Permill::decode_checked(data, propagated.specialty_set.is_compact)?,
+            data: Permill::decode_checked(data, propagated.checker.specialty_set.is_compact)?,
         }),
         SpecialtyTypeChecked::Perquintill => Ok(ExtendedData {
             info: propagated.info,
-            data: Perquintill::decode_checked(data, propagated.specialty_set.is_compact)?,
+            data: Perquintill::decode_checked(data, propagated.checker.specialty_set.is_compact)?,
         }),
         SpecialtyTypeChecked::PerU16 => Ok(ExtendedData {
             info: propagated.info,
-            data: PerU16::decode_checked(data, propagated.specialty_set.is_compact)?,
+            data: PerU16::decode_checked(data, propagated.checker.specialty_set.is_compact)?,
         }),
-        SpecialtyTypeChecked::PublicEd25519 => Ok(ExtendedData {
-            info: propagated.info,
-            data: special_case_ed25519_public(data)?,
-        }),
-        SpecialtyTypeChecked::PublicSr25519 => Ok(ExtendedData {
-            info: propagated.info,
-            data: special_case_sr25519_public(data)?,
-        }),
-        SpecialtyTypeChecked::PublicEcdsa => Ok(ExtendedData {
-            info: propagated.info,
-            data: special_case_ecdsa_public(data)?,
-        }),
-        SpecialtyTypeChecked::SignatureEd25519 => Ok(ExtendedData {
-            info: propagated.info,
-            data: special_case_ed25519_signature(data)?,
-        }),
-        SpecialtyTypeChecked::SignatureSr25519 => Ok(ExtendedData {
-            info: propagated.info,
-            data: special_case_sr25519_signature(data)?,
-        }),
-        SpecialtyTypeChecked::SignatureEcdsa => Ok(ExtendedData {
-            info: propagated.info,
-            data: special_case_ecdsa_signature(data)?,
-        }),
+        SpecialtyTypeChecked::PublicEd25519 => {
+            propagated.reject_compact()?;
+            Ok(ExtendedData {
+                info: propagated.info,
+                data: special_case_ed25519_public(data)?,
+            })
+        }
+        SpecialtyTypeChecked::PublicSr25519 => {
+            propagated.reject_compact()?;
+            Ok(ExtendedData {
+                info: propagated.info,
+                data: special_case_sr25519_public(data)?,
+            })
+        }
+        SpecialtyTypeChecked::PublicEcdsa => {
+            propagated.reject_compact()?;
+            Ok(ExtendedData {
+                info: propagated.info,
+                data: special_case_ecdsa_public(data)?,
+            })
+        }
+        SpecialtyTypeChecked::SignatureEd25519 => {
+            propagated.reject_compact()?;
+            Ok(ExtendedData {
+                info: propagated.info,
+                data: special_case_ed25519_signature(data)?,
+            })
+        }
+        SpecialtyTypeChecked::SignatureSr25519 => {
+            propagated.reject_compact()?;
+            Ok(ExtendedData {
+                info: propagated.info,
+                data: special_case_sr25519_signature(data)?,
+            })
+        }
+        SpecialtyTypeChecked::SignatureEcdsa => {
+            propagated.reject_compact()?;
+            Ok(ExtendedData {
+                info: propagated.info,
+                data: special_case_ecdsa_signature(data)?,
+            })
+        }
     }
 }
 
-pub fn decode_fields(
+fn decode_fields(
     fields: &[Field<PortableForm>],
     data: &mut Vec<u8>,
     meta_v14: &RuntimeMetadataV14,
-    specialty_set: SpecialtySet,
+    checker: Checker,
 ) -> Result<Vec<FieldData>, ParserError> {
     if fields.len() > 1 {
-        specialty_set.reject_compact()?;
+        checker.specialty_set.reject_compact()?;
     }
     let mut out: Vec<FieldData> = Vec::new();
     for field in fields.iter() {
@@ -396,7 +465,7 @@ pub fn decode_fields(
             &Ty::Symbol(field.ty()),
             data,
             meta_v14,
-            Propagated::with_specialty_set_updated(specialty_set, Hint::from_field(field)),
+            Propagated::for_field(&checker, field)?,
         )?;
         out.push(FieldData {
             field_name,
@@ -408,16 +477,16 @@ pub fn decode_fields(
     Ok(out)
 }
 
-pub fn decode_elements_set(
+fn decode_elements_set(
     element: &UntrackedSymbol<std::any::TypeId>,
     number_of_elements: u32,
     data: &mut Vec<u8>,
     meta_v14: &RuntimeMetadataV14,
     propagated: Propagated,
 ) -> Result<ExtendedData, ParserError> {
-    propagated.specialty_set.reject_compact()?;
+    propagated.reject_compact()?;
 
-    let husked = husk_type(element, meta_v14)?;
+    let husked = husk_type(element, meta_v14, propagated.checker)?;
 
     let data = {
         if number_of_elements == 0 {
@@ -432,7 +501,7 @@ pub fn decode_elements_set(
                     &Ty::Resolved(husked.ty),
                     data,
                     meta_v14,
-                    Propagated::with_specialty_set(husked.specialty_set),
+                    Propagated::with_checker(husked.checker.clone()),
                 )?;
                 out.push(element_extended_data.data);
             }
@@ -485,7 +554,7 @@ fn decode_variant(
     *data = data[1..].to_vec();
     let variant_name = found_variant.name().to_owned();
     let variant_docs = found_variant.collect_docs();
-    let fields = decode_fields(found_variant.fields(), data, meta_v14, SpecialtySet::new())?;
+    let fields = decode_fields(found_variant.fields(), data, meta_v14, Checker::new())?;
 
     Ok(VariantData {
         variant_name,
@@ -587,22 +656,24 @@ fn decode_type_def_bit_sequence(
 
 struct HuskedType<'a> {
     info: Vec<Info>,
-    specialty_set: SpecialtySet,
+    checker: Checker,
     ty: &'a Type<PortableForm>,
 }
-
-const HUSKER_DEPTH: u8 = 10;
 
 fn husk_type<'a>(
     entry_symbol: &'a UntrackedSymbol<std::any::TypeId>,
     meta_v14: &'a RuntimeMetadataV14,
+    mut checker: Checker,
 ) -> Result<HuskedType<'a>, ParserError> {
-    let mut ty = resolve_ty(meta_v14, entry_symbol.id())?;
-    let mut info: Vec<Info> = Vec::new();
-    let mut is_compact = false;
-    let mut hint = Hint::None;
+    let entry_symbol_id = entry_symbol.id();
+    checker.check_id(entry_symbol_id)?;
+    checker.specialty_set = SpecialtySet {
+        hint: Hint::None,
+        is_compact: false,
+    };
 
-    let mut husker_counter = 0;
+    let mut ty = resolve_ty(meta_v14, entry_symbol_id)?;
+    let mut info: Vec<Info> = Vec::new();
 
     loop {
         let info_ty = Info::from_ty(ty);
@@ -615,38 +686,31 @@ fn husk_type<'a>(
                 TypeDef::Composite(x) => {
                     let fields = x.fields();
                     if fields.len() == 1 {
-                        ty = resolve_ty(meta_v14, fields[0].ty().id())?;
-                        if let Hint::None = hint {
-                            hint = Hint::from_field(&fields[0])
+                        let id = fields[0].ty().id();
+                        checker.check_id(id)?;
+                        ty = resolve_ty(meta_v14, id)?;
+                        if let Hint::None = checker.specialty_set.hint {
+                            checker.specialty_set.hint = Hint::from_field(&fields[0])
                         }
                     } else {
                         break;
                     }
                 }
                 TypeDef::Compact(x) => {
-                    is_compact = true;
-                    ty = resolve_ty(meta_v14, x.type_param().id())?;
+                    checker.specialty_set.reject_compact()?;
+                    checker.specialty_set.is_compact = true;
+                    let id = x.type_param().id();
+                    checker.check_id(id)?;
+                    ty = resolve_ty(meta_v14, id)?;
                 }
                 _ => break,
             }
         } else {
             break;
         }
-
-        if husker_counter < HUSKER_DEPTH {
-            husker_counter += 1
-        } else {
-            break;
-        }
     }
 
-    let specialty_set = SpecialtySet { hint, is_compact };
-
-    Ok(HuskedType {
-        info,
-        specialty_set,
-        ty,
-    })
+    Ok(HuskedType { info, checker, ty })
 }
 
 pub enum Ty<'a> {

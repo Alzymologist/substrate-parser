@@ -161,7 +161,7 @@ pub const CHARGE_TRANSACTION_PAYMENT: &str = "ChargeTransactionPayment";
 ///
 /// Is determined by propagating [`Hint`] from [`SignedExtensionMetadata`]
 /// identifier or from [`Field`] descriptor.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SpecialtyPrimitive {
     /// Regular unsigned integer.
     None,
@@ -261,6 +261,13 @@ impl Hint {
     }
 }
 
+/// Specialty information that propagates during the decoding into compacts and
+/// single-field structs.
+///
+/// `is_compact` flag must cause parser error if the type inside compact has no
+/// [`HasCompact`](parity_scale_codec::HasCompact) implementation. Currently
+/// `true` `is_compact` is allowed for unsigned integers and single-field
+/// structs with unsigned integer as a field.
 #[derive(Clone, Copy, Debug)]
 pub struct SpecialtySet {
     pub is_compact: bool,
@@ -295,10 +302,60 @@ impl Default for SpecialtySet {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Checker {
+    pub specialty_set: SpecialtySet,
+
+    /// Set of type `id()`, to track possible endless type resolution cycles.
+    pub cycle_check: Vec<u32>,
+}
+
+impl Checker {
+    pub fn new() -> Self {
+        Self {
+            specialty_set: SpecialtySet::new(),
+            cycle_check: Vec::new(),
+        }
+    }
+    pub fn update_for_field(&self, field: &Field<PortableForm>) -> Result<Self, ParserError> {
+        let mut checker = self.clone();
+        if let Hint::None = checker.specialty_set.hint {
+            checker.specialty_set.hint = Hint::from_field(field);
+        }
+        checker.check_id(field.ty().id())?;
+        Ok(checker)
+    }
+    pub fn update_for_ty_symbol(
+        &self,
+        ty_symbol: &UntrackedSymbol<std::any::TypeId>,
+    ) -> Result<Self, ParserError> {
+        let mut checker = self.clone();
+        checker.check_id(ty_symbol.id())?;
+        Ok(checker)
+    }
+    pub fn drop_cycle_check(&mut self) {
+        self.cycle_check.clear()
+    }
+    pub fn check_id(&mut self, id: u32) -> Result<(), ParserError> {
+        if self.cycle_check.contains(&id) {
+            Err(ParserError::CyclicMetadata(id))
+        } else {
+            self.cycle_check.push(id);
+            Ok(())
+        }
+    }
+}
+
+impl Default for Checker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Propagating type info
 #[derive(Clone, Debug)]
 pub struct Propagated {
-    pub specialty_set: SpecialtySet,
+    pub checker: Checker,
 
     /// Set of [`Info`] collected while resolving the type.
     ///
@@ -309,24 +366,33 @@ pub struct Propagated {
 impl Propagated {
     pub fn new() -> Self {
         Self {
-            specialty_set: SpecialtySet::new(),
+            checker: Checker::new(),
             info: Vec::new(),
         }
     }
-    pub fn with_specialty_set(specialty_set: SpecialtySet) -> Self {
+    pub fn reject_compact(&self) -> Result<(), ParserError> {
+        self.checker.specialty_set.reject_compact()
+    }
+    pub fn with_checker(checker: Checker) -> Self {
         Self {
-            specialty_set,
+            checker,
             info: Vec::new(),
         }
     }
-    pub fn with_specialty_set_updated(mut specialty_set: SpecialtySet, hint: Hint) -> Self {
-        if let Hint::None = specialty_set.hint {
-            specialty_set.hint = hint;
-        }
-        Self {
-            specialty_set,
+    pub fn for_field(checker: &Checker, field: &Field<PortableForm>) -> Result<Self, ParserError> {
+        Ok(Self {
+            checker: Checker::update_for_field(checker, field)?,
             info: Vec::new(),
-        }
+        })
+    }
+    pub fn for_ty_symbol(
+        checker: &Checker,
+        ty_symbol: &UntrackedSymbol<std::any::TypeId>,
+    ) -> Result<Self, ParserError> {
+        Ok(Self {
+            checker: Checker::update_for_ty_symbol(checker, ty_symbol)?,
+            info: Vec::new(),
+        })
     }
     pub fn add_info(&mut self, info_update: &Info) {
         if !info_update.is_empty() {
@@ -347,9 +413,12 @@ impl Propagated {
             _ => Hint::None,
         };
         Self {
-            specialty_set: SpecialtySet {
-                is_compact: false,
-                hint,
+            checker: Checker {
+                specialty_set: SpecialtySet {
+                    is_compact: false,
+                    hint,
+                },
+                cycle_check: Vec::new(),
             },
             info: Vec::new(),
         }

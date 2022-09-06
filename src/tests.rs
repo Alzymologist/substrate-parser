@@ -1,10 +1,14 @@
-use crate::{display_transaction, parse_transaction};
 use frame_metadata::v14::RuntimeMetadataV14;
 use parity_scale_codec::Decode;
+use scale_info::{interner::UntrackedSymbol, IntoPortable, Registry};
 use sp_core::H256;
 use std::str::FromStr;
 
-use crate::ShortSpecs;
+use crate::cards::{
+    ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
+};
+use crate::error::ParserError;
+use crate::{decode_blob_as_type, display_transaction, parse_transaction, ShortSpecs};
 
 fn metadata(filename: &str) -> RuntimeMetadataV14 {
     let metadata_hex = std::fs::read_to_string(&filename).unwrap();
@@ -24,6 +28,25 @@ fn specs() -> ShortSpecs {
         name: "westend".to_string(),
         unit: "WND".to_string(),
     }
+}
+
+fn system_digest_ty(meta_v14: &RuntimeMetadataV14) -> UntrackedSymbol<std::any::TypeId> {
+    let mut ty = None;
+    for pallet in meta_v14.pallets.iter() {
+        if let Some(ref storage) = pallet.storage {
+            if storage.prefix == "System" {
+                for storage_entry in storage.entries.iter() {
+                    if storage_entry.name == "Digest" {
+                        if let frame_metadata::v14::StorageEntryType::Plain(a) = storage_entry.ty {
+                            ty = Some(a);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    ty.unwrap()
 }
 
 #[test]
@@ -327,6 +350,98 @@ Block Hash: 5cfeb3e46c080274613bdb80809a3e84fe782ac31ea91e2c778de996f738e620"#;
     assert!(
         reply == reply_known,
         "Expected: {}\nReceived: {}",
+        reply_known,
+        reply
+    );
+}
+
+#[test]
+fn storage_1_good() {
+    let mut data = hex::decode("04066175726120c1f2410800000000").unwrap();
+    let metadata = metadata("for_tests/westmint9270");
+    let reply = decode_blob_as_type(&system_digest_ty(&metadata), &mut data, &metadata).unwrap();
+    let reply_known = ExtendedData {
+        info: vec![Info {
+            docs: String::new(),
+            path: scale_info::Path::from_segments(vec![
+                "sp_runtime",
+                "generic",
+                "digest",
+                "Digest",
+            ])
+            .unwrap()
+            .into_portable(&mut Registry::new()),
+        }],
+        data: ParsedData::Composite(vec![FieldData {
+            field_name: Some(String::from("logs")),
+            type_name: Some(String::from("Vec<DigestItem>")),
+            field_docs: String::new(),
+            data: ExtendedData {
+                info: Vec::new(),
+                data: ParsedData::SequenceRaw(SequenceRawData {
+                    element_info: vec![Info {
+                        docs: String::new(),
+                        path: scale_info::Path::from_segments(vec![
+                            "sp_runtime",
+                            "generic",
+                            "digest",
+                            "DigestItem",
+                        ])
+                        .unwrap()
+                        .into_portable(&mut Registry::new()),
+                    }],
+                    data: vec![ParsedData::Variant(VariantData {
+                        variant_name: String::from("PreRuntime"),
+                        variant_docs: String::new(),
+                        fields: vec![
+                            FieldData {
+                                field_name: None,
+                                type_name: Some(String::from("ConsensusEngineId")),
+                                field_docs: String::new(),
+                                data: ExtendedData {
+                                    info: Vec::new(),
+                                    data: ParsedData::Sequence(SequenceData {
+                                        element_info: Vec::new(),
+                                        data: Sequence::U8(vec![97, 117, 114, 97]),
+                                    }),
+                                },
+                            },
+                            FieldData {
+                                field_name: None,
+                                type_name: Some(String::from("Vec<u8>")),
+                                field_docs: String::new(),
+                                data: ExtendedData {
+                                    info: Vec::new(),
+                                    data: ParsedData::Sequence(SequenceData {
+                                        element_info: Vec::new(),
+                                        data: Sequence::U8(vec![193, 242, 65, 8, 0, 0, 0, 0]),
+                                    }),
+                                },
+                            },
+                        ],
+                    })],
+                }),
+            },
+        }]),
+    };
+    assert!(
+        reply == reply_known,
+        "Expected: {:?}\nReceived: {:?}",
+        reply_known,
+        reply
+    );
+}
+
+#[test]
+fn storage_2_spoiled_digest() {
+    let mut data = hex::decode("04066175726120c1f2410800000000").unwrap();
+    let metadata = metadata("for_tests/westmint9270_spoiled_digest");
+    let reply =
+        decode_blob_as_type(&system_digest_ty(&metadata), &mut data, &metadata).unwrap_err();
+    let reply_known = ParserError::CyclicMetadata(11);
+    assert!(
+        reply == reply_known,
+        "Expected: {:?}\nReceived: {:?}",
         reply_known,
         reply
     );
