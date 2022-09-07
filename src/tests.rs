@@ -1,6 +1,6 @@
 use frame_metadata::v14::RuntimeMetadataV14;
 use parity_scale_codec::Decode;
-use scale_info::{interner::UntrackedSymbol, IntoPortable, Registry};
+use scale_info::{interner::UntrackedSymbol, IntoPortable, Path, Registry, TypeDef};
 use sp_core::H256;
 use std::str::FromStr;
 
@@ -357,20 +357,35 @@ Block Hash: 5cfeb3e46c080274613bdb80809a3e84fe782ac31ea91e2c778de996f738e620"#;
 
 #[test]
 fn storage_1_good() {
+    // This value is `Digest` fetched from westmint storage at some point.
     let mut data = hex::decode("04066175726120c1f2410800000000").unwrap();
+
+    // Correct westmint metadata.
     let metadata = metadata("for_tests/westmint9270");
-    let reply = decode_blob_as_type(&system_digest_ty(&metadata), &mut data, &metadata).unwrap();
+
+    // Type associated with `Digest` storage entry in `System` pallet.
+    let system_digest_ty = system_digest_ty(&metadata);
+
+    // `Digest` type is `11` in types registry.
+    assert!(system_digest_ty.id() == 11);
+
+    // It is a composite with a single field.
+    // Here in good metadata `westmint9270` the field type identifier is `12`
+    // and further type resolving is possible.
+    let metadata_type_11 = metadata.types.resolve(11).unwrap();
+    if let TypeDef::Composite(x) = metadata_type_11.type_def() {
+        assert!(x.fields()[0].ty().id() == 12);
+    } else {
+        panic!("Expected composite.")
+    }
+
+    let reply = decode_blob_as_type(&system_digest_ty, &mut data, &metadata).unwrap();
     let reply_known = ExtendedData {
         info: vec![Info {
             docs: String::new(),
-            path: scale_info::Path::from_segments(vec![
-                "sp_runtime",
-                "generic",
-                "digest",
-                "Digest",
-            ])
-            .unwrap()
-            .into_portable(&mut Registry::new()),
+            path: Path::from_segments(vec!["sp_runtime", "generic", "digest", "Digest"])
+                .unwrap()
+                .into_portable(&mut Registry::new()),
         }],
         data: ParsedData::Composite(vec![FieldData {
             field_name: Some(String::from("logs")),
@@ -381,7 +396,7 @@ fn storage_1_good() {
                 data: ParsedData::SequenceRaw(SequenceRawData {
                     element_info: vec![Info {
                         docs: String::new(),
-                        path: scale_info::Path::from_segments(vec![
+                        path: Path::from_segments(vec![
                             "sp_runtime",
                             "generic",
                             "digest",
@@ -434,10 +449,34 @@ fn storage_1_good() {
 
 #[test]
 fn storage_2_spoiled_digest() {
+    // This value is `Digest` fetched from westmint storage at some point.
     let mut data = hex::decode("04066175726120c1f2410800000000").unwrap();
+
+    // Manually spoiled westmint metadata.
     let metadata = metadata("for_tests/westmint9270_spoiled_digest");
-    let reply =
-        decode_blob_as_type(&system_digest_ty(&metadata), &mut data, &metadata).unwrap_err();
+
+    // Type associated with `Digest` storage entry in `System` pallet.
+    let system_digest_ty = system_digest_ty(&metadata);
+
+    // `Digest` type is `11` in types registry.
+    assert!(system_digest_ty.id() == 11);
+
+    // In good metadata `westmint9270` the field type identifier was `12` (see
+    // the `storage_1_good` test above), and further type resolving was
+    // possible.
+    // Here, in spoiled metadata `westmint9270_spoiled_digest` the field type
+    // identifier was manually swapped to `11` and thus could cause endless type
+    // resolution cycle.
+    // This check is to make sure the metadata really contains error in type
+    // referencing.
+    let metadata_type_11 = metadata.types.resolve(11).unwrap();
+    if let TypeDef::Composite(x) = metadata_type_11.type_def() {
+        assert!(x.fields()[0].ty().id() == 11);
+    } else {
+        panic!("Expected composite.")
+    }
+
+    let reply = decode_blob_as_type(&system_digest_ty, &mut data, &metadata).unwrap_err();
     let reply_known = ParserError::CyclicMetadata(11);
     assert!(
         reply == reply_known,

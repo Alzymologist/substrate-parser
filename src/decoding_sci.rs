@@ -16,9 +16,9 @@ use crate::cards::{
 };
 use crate::compacts::{cut_compact, get_compact};
 use crate::error::{ParserError, SignableError};
+use crate::propagated::{Checker, Propagated, SpecialtySet};
 use crate::special_indicators::{
-    Checker, Hint, PalletSpecificItem, Propagated, SpecialtySet, SpecialtyTypeChecked,
-    SpecialtyTypeHinted,
+    Hint, PalletSpecificItem, SpecialtyTypeChecked, SpecialtyTypeHinted,
 };
 use crate::special_types::{
     special_case_account_id32, special_case_ecdsa_public, special_case_ecdsa_signature,
@@ -236,7 +236,8 @@ pub fn decode_with_type(
             TypeDef::Tuple(x) => {
                 let inner_types_set = x.fields();
                 if inner_types_set.len() > 1 {
-                    propagated.reject_compact()?
+                    propagated.reject_compact()?;
+                    propagated.forget_hint();
                 }
                 let mut tuple_data_set: Vec<ExtendedData> = Vec::new();
                 for inner_ty_symbol in inner_types_set.iter() {
@@ -452,10 +453,11 @@ fn decode_fields(
     fields: &[Field<PortableForm>],
     data: &mut Vec<u8>,
     meta_v14: &RuntimeMetadataV14,
-    checker: Checker,
+    mut checker: Checker,
 ) -> Result<Vec<FieldData>, ParserError> {
     if fields.len() > 1 {
-        checker.specialty_set.reject_compact()?;
+        checker.reject_compact()?;
+        checker.forget_hint();
     }
     let mut out: Vec<FieldData> = Vec::new();
     for field in fields.iter() {
@@ -697,7 +699,7 @@ fn husk_type<'a>(
                     }
                 }
                 TypeDef::Compact(x) => {
-                    checker.specialty_set.reject_compact()?;
+                    checker.reject_compact()?;
                     checker.specialty_set.is_compact = true;
                     let id = x.type_param().id();
                     checker.check_id(id)?;

@@ -107,8 +107,9 @@ pub use decoding_sci_ext::decode_ext_attempt;
 pub mod error;
 use error::{ParserError, SignableError};
 pub mod printing_balance;
+mod propagated;
+use propagated::Propagated;
 pub mod special_indicators;
-use special_indicators::Propagated;
 pub mod special_types;
 
 #[cfg(test)]

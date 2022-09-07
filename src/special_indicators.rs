@@ -7,9 +7,6 @@
 //! Additionally, some data should better be decoded directly as the custom type
 //! mentioned in metadata descriptors, rather than decoded as more generalized
 //! type and cast into custom type later on.
-//!
-//! Reasonable balance between bringing in external types and clean universal
-//! decoder is difficult to find, and improvement suggestions are welcome.
 use frame_metadata::v14::{RuntimeMetadataV14, SignedExtensionMetadata};
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, Path, Type, TypeDef, Variant,
@@ -17,7 +14,6 @@ use scale_info::{
 
 use crate::cards::Info;
 use crate::decoding_sci::pick_variant;
-use crate::error::ParserError;
 
 /// [`Field`] `type_name` set indicating that the value *may* be
 /// currency-related.
@@ -196,8 +192,10 @@ pub enum SpecialtyH256 {
     BlockHash,
 }
 
-/// Specialty indicator that propagates during the decoding into compacts and
-/// single-field structs and gets used only if suitable type is encountered.
+/// Nonbinding, propagating type specialty indicator.
+///
+/// Propagates during the decoding into compacts and single-field structs and
+/// gets used only if suitable type is encountered.
 ///
 /// `Hint` can originate from [`SignedExtensionMetadata`] identifier or from
 /// [`Field`] descriptor.
@@ -239,6 +237,19 @@ impl Hint {
         out
     }
 
+    /// `Hint` for signed extensions instance.
+    pub fn from_ext_meta(signed_ext_meta: &SignedExtensionMetadata<PortableForm>) -> Self {
+        match signed_ext_meta.identifier.as_str() {
+            CHECK_SPEC_VERSION => Self::CheckSpecVersion,
+            CHECK_TX_VERSION => Self::CheckTxVersion,
+            CHECK_GENESIS => Self::CheckGenesis,
+            CHECK_MORTALITY => Self::CheckMortality,
+            CHECK_NONCE => Self::CheckNonce,
+            CHARGE_TRANSACTION_PAYMENT => Self::ChargeTransactionPayment,
+            _ => Self::None,
+        }
+    }
+
     /// Apply [`Hint`] on unsigned integer decoding.
     pub fn primitive(&self) -> SpecialtyPrimitive {
         match &self {
@@ -261,186 +272,12 @@ impl Hint {
     }
 }
 
-/// Specialty information that propagates during the decoding into compacts and
-/// single-field structs.
+/// Unconfirmed specialty for a [`Type`], based only on its [`Path`].
 ///
-/// `is_compact` flag must cause parser error if the type inside compact has no
-/// [`HasCompact`](parity_scale_codec::HasCompact) implementation. Currently
-/// `true` `is_compact` is allowed for unsigned integers and single-field
-/// structs with unsigned integer as a field.
-#[derive(Clone, Copy, Debug)]
-pub struct SpecialtySet {
-    pub is_compact: bool,
-    pub hint: Hint,
-}
-
-impl SpecialtySet {
-    pub fn new() -> Self {
-        Self {
-            is_compact: false,
-            hint: Hint::None,
-        }
-    }
-    pub fn reject_compact(&self) -> Result<(), ParserError> {
-        if self.is_compact {
-            Err(ParserError::UnexpectedCompactInsides)
-        } else {
-            Ok(())
-        }
-    }
-    pub fn primitive(&self) -> SpecialtyPrimitive {
-        self.hint.primitive()
-    }
-    pub fn hash256(&self) -> SpecialtyH256 {
-        self.hint.hash256()
-    }
-}
-
-impl Default for SpecialtySet {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Checker {
-    pub specialty_set: SpecialtySet,
-
-    /// Set of type `id()`, to track possible endless type resolution cycles.
-    pub cycle_check: Vec<u32>,
-}
-
-impl Checker {
-    pub fn new() -> Self {
-        Self {
-            specialty_set: SpecialtySet::new(),
-            cycle_check: Vec::new(),
-        }
-    }
-    pub fn update_for_field(&self, field: &Field<PortableForm>) -> Result<Self, ParserError> {
-        let mut checker = self.clone();
-        if let Hint::None = checker.specialty_set.hint {
-            checker.specialty_set.hint = Hint::from_field(field);
-        }
-        checker.check_id(field.ty().id())?;
-        Ok(checker)
-    }
-    pub fn update_for_ty_symbol(
-        &self,
-        ty_symbol: &UntrackedSymbol<std::any::TypeId>,
-    ) -> Result<Self, ParserError> {
-        let mut checker = self.clone();
-        checker.check_id(ty_symbol.id())?;
-        Ok(checker)
-    }
-    pub fn drop_cycle_check(&mut self) {
-        self.cycle_check.clear()
-    }
-    pub fn check_id(&mut self, id: u32) -> Result<(), ParserError> {
-        if self.cycle_check.contains(&id) {
-            Err(ParserError::CyclicMetadata(id))
-        } else {
-            self.cycle_check.push(id);
-            Ok(())
-        }
-    }
-}
-
-impl Default for Checker {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Propagating type info
-#[derive(Clone, Debug)]
-pub struct Propagated {
-    pub checker: Checker,
-
-    /// Set of [`Info`] collected while resolving the type.
-    ///
-    /// Only non-empty [`Info`] entries are added.
-    pub info: Vec<Info>,
-}
-
-impl Propagated {
-    pub fn new() -> Self {
-        Self {
-            checker: Checker::new(),
-            info: Vec::new(),
-        }
-    }
-    pub fn reject_compact(&self) -> Result<(), ParserError> {
-        self.checker.specialty_set.reject_compact()
-    }
-    pub fn with_checker(checker: Checker) -> Self {
-        Self {
-            checker,
-            info: Vec::new(),
-        }
-    }
-    pub fn for_field(checker: &Checker, field: &Field<PortableForm>) -> Result<Self, ParserError> {
-        Ok(Self {
-            checker: Checker::update_for_field(checker, field)?,
-            info: Vec::new(),
-        })
-    }
-    pub fn for_ty_symbol(
-        checker: &Checker,
-        ty_symbol: &UntrackedSymbol<std::any::TypeId>,
-    ) -> Result<Self, ParserError> {
-        Ok(Self {
-            checker: Checker::update_for_ty_symbol(checker, ty_symbol)?,
-            info: Vec::new(),
-        })
-    }
-    pub fn add_info(&mut self, info_update: &Info) {
-        if !info_update.is_empty() {
-            self.info.push(info_update.clone())
-        }
-    }
-    pub fn add_info_slice(&mut self, info_update_slice: &[Info]) {
-        self.info.extend_from_slice(info_update_slice)
-    }
-    pub fn from_ext_meta(signed_ext_meta: &SignedExtensionMetadata<PortableForm>) -> Self {
-        let hint = match signed_ext_meta.identifier.as_str() {
-            CHECK_SPEC_VERSION => Hint::CheckSpecVersion,
-            CHECK_TX_VERSION => Hint::CheckTxVersion,
-            CHECK_GENESIS => Hint::CheckGenesis,
-            CHECK_MORTALITY => Hint::CheckMortality,
-            CHECK_NONCE => Hint::CheckNonce,
-            CHARGE_TRANSACTION_PAYMENT => Hint::ChargeTransactionPayment,
-            _ => Hint::None,
-        };
-        Self {
-            checker: Checker {
-                specialty_set: SpecialtySet {
-                    is_compact: false,
-                    hint,
-                },
-                cycle_check: Vec::new(),
-            },
-            info: Vec::new(),
-        }
-    }
-}
-
-impl Default for Propagated {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Specialty found from `path` of the [`Type`].
+/// Does not propagate.
 ///
-/// Allows to decode data as as custom known types and to display data better.
-///
-/// Becomes other than `None` if a [`Type`] has recognizable `ident` component
-/// of the [`Path`].
-///
-/// If found, **tries** sending decoding through a special decoding route.
-///
-/// Gets checked each time a new type is encountered.
+/// Type internal structure must be additionally confirmed for `Call`, `Event`
+/// and `Option` before transforming into [`SpecialtyTypeChecked`].
 pub enum SpecialtyTypeHinted {
     None,
     AccountId32,
@@ -463,6 +300,11 @@ pub enum SpecialtyTypeHinted {
     SignatureEcdsa,
 }
 
+/// Specilty types that are associated with particular pallet. Currently `Call`
+/// and `Enum`.
+///
+/// Identifier `Call` and `Enum` are encoutered both in hierarchically first and
+/// second enums descibing the pallet and the call/event name correspondingly.
 #[derive(Debug, Eq, PartialEq)]
 pub enum PalletSpecificItem {
     Call,
@@ -470,6 +312,7 @@ pub enum PalletSpecificItem {
 }
 
 impl SpecialtyTypeHinted {
+    /// Get [`SpecialtyTypeHinted`]
     pub fn from_path(path: &Path<PortableForm>) -> Self {
         match path.ident() {
             Some(a) => match a.as_str() {
