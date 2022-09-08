@@ -6,7 +6,8 @@ use sp_runtime::generic::Era;
 use crate::cards::{ExtendedData, ParsedData};
 use crate::decoding_sci::{decode_with_type, Ty};
 use crate::error::{ExtensionsError, SignableError};
-use crate::special_indicators::{Propagated, SpecialtyPrimitive};
+use crate::propagated::Propagated;
+use crate::special_indicators::SpecialtyPrimitive;
 use crate::special_types::StLenCheckSpecialtyCompact;
 
 pub fn decode_ext_attempt(

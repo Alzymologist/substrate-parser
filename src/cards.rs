@@ -85,13 +85,13 @@ impl_documented!(
 );
 
 /// Each decoding results in `ExtendedData`
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtendedData {
     pub info: Vec<Info>,
     pub data: ParsedData,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PalletSpecificData {
     pub pallet_info: Info,
     pub variant_docs: String,
@@ -100,10 +100,10 @@ pub struct PalletSpecificData {
     pub fields: Vec<FieldData>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Call(pub PalletSpecificData);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Event(pub PalletSpecificData);
 
 /// List of pallets in which the currency-related value gets displayed with
@@ -170,7 +170,7 @@ impl Event {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FieldData {
     pub field_name: Option<String>,
     pub type_name: Option<String>,
@@ -178,7 +178,7 @@ pub struct FieldData {
     pub data: ExtendedData,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VariantData {
     pub variant_name: String,
     pub variant_docs: String,
@@ -186,20 +186,20 @@ pub struct VariantData {
 }
 
 /// For both vectors and arrays
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SequenceRawData {
     pub element_info: Vec<Info>, // info associated with every `ParsedData`
     pub data: Vec<ParsedData>,
 }
 
 /// For both vectors and arrays
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SequenceData {
     pub element_info: Vec<Info>, // info associated with every element of sequence
     pub data: Sequence,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Sequence {
     U8(Vec<u8>),
     U16(Vec<u16>),
@@ -212,7 +212,7 @@ pub enum Sequence {
     },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParsedData {
     BitVecU8Lsb0(BitVec<u8, Lsb0>),
     BitVecU16Lsb0(BitVec<u16, Lsb0>),
