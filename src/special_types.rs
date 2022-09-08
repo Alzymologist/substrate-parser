@@ -13,6 +13,7 @@ use crate::printing_balance::AsBalance;
 use crate::propagated::SpecialtySet;
 use crate::special_indicators::{SpecialtyH256, SpecialtyPrimitive};
 
+/// Stable length trait.
 pub(crate) trait StLen: Sized {
     fn decode_value(data: &mut Vec<u8>) -> Result<Self, ParserError>;
 }

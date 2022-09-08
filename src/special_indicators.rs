@@ -277,7 +277,8 @@ impl Hint {
 /// Does not propagate.
 ///
 /// Type internal structure must be additionally confirmed for `Call`, `Event`
-/// and `Option` before transforming into [`SpecialtyTypeChecked`].
+/// and `Option` before transforming into [`SpecialtyTypeChecked`], the type
+/// specialty that causes parser action.
 pub enum SpecialtyTypeHinted {
     None,
     AccountId32,
@@ -300,11 +301,12 @@ pub enum SpecialtyTypeHinted {
     SignatureEcdsa,
 }
 
-/// Specilty types that are associated with particular pallet. Currently `Call`
+/// Specialty types that are associated with particular pallet. Currently `Call`
 /// and `Enum`.
 ///
-/// Identifier `Call` and `Enum` are encoutered both in hierarchically first and
-/// second enums descibing the pallet and the call/event name correspondingly.
+/// Identifier `Call` and `Enum` are encoutered in both hierarchically first and
+/// second enums that descibe the pallet and the call/event name
+/// correspondingly.
 #[derive(Debug, Eq, PartialEq)]
 pub enum PalletSpecificItem {
     Call,
@@ -312,7 +314,7 @@ pub enum PalletSpecificItem {
 }
 
 impl SpecialtyTypeHinted {
-    /// Get [`SpecialtyTypeHinted`]
+    /// Get `SpecialtyTypeHinted` from type-associated [`Path`].
     pub fn from_path(path: &Path<PortableForm>) -> Self {
         match path.ident() {
             Some(a) => match a.as_str() {
@@ -360,6 +362,10 @@ impl SpecialtyTypeHinted {
     }
 }
 
+/// [`Type`] specialty, based on [`Path`] and type internal structure.
+///
+/// Does not propagate. If found, causes parser to decode through special route.
+/// If decoding through special route fails, it is considered parser error.
 pub enum SpecialtyTypeChecked<'a> {
     None,
     AccountId32,
@@ -388,13 +394,18 @@ pub enum SpecialtyTypeChecked<'a> {
 }
 
 impl<'a> SpecialtyTypeChecked<'a> {
+    /// Get `SpecialtyTypeChecked` for a [`Type`].
+    ///
+    /// Checks type internal structure for `Option`.
+    ///
+    /// Checks type internal structure and uses input data for
+    /// [`PalletSpecificItem`].
     pub fn from_type(
         ty: &'a Type<PortableForm>,
         data: &mut Vec<u8>,
         meta_v14: &'a RuntimeMetadataV14,
     ) -> Self {
-        let path = ty.path();
-        match SpecialtyTypeHinted::from_path(path) {
+        match SpecialtyTypeHinted::from_path(ty.path()) {
             SpecialtyTypeHinted::None => Self::None,
             SpecialtyTypeHinted::AccountId32 => Self::AccountId32,
             SpecialtyTypeHinted::Era => Self::Era,
