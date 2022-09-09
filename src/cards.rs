@@ -812,14 +812,14 @@ fn readable(indent: u32, card_type: &str, card_payload: &str) -> String {
 /// Formatted and flat decoded data, ready to be displayed.
 ///
 /// I suppose it must have as simple fields as possible. To be fixed.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtendedCard {
     pub parser_card: ParserCard,
     pub indent: u32,
     pub info_flat: Vec<InfoFlat>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InfoFlat {
     pub docs: Option<String>,
     pub path_flat: Option<String>,
@@ -833,7 +833,7 @@ impl InfoFlat {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IdData {
     pub base58: String,
     pub identicon: Vec<u8>,
@@ -843,7 +843,7 @@ pub struct IdData {
 ///
 /// Some cards always have associated additional info elements that go into `ExtendedCard`.
 /// Some cards (`Sequence`) have info elements inside.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParserCard {
     Balance(Currency),
     BalanceRaw(String),
