@@ -15,22 +15,38 @@ use crate::printing_balance::{AsBalance, Currency};
 use crate::special_indicators::{PalletSpecificItem, SpecialtyPrimitive};
 use crate::ShortSpecs;
 
+/// Type-associated information from the metadata.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Info {
+    /// Documentation from metadata, collected into single `String`.
     pub docs: String,
+
+    /// [`Path`], copied from the metadata verbatim.
+    ///
+    /// Could be used to locate parsed information pieces by known path
+    /// elements.
     pub path: Path<PortableForm>,
 }
 
 impl Info {
-    pub fn is_empty(&self) -> bool {
-        self.docs.is_empty() && self.path.is_empty()
-    }
+    /// Collect available info for a [`Type`].
     pub fn from_ty(ty: &Type<PortableForm>) -> Self {
         Self {
             docs: ty.collect_docs(),
             path: ty.path().to_owned(),
         }
     }
+
+    /// Check if `Info` is empty, i.e. there are neither docs nor path
+    /// available.
+    ///
+    /// Only non-empty `Info` entries are added to info set.
+    pub fn is_empty(&self) -> bool {
+        self.docs.is_empty() && self.path.is_empty()
+    }
+
+    /// Transform `Info` (used in `ExtendedData`) into `InfoFlat` (used in flat
+    /// cards `ExtendedCard`).
     pub fn flatten(&self) -> InfoFlat {
         let docs = {
             if self.docs.is_empty() {
@@ -57,10 +73,13 @@ impl Info {
     }
 }
 
+/// Helper trait for [`scale_info`] entities having documentation.
 pub trait Documented {
     fn collect_docs(&self) -> String;
 }
 
+/// Collect documentation from documented [`scale_info`] entity ([`Type`],
+/// [`Field`], [`Variant`]).
 macro_rules! impl_documented {
     ($($ty: ty), *) => {
         $(
@@ -84,13 +103,17 @@ impl_documented!(
     Variant<PortableForm>
 );
 
-/// Each decoding results in `ExtendedData`
+/// Parsed data and collected relevant type information.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtendedData {
+    /// All non-empty `Info` encountered while resolving the type.
     pub info: Vec<Info>,
+
+    /// Parsed data, nested.
     pub data: ParsedData,
 }
 
+/// Parsed data for [`PalletSpecificItem`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PalletSpecificData {
     pub pallet_info: Info,
@@ -100,9 +123,11 @@ pub struct PalletSpecificData {
     pub fields: Vec<FieldData>,
 }
 
+/// Call parsed data.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Call(pub PalletSpecificData);
 
+/// Event parsed data.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Event(pub PalletSpecificData);
 
@@ -111,6 +136,10 @@ pub struct Event(pub PalletSpecificData);
 pub const PALLETS_BALANCE_VALID: &[&str] = &["Balances", "Staking"];
 
 impl PalletSpecificData {
+    /// Should the balance value in the `PalletSpecificData` be displayed as a
+    /// balance with chain decimals and units?
+    ///
+    /// Determined by the pallet name.
     fn is_balance_display(&self) -> bool {
         PALLETS_BALANCE_VALID.contains(&self.pallet_name.as_str())
     }
@@ -696,6 +725,10 @@ impl ParsedData {
     }
 }
 
+/// Card a single unnamed [`Field`] and add the card(s) into already existing
+/// `Vec<ExtendedCard>`.
+///
+/// Single unnamed field is carded without `FieldNumber` card.
 fn card_unnamed_single_field(
     out: &mut Vec<ExtendedCard>,
     mut new_info_flat: Vec<InfoFlat>,
@@ -721,6 +754,12 @@ fn card_unnamed_single_field(
     ));
 }
 
+/// Card a set of [`Field`]s and add the cards into already existing
+/// `Vec<ExtendedCard>`.
+///
+/// Named fields have associated `FieldName` card, unnamed fields have
+/// associated `FieldNumber` card. It is not checked anywhere that the set
+/// contains only named or only unnamed fields.
 fn card_field_set(
     out: &mut Vec<ExtendedCard>,
     fields: &[FieldData],
@@ -746,6 +785,9 @@ fn card_field_set(
     }
 }
 
+/// Produce `Vec<InfoFlat>` when there are only docs available.
+///
+/// For [`Field`], [`Variant`] and [`PalletSpecificItem`].
 fn info_with_docs_only(docs: &str) -> Vec<InfoFlat> {
     if docs.is_empty() {
         Vec::new()
@@ -757,6 +799,7 @@ fn info_with_docs_only(docs: &str) -> Vec<InfoFlat> {
     }
 }
 
+/// Helper for [`ExtendedCard`] display.
 fn readable(indent: u32, card_type: &str, card_payload: &str) -> String {
     format!(
         "{}{}: {}",
