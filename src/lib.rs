@@ -89,7 +89,342 @@
 //!
 //! Field could contain currency-related data. When carded and displayed,
 //! currency is displayed with chain decimals and units only if encountered in
-//! a particular set of pallets or in extensions.
+//! a one of balance-displaying [pallets](crate::cards::PALLETS_BALANCE_VALID)
+//! or in extensions.
+//!
+//! # Examples
+//!```
+//! use frame_metadata::RuntimeMetadataV14;
+//! use parity_scale_codec::Decode;
+//! use scale_info::{IntoPortable, Path, Registry};
+//! use sp_core::{H256, crypto::AccountId32};
+//! use sp_runtime::generic::Era;
+//! use std::str::FromStr;
+//! use substrate_parser::{
+//!     parse_transaction,
+//!     MetaInput,
+//!     cards::{
+//!         Call, ExtendedData, FieldData, Info,
+//!         PalletSpecificData, ParsedData, VariantData,
+//!     },
+//!     special_indicators::SpecialtyPrimitive,
+//! };
+//!
+//! // A simple signable transaction: Alice sends some cash by `transfer_keep_alive` method
+//! let mut signable_data = hex::decode("9c0403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480284d717d5031504025a62029723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84").unwrap();
+//!
+//! // Hexadecimal metadata, such as one fetched through rpc query
+//! let metadata_westend9111_hex = std::fs::read_to_string("for_tests/westend9111").unwrap();
+//!
+//! // SCALE-encoded `V14` metadata, first 5 elements cut off here are `META` prefix and
+//! // `V14` enum index
+//! let metadata_westend9111_vec = hex::decode(&metadata_westend9111_hex.trim()).unwrap()[5..].to_vec();
+//!
+//! // `RuntimeMetadataV14` decoded and ready to use.
+//! let metadata_westend9111 = RuntimeMetadataV14::decode(&mut &metadata_westend9111_vec[..]).unwrap();
+//!
+//! // Chain genesis hash, typically well-known. Could be fetched through a separate rpc query.
+//! let westend_genesis_hash = H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap();
+//!
+//! let parsed = parse_transaction(
+//!     &mut signable_data.clone(),
+//!     MetaInput::Raw(&metadata_westend9111),
+//!     westend_genesis_hash,
+//! ).unwrap();
+//!
+//! let call_data = parsed.call_result.unwrap();
+//!
+//! // Pallet name.
+//! assert_eq!(call_data.0.pallet_name, "Balances");
+//!
+//! // Call name within the pallet.
+//! assert_eq!(call_data.0.variant_name, "transfer_keep_alive");
+//!
+//! // Call contents are the associated `Field` data.
+//! let expected_field_data = vec![
+//!     FieldData {
+//!         field_name: Some(String::from("dest")),
+//!         type_name: Some(String::from("<T::Lookup as StaticLookup>::Source")),
+//!         field_docs: String::new(),
+//!         data: ExtendedData {
+//!             info: vec![
+//!                 Info {
+//!                     docs: String::new(),
+//!                     path: Path::from_segments(vec![
+//!                         "sp_runtime",
+//!                         "multiaddress",
+//!                         "MultiAddress"
+//!                     ])
+//!                        .unwrap()
+//!                        .into_portable(&mut Registry::new()),
+//!                 }
+//!             ],
+//!             data: ParsedData::Variant(VariantData {
+//!                 variant_name: String::from("Id"),
+//!                 variant_docs: String::new(),
+//!                 fields: vec![
+//!                     FieldData {
+//!                         field_name: None,
+//!                         type_name: Some(String::from("AccountId")),
+//!                         field_docs: String::new(),
+//!                         data: ExtendedData {
+//!                             info: vec![
+//!                                 Info {
+//!                                     docs: String::new(),
+//!                                     path: Path::from_segments(vec![
+//!                                         "sp_core",
+//!                                         "crypto",
+//!                                         "AccountId32"
+//!                                     ])
+//!                                        .unwrap()
+//!                                        .into_portable(&mut Registry::new()),
+//!                                 }
+//!                             ],
+//!                             data: ParsedData::Id(AccountId32::from_str("8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48").unwrap()),
+//!                         }
+//!                     }
+//!                 ]
+//!             })
+//!         }
+//!     },
+//!     FieldData {
+//!         field_name: Some(String::from("value")),
+//!         type_name: Some(String::from("T::Balance")),
+//!         field_docs: String::new(),
+//!         data: ExtendedData {
+//!             info: Vec::new(),
+//!             data: ParsedData::PrimitiveU128{
+//!                 value: 100000000,
+//!                 specialty: SpecialtyPrimitive::Balance,
+//!             }
+//!         }
+//!     }
+//! ];
+//! assert_eq!(call_data.0.fields, expected_field_data);
+//!
+//! // Parsed extensions. Note that many extensions are empty.
+//! let expected_extensions_data = vec![
+//!     ExtendedData {
+//!         info: vec![
+//!             Info {
+//!                 docs: String::new(),
+//!                 path: Path::from_segments(vec![
+//!                     "frame_system",
+//!                     "extensions",
+//!                     "check_spec_version",
+//!                     "CheckSpecVersion",
+//!                 ])
+//!                     .unwrap()
+//!                     .into_portable(&mut Registry::new()),
+//!             }
+//!         ],
+//!         data: ParsedData::Composite(Vec::new()),
+//!     },
+//!     ExtendedData {
+//!         info: vec![
+//!             Info {
+//!                 docs: String::new(),
+//!                 path: Path::from_segments(vec![
+//!                     "frame_system",
+//!                     "extensions",
+//!                     "check_tx_version",
+//!                     "CheckTxVersion",
+//!                 ])
+//!                     .unwrap()
+//!                     .into_portable(&mut Registry::new()),
+//!             }
+//!         ],
+//!         data: ParsedData::Composite(Vec::new()),
+//!     },
+//!     ExtendedData {
+//!         info: vec![
+//!             Info {
+//!                 docs: String::new(),
+//!                 path: Path::from_segments(vec![
+//!                     "frame_system",
+//!                     "extensions",
+//!                     "check_genesis",
+//!                     "CheckGenesis",
+//!                 ])
+//!                     .unwrap()
+//!                     .into_portable(&mut Registry::new()),
+//!             }
+//!         ],
+//!         data: ParsedData::Composite(Vec::new())
+//!     },
+//!     ExtendedData {
+//!         info: vec![
+//!             Info {
+//!                 docs: String::new(),
+//!                 path: Path::from_segments(vec![
+//!                     "frame_system",
+//!                     "extensions",
+//!                     "check_mortality",
+//!                     "CheckMortality",
+//!                 ])
+//!                     .unwrap()
+//!                     .into_portable(&mut Registry::new()),
+//!             }
+//!         ],
+//!         data: ParsedData::Composite(vec![
+//!             FieldData {
+//!                 field_name: None,
+//!                 type_name: Some(String::from("Era")),
+//!                 field_docs: String::new(),
+//!                 data: ExtendedData {
+//!                     info: vec![
+//!                         Info {
+//!                             docs: String::new(),
+//!                             path: Path::from_segments(vec![
+//!                                 "sp_runtime",
+//!                                 "generic",
+//!                                 "era",
+//!                                 "Era",
+//!                             ])
+//!                             .unwrap()
+//!                             .into_portable(&mut Registry::new()),
+//!                         }
+//!                     ],
+//!                     data: ParsedData::Era(Era::Mortal(64, 61)),
+//!                 }
+//!             }
+//!         ])
+//!     },
+//!     ExtendedData {
+//!         info: vec![
+//!             Info {
+//!                 docs: String::new(),
+//!                 path: Path::from_segments(vec![
+//!                     "frame_system",
+//!                     "extensions",
+//!                     "check_nonce",
+//!                     "CheckNonce",
+//!                 ])
+//!                     .unwrap()
+//!                     .into_portable(&mut Registry::new()),
+//!             }
+//!         ],
+//!         data: ParsedData::Composite(vec![
+//!             FieldData {
+//!                 field_name: None,
+//!                 type_name: Some(String::from("T::Index")),
+//!                 field_docs: String::new(),
+//!                 data: ExtendedData {
+//!                     info: Vec::new(),
+//!                     data: ParsedData::PrimitiveU32 {
+//!                         value: 261,
+//!                         specialty: SpecialtyPrimitive::Nonce,
+//!                     }
+//!                 }
+//!             }
+//!         ])
+//!     },
+//!     ExtendedData {
+//!         info: vec![
+//!             Info {
+//!                 docs: String::new(),
+//!                 path: Path::from_segments(vec![
+//!                     "frame_system",
+//!                     "extensions",
+//!                     "check_weight",
+//!                     "CheckWeight",
+//!                 ])
+//!                     .unwrap()
+//!                     .into_portable(&mut Registry::new()),
+//!             }
+//!         ],
+//!         data: ParsedData::Composite(Vec::new())
+//!     },
+//!     ExtendedData {
+//!         info: vec![
+//!             Info {
+//!                 docs: String::new(),
+//!                 path: Path::from_segments(vec![
+//!                     "pallet_transaction_payment",
+//!                     "ChargeTransactionPayment",
+//!                 ])
+//!                     .unwrap()
+//!                     .into_portable(&mut Registry::new()),
+//!             }
+//!         ],
+//!         data: ParsedData::Composite(vec![
+//!             FieldData {
+//!                 field_name: None,
+//!                 type_name: Some(String::from("BalanceOf<T>")),
+//!                 field_docs: String::new(),
+//!                 data: ExtendedData {
+//!                     info: Vec::new(),
+//!                     data: ParsedData::PrimitiveU128 {
+//!                         value: 10000000,
+//!                         specialty: SpecialtyPrimitive::Tip
+//!                     }
+//!                 }
+//!             }
+//!         ])
+//!     },
+//!     ExtendedData {
+//!         info: Vec::new(),
+//!         data: ParsedData::PrimitiveU32 {
+//!             value: 9111,
+//!             specialty: SpecialtyPrimitive::SpecVersion
+//!         }
+//!     },
+//!     ExtendedData {
+//!         info: Vec::new(),
+//!         data: ParsedData::PrimitiveU32 {
+//!             value: 7,
+//!             specialty: SpecialtyPrimitive::TxVersion
+//!         }
+//!     },
+//!     ExtendedData {
+//!         info: vec![
+//!             Info {
+//!                 docs: String::new(),
+//!                 path: Path::from_segments(vec![
+//!                    "primitive_types",
+//!                    "H256",
+//!                ])
+//!                    .unwrap()
+//!                    .into_portable(&mut Registry::new()),
+//!             }
+//!         ],
+//!         data: ParsedData::GenesisHash(H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap()),
+//!     },
+//!     ExtendedData {
+//!         info: vec![
+//!             Info {
+//!                 docs: String::new(),
+//!                 path: Path::from_segments(vec![
+//!                    "primitive_types",
+//!                    "H256",
+//!                ])
+//!                    .unwrap()
+//!                    .into_portable(&mut Registry::new()),
+//!             }
+//!         ],
+//!         data: ParsedData::BlockHash(H256::from_str("98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84").unwrap()),
+//!     },
+//!     ExtendedData {
+//!         info: Vec::new(),
+//!         data: ParsedData::Tuple(Vec::new())
+//!     },
+//!     ExtendedData {
+//!         info: Vec::new(),
+//!         data: ParsedData::Tuple(Vec::new())
+//!     },
+//!     ExtendedData {
+//!         info: Vec::new(),
+//!         data: ParsedData::Tuple(Vec::new())
+//!     }
+//! ];
+//!
+//!  assert_eq!(parsed.extensions, expected_extensions_data);
+//!```
+//!
+//! Parsed data could be transformed into flat formatted cards with `card`
+//! method.
+//!
+//! Cards could be printed by `show` or `show_with_docs` into readable Strings.
 #![deny(unused_crate_dependencies)]
 
 use frame_metadata::v14::RuntimeMetadataV14;
@@ -106,6 +441,8 @@ mod decoding_sci_ext;
 pub use decoding_sci_ext::decode_ext_attempt;
 pub mod error;
 use error::{ParserError, SignableError};
+mod metadata_check;
+pub use metadata_check::{CheckedMetadata, MetaInput};
 pub mod printing_balance;
 mod propagated;
 use propagated::Propagated;
@@ -116,10 +453,14 @@ pub mod special_types;
 mod tests;
 
 /// Chain data necessary to display decoded data correctly.
+///
+/// `ShortSpecs` are not checked in this crate to be correct ones for the chain,
+/// this must be done elsewhere.
+///
+/// Using wrong specs may result in incorrectly displayed parsed information.
 pub struct ShortSpecs {
     pub base58prefix: u16,
     pub decimals: u8,
-    pub genesis_hash: H256,
     pub name: String,
     pub unit: String,
 }
@@ -142,74 +483,56 @@ pub struct TransactionParsed {
     pub extensions: Vec<ExtendedData>,
 }
 
+/// Signable transaction parsing outcome represented as formatted flat cards.
+#[derive(Debug)]
+pub struct TransactionCarded {
+    pub call_result: Result<Vec<ExtendedCard>, SignableError>,
+    pub extensions: Vec<ExtendedCard>,
+}
+
+impl TransactionParsed {
+    /// Transform nested data from `TransactionParsed` into flat cards.
+    pub fn card(self, short_specs: &ShortSpecs) -> TransactionCarded {
+        let start_indent = 0;
+        let mut extensions: Vec<ExtendedCard> = Vec::new();
+        for ext in self.extensions.iter() {
+            let addition_set = ext.card(start_indent, true, short_specs);
+            if !addition_set.is_empty() {
+                extensions.extend_from_slice(&addition_set)
+            }
+        }
+        TransactionCarded {
+            call_result: self
+                .call_result
+                .map(|call| call.card(start_indent, short_specs)),
+            extensions,
+        }
+    }
+}
+
 /// Parse a signable transaction.
 pub fn parse_transaction(
     data: &mut Vec<u8>,
-    meta_v14: &RuntimeMetadataV14,
-    version: u32,
+    meta_input: MetaInput,
     genesis_hash: H256,
 ) -> Result<TransactionParsed, SignableError> {
+    let checked_metadata = meta_input.checked().map_err(SignableError::MetaVersion)?;
+
     // if unable to separate call date and extensions, then there is
     // some fundamental flaw is in transaction itself
     let (mut call_data, mut extensions_data) = cut_call_extensions(data)?;
 
     // try parsing extensions, check that spec version and genesis hash are
     // correct
-    let extensions = decode_ext_attempt(&mut extensions_data, meta_v14, version, genesis_hash)?;
+    let extensions = decode_ext_attempt(&mut extensions_data, &checked_metadata, genesis_hash)?;
 
     // try parsing call data
-    let call_result = decode_as_call_v14(&mut call_data, meta_v14);
+    let call_result = decode_as_call_v14(&mut call_data, checked_metadata.meta_v14);
 
     Ok(TransactionParsed {
         call_result,
         extensions,
     })
-}
-
-/// Display signable transaction, in readable form.
-pub fn display_transaction(
-    data: &mut Vec<u8>,
-    meta_v14: &RuntimeMetadataV14,
-    version: u32,
-    short_specs: &ShortSpecs,
-) -> Result<String, String> {
-    let parsed = parse_transaction(data, meta_v14, version, short_specs.genesis_hash)
-        .map_err(|e| e.to_string())?;
-
-    let indent = 0;
-    let mut extensions_set: Vec<ExtendedCard> = Vec::new();
-    for extension in parsed.extensions.iter() {
-        let addition_set = extension.card(indent, true, short_specs);
-        if !addition_set.is_empty() {
-            extensions_set.extend_from_slice(&addition_set)
-        }
-    }
-
-    let mut extensions_printed = String::new();
-    for (i, x) in extensions_set.iter().enumerate() {
-        if i > 0 {
-            extensions_printed.push('\n')
-        }
-        extensions_printed.push_str(&x.show());
-    }
-    let call_printed = match parsed.call_result {
-        Ok(call_parsed) => {
-            let call_set = call_parsed.card(indent, short_specs);
-            let mut call_out = String::new();
-            for (i, x) in call_set.iter().enumerate() {
-                if i > 0 {
-                    call_out.push('\n')
-                }
-                call_out.push_str(&x.show());
-            }
-            call_out
-        }
-        Err(e) => e.to_string(),
-    };
-    Ok(format!(
-        "\nCall:\n\n{}\n\n\nExtensions:\n\n{}",
-        call_printed, extensions_printed
-    ))
 }
 
 /// Decode data blob with known type.

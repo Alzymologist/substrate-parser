@@ -34,6 +34,11 @@ pub const BALANCE_ID_SET: &[&str] = &[
 /// If the value is unsigned integer, it will be considered nonce.
 pub const NONCE_ID_SET: &[&str] = &["nonce"];
 
+/// [`Field`] `name` set indicating the value *may* be metadata spec version.
+///
+/// If the value is unsigned integer, it will be considered spec version.
+pub const SPEC_VERSION_ID_SET: &[&str] = &["spec_version"];
+
 /// [`Type`]-associated [`Path`] `ident` for [sp_core::crypto::AccountId32].
 pub const ACCOUNT_ID32: &str = "AccountId32";
 
@@ -213,6 +218,7 @@ pub enum Hint {
     ChargeTransactionPayment,
     FieldBalance,
     FieldNonce,
+    FieldSpecVersion,
 }
 
 impl Hint {
@@ -222,6 +228,7 @@ impl Hint {
         let mut out = match field.name() {
             Some(name) => match name.as_str() {
                 a if NONCE_ID_SET.contains(&a) => Self::FieldNonce,
+                a if SPEC_VERSION_ID_SET.contains(&a) => Self::FieldSpecVersion,
                 _ => Self::None,
             },
             None => Self::None,
@@ -253,7 +260,7 @@ impl Hint {
     /// Apply [`Hint`] on unsigned integer decoding.
     pub fn primitive(&self) -> SpecialtyPrimitive {
         match &self {
-            Hint::CheckSpecVersion => SpecialtyPrimitive::SpecVersion,
+            Hint::CheckSpecVersion | Hint::FieldSpecVersion => SpecialtyPrimitive::SpecVersion,
             Hint::CheckTxVersion => SpecialtyPrimitive::TxVersion,
             Hint::CheckNonce | Hint::FieldNonce => SpecialtyPrimitive::Nonce,
             Hint::ChargeTransactionPayment => SpecialtyPrimitive::Tip,

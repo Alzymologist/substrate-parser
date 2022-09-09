@@ -13,6 +13,9 @@ pub enum SignableError {
     #[error("Extensions error. Block hash does not match the chain genesis hash in transaction with immortal `Era`.")]
     ImmortalHashMismatch,
 
+    #[error("Unable to determine metadata spec version. {0}")]
+    MetaVersion(MetaVersionError),
+
     #[error(
         "Unable to decode the call data of the signable transaction. Pallet {0} has no calls."
     )]
@@ -39,7 +42,7 @@ pub enum SignableError {
     #[error("Wrong metadata spec version. When decoding extensions data with metadata version {in_metadata}, the apparent spec version in extensions is {as_decoded}.")]
     WrongSpecVersion {
         as_decoded: String,
-        in_metadata: u32,
+        in_metadata: String,
     },
 }
 
@@ -112,4 +115,23 @@ pub enum ExtensionsError {
 
     #[error("Signable transaction extensions contain more than one metadata spec version. Unable to verify that correct metadata version is used for parsing.")]
     SpecVersionTwice,
+}
+
+/// Error in metadata version constant.
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
+pub enum MetaVersionError {
+    #[error("No spec version found in decoded `Version` constant.")]
+    NoSpecVersionIdentifier,
+
+    #[error("No `System` pallet in metadata.")]
+    NoSystemPallet,
+
+    #[error("No `Version` constant in metadata `System` pallet.")]
+    NoVersionInConstants,
+
+    #[error("`Version` constant from metadata `System` pallet could not be decoded.")]
+    RuntimeVersionNotDecodeable,
+
+    #[error("Decoded `Version` constant is not a composite.")]
+    UnexpectedRuntimeVersionFormat,
 }

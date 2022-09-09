@@ -1,39 +1,38 @@
-//! Decode signable transaction extensions using [`RuntimeMetadataV14`].
-use frame_metadata::v14::RuntimeMetadataV14;
+//! Decode signable transaction extensions using `RuntimeMetadataV14`.
 use sp_core::H256;
 use sp_runtime::generic::Era;
 
 use crate::cards::{ExtendedData, ParsedData};
 use crate::decoding_sci::{decode_with_type, Ty};
 use crate::error::{ExtensionsError, SignableError};
+use crate::metadata_check::CheckedMetadata;
 use crate::propagated::Propagated;
 use crate::special_indicators::SpecialtyPrimitive;
 use crate::special_types::StLenCheckSpecialtyCompact;
 
 pub fn decode_ext_attempt(
     data: &mut Vec<u8>,
-    meta_v14: &RuntimeMetadataV14,
-    network_version: u32,
+    checked_metadata: &CheckedMetadata,
     genesis_hash: H256,
 ) -> Result<Vec<ExtendedData>, SignableError> {
     let mut extensions: Vec<ExtendedData> = Vec::new();
-    for signed_extensions_metadata in meta_v14.extrinsic.signed_extensions.iter() {
+    for signed_extensions_metadata in checked_metadata.meta_v14.extrinsic.signed_extensions.iter() {
         extensions.push(
             decode_with_type(
                 &Ty::Symbol(&signed_extensions_metadata.ty),
                 data,
-                meta_v14,
+                checked_metadata.meta_v14,
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
             .map_err(SignableError::Parsing)?,
         )
     }
-    for signed_extensions_metadata in meta_v14.extrinsic.signed_extensions.iter() {
+    for signed_extensions_metadata in checked_metadata.meta_v14.extrinsic.signed_extensions.iter() {
         extensions.push(
             decode_with_type(
                 &Ty::Symbol(&signed_extensions_metadata.additional_signed),
                 data,
-                meta_v14,
+                checked_metadata.meta_v14,
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
             .map_err(SignableError::Parsing)?,
@@ -42,13 +41,13 @@ pub fn decode_ext_attempt(
     if !data.is_empty() {
         return Err(SignableError::SomeDataNotUsedExtensions);
     }
-    check_extensions(&extensions, network_version, genesis_hash)?;
+    check_extensions(&extensions, &checked_metadata.version, genesis_hash)?;
     Ok(extensions)
 }
 
 pub fn check_extensions(
     extensions: &[ExtendedData],
-    network_version: u32,
+    version: &str,
     genesis_hash: H256,
 ) -> Result<(), SignableError> {
     let mut collected_ext = CollectedExt::new();
@@ -112,10 +111,10 @@ pub fn check_extensions(
     }
     match collected_ext.spec_version_printed {
         Some(spec_version_found) => {
-            if spec_version_found != network_version.to_string() {
+            if spec_version_found != version {
                 return Err(SignableError::WrongSpecVersion {
                     as_decoded: spec_version_found,
-                    in_metadata: network_version,
+                    in_metadata: version.to_owned(),
                 });
             }
         }
