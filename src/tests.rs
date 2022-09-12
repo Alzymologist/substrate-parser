@@ -173,7 +173,7 @@ bypassing `frame_system::Config::BaseCallFilter`).
 - Complexity: O(C) where C is the number of calls to be batched.
 # </weight>, path: None)
     Field Name: calls
-      Sequence: 2 element(s), element info: (docs: None, path: westend_runtime >> Call)
+      Sequence: 2 element(s), element info: [(docs: None, path: westend_runtime >> Call)]
         Pallet: Staking
         (docs: Contains one variant per dispatchable that can be called by an extrinsic., path: pallet_staking >> pallet >> pallet >> Call)
           Call: bond
@@ -221,7 +221,7 @@ which is capped at CompactAssignments::LIMIT (MAX_NOMINATIONS).
 - Both the reads and writes follow a similar pattern.
 # </weight>, path: None)
             Field Name: targets
-              Sequence: 3 element(s), element info: (docs: None, path: sp_runtime >> multiaddress >> MultiAddress)
+              Sequence: 3 element(s), element info: [(docs: None, path: sp_runtime >> multiaddress >> MultiAddress)]
                 Enum
                   Enum Variant Name: Id
                     Id: 5CFPcUJgYgWryPaV1aYjSbTpbTLu42V32Ytw1L9rfoMAsfGh

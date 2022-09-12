@@ -14,7 +14,7 @@ use crate::cards::{
     Call, Documented, Event, ExtendedData, FieldData, Info, PalletSpecificData, ParsedData,
     SequenceData, SequenceRawData, VariantData,
 };
-use crate::compacts::{cut_compact, get_compact};
+use crate::compacts::{find_compact, get_compact};
 use crate::error::{ParserError, SignableError};
 use crate::propagated::{Checker, Propagated, SpecialtySet};
 use crate::special_indicators::{
@@ -27,16 +27,10 @@ use crate::special_types::{
     SpecialArray, StLenCheckCompact, StLenCheckSpecialtyCompact,
 };
 
-/// Function to decode types that are variants of TypeDefPrimitive enum.
+/// Finalize parsing of primitives (variants of [`TypeDefPrimitive`]).
 ///
-/// The function decodes only given type found_ty, removes already decoded part of input data Vec<u8>,
-/// and returns whatever remains as DecodedOut field remaining_vector, which is processed later separately.
-///
-/// The function takes as arguments
-/// - found_ty (TypeDefPrimitive, found in the previous iteration)
-/// - data (remaining Vec<u8> of data),
-///
-/// The function outputs the DecodedOut value in case of success.
+/// Decoded data gets consumed. Propagated to this point [`SpecialtySet`] is
+/// used.
 fn decode_type_def_primitive(
     found_ty: &TypeDefPrimitive,
     data: &mut Vec<u8>,
@@ -64,17 +58,12 @@ fn decode_type_def_primitive(
     }
 }
 
-/// Function to decode `str`.
-/// `str` is encoded as a vector of utf-converteable elements, and is therefore
-/// preluded by the number of elements as compact.
+/// Decode `str`.
 ///
-/// The function decodes only `str` part, removes already decoded part of input data Vec<u8>,
-/// and returns whatever remains as DecodedOut field remaining_vector, which is processed later separately.
+/// `str` is a `Vec<u8>` with utf-convertible elements, and is decoded as a
+/// vector (compact of length precedes the data).
 ///
-/// The function takes as arguments
-/// - data (remaining Vec<u8> of data),
-///
-/// The function outputs the DecodedOut value in case of success.
+/// Decoded data gets consumed.
 fn decode_str(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
     let str_length = get_compact::<u32>(data)? as usize;
     if !data.is_empty() {
@@ -97,7 +86,17 @@ fn decode_str(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
     }
 }
 
-pub fn decode_as_call_v14(
+/// Parse call data with provided `V14` metadata.
+///
+/// Intended for call part of a signable transaction.
+///
+/// Data is expected to be a call. The first `u8` element is a pallet index,
+/// the type within corresponding `PalletCallMetadata` is expected to be an
+/// enum with pallet-specific calls. If the pallet-call pattern is not observed,
+/// an error occurs.
+///
+/// Input data gets consumed during the decoding.
+pub fn decode_as_call(
     data: &mut Vec<u8>,
     meta_v14: &RuntimeMetadataV14,
 ) -> Result<Call, SignableError> {
@@ -160,9 +159,10 @@ pub fn decode_as_call_v14(
     }
 }
 
-/// Main decoder function.
+/// General decoder function. Parse part of data as [`Ty`].
 ///
-/// Processes input data byte-by-byte, cutting and decoding data chunks.
+/// Processes input data byte-by-byte, cutting and decoding data chunks. Input
+/// data is consumed.
 ///
 /// This function is sometimes used recursively. Specifically, it could be
 /// called on inner element(s) when decoding deals with:
@@ -449,6 +449,10 @@ pub fn decode_with_type(
     }
 }
 
+/// Parse part of data as a set of [`Field`]s. Used for structs, enums and call
+/// decoding.
+///
+/// Used data gets cut off in the process.
 fn decode_fields(
     fields: &[Field<PortableForm>],
     data: &mut Vec<u8>,
@@ -456,7 +460,13 @@ fn decode_fields(
     mut checker: Checker,
 ) -> Result<Vec<FieldData>, ParserError> {
     if fields.len() > 1 {
+        // Only single-field structs can be processed as a compact.
+        // Note: compact flag was already checked in enum processing at this
+        // point.
         checker.reject_compact()?;
+
+        // `Hint` remains relevant only if single-field struct is processed.
+        // Note: checker gets renewed when fields of enum are processed.
         checker.forget_hint();
     }
     let mut out: Vec<FieldData> = Vec::new();
@@ -479,6 +489,10 @@ fn decode_fields(
     Ok(out)
 }
 
+/// Parse part of data as a known number of identical elements. Used for vectors
+/// and arrays.
+///
+/// Used data gets cut off in the process.
 fn decode_elements_set(
     element: &UntrackedSymbol<std::any::TypeId>,
     number_of_elements: u32,
@@ -525,6 +539,11 @@ fn decode_elements_set(
     })
 }
 
+/// Select an enum variant based on data.
+///
+/// First data `u8` element is `index` of [`Variant`].
+///
+/// Does not modify the input.
 pub(crate) fn pick_variant<'a>(
     variants: &'a [Variant<PortableForm>],
     data: &[u8],
@@ -547,6 +566,7 @@ pub(crate) fn pick_variant<'a>(
     }
 }
 
+/// Parse part of data as a variant. Used for enums and call decoding.
 fn decode_variant(
     variants: &[Variant<PortableForm>],
     data: &mut Vec<u8>,
@@ -565,27 +585,34 @@ fn decode_variant(
     })
 }
 
+/// `BitOrder` as determined by the `bit_order_type` for [`TypeDefBitSequence`].
 enum FoundBitOrder {
     Lsb0,
     Msb0,
 }
 
+/// [`Type`]-associated [`Path`](scale_info::Path) `ident` for
+/// [bitvec::order::Msb0].
 const MSB0: &str = "Msb0";
+
+/// [`Type`]-associated [`Path`](scale_info::Path) `ident` for
+/// [bitvec::order::Lsb0].
 const LSB0: &str = "Lsb0";
 
+/// Parse part of data as a bitvec.
 fn decode_type_def_bit_sequence(
     bit_ty: &TypeDefBitSequence<PortableForm>,
     data: &mut Vec<u8>,
     meta_v14: &RuntimeMetadataV14,
 ) -> Result<ParsedData, ParserError> {
-    let cut_compact = cut_compact::<u32>(data)?;
-    let bit_length_found = cut_compact.compact_found;
+    let found_compact = find_compact::<u32>(data)?;
+    let bit_length_found = found_compact.compact;
     let byte_length = match bit_length_found % 8 {
         0 => (bit_length_found / 8),
         _ => (bit_length_found / 8) + 1,
     } as usize;
 
-    let into_decode = match cut_compact.start_next_unit {
+    let into_decode = match found_compact.start_next_unit {
         Some(start) => match data.get(..start + byte_length) {
             Some(a) => {
                 let into_decode = a.to_vec();
@@ -656,12 +683,23 @@ fn decode_type_def_bit_sequence(
     .map_err(|_| ParserError::TypeFailure("BitVec"))
 }
 
+/// Type of set element, resolved as completely as possible.
+///
+/// Elements in set (vector or array) could have complex solvable descriptions.
+///
+/// Element [`Info`] is collected while resolving the type. No identical
+/// [`Type`] `id`s are expected to be encountered (these are collected and
+/// checked in [`Checker`]), otherwise the resolving would go indefinitely.
 struct HuskedType<'a> {
     info: Vec<Info>,
     checker: Checker,
     ty: &'a Type<PortableForm>,
 }
 
+/// Resolve [`Type`] of set element.
+///
+/// Compact and single-field structs are resolved into corresponding inner
+/// types. All available [`Info`] is collected.
 fn husk_type<'a>(
     entry_symbol: &'a UntrackedSymbol<std::any::TypeId>,
     meta_v14: &'a RuntimeMetadataV14,
@@ -715,11 +753,16 @@ fn husk_type<'a>(
     Ok(HuskedType { info, checker, ty })
 }
 
+/// Type information used for parsing.
 pub enum Ty<'a> {
+    /// Type is already resolved in metadata `Registry`.
     Resolved(&'a Type<PortableForm>),
+
+    /// Type is not yet resolved.
     Symbol(&'a UntrackedSymbol<std::any::TypeId>),
 }
 
+/// Resolve type id in `V14` metadata types `Registry`.
 fn resolve_ty(meta_v14: &RuntimeMetadataV14, id: u32) -> Result<&Type<PortableForm>, ParserError> {
     match meta_v14.types.resolve(id) {
         Some(a) => Ok(a),

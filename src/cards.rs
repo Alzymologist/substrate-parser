@@ -59,14 +59,7 @@ impl Info {
             if self.path.is_empty() {
                 None
             } else {
-                let mut collect = String::new();
-                for (i, x) in self.path.segments().iter().enumerate() {
-                    if i > 0 {
-                        collect.push_str(" >> ");
-                    }
-                    collect.push_str(x);
-                }
-                Some(collect)
+                Some(self.path.segments().join(" >> "))
             }
         };
         InfoFlat { docs, path_flat }
@@ -85,12 +78,7 @@ macro_rules! impl_documented {
         $(
             impl Documented for $ty {
                 fn collect_docs(&self) -> String {
-                    let mut docs = String::new();
-                    for (i, docs_line) in self.docs().iter().enumerate() {
-                        if i > 0 {docs.push('\n')}
-                        docs.push_str(docs_line);
-                    }
-                    docs
+                    self.docs().join("\n")
                 }
             }
         )*
@@ -123,11 +111,11 @@ pub struct PalletSpecificData {
     pub fields: Vec<FieldData>,
 }
 
-/// Call parsed data.
+/// Parsed Call data. Nested.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Call(pub PalletSpecificData);
 
-/// Event parsed data.
+/// Parsed Event data. Nested.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Event(pub PalletSpecificData);
 
@@ -143,6 +131,9 @@ impl PalletSpecificData {
     fn is_balance_display(&self) -> bool {
         PALLETS_BALANCE_VALID.contains(&self.pallet_name.as_str())
     }
+
+    /// Transform `PalletSpecificData` into a set of flat formatted
+    /// [`ExtendedCard`]s.
     fn card(
         &self,
         indent: u32,
@@ -188,17 +179,20 @@ impl PalletSpecificData {
 }
 
 impl Call {
+    /// Transform `Call` into a set of flat formatted [`ExtendedCard`]s.
     pub fn card(&self, indent: u32, short_specs: &ShortSpecs) -> Vec<ExtendedCard> {
         self.0.card(indent, short_specs, PalletSpecificItem::Call)
     }
 }
 
 impl Event {
+    /// Transform `Event` into a set of flat formatted [`ExtendedCard`]s.
     pub fn card(&self, indent: u32, short_specs: &ShortSpecs) -> Vec<ExtendedCard> {
         self.0.card(indent, short_specs, PalletSpecificItem::Event)
     }
 }
 
+/// Parsed data for a [`Field`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FieldData {
     pub field_name: Option<String>,
@@ -207,6 +201,7 @@ pub struct FieldData {
     pub data: ExtendedData,
 }
 
+/// Parsed data for a [`Variant`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VariantData {
     pub variant_name: String,
@@ -214,20 +209,28 @@ pub struct VariantData {
     pub fields: Vec<FieldData>,
 }
 
-/// For both vectors and arrays
+/// Parsed data for a sequence.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SequenceRawData {
-    pub element_info: Vec<Info>, // info associated with every `ParsedData`
+    /// [`Info`] associated with every [`ParsedData`] in the sequence.
+    pub element_info: Vec<Info>,
+
+    /// [`ParsedData`] set. Note that all associated [`Info`] is in
+    /// `element_info`.
     pub data: Vec<ParsedData>,
 }
 
-/// For both vectors and arrays
+/// Parsed data for a wrapped sequence.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SequenceData {
-    pub element_info: Vec<Info>, // info associated with every element of sequence
+    /// [`Info`] associated with every element of the [`Sequence`].
+    pub element_info: Vec<Info>,
+
+    /// `Vec<ParsedData>` wrapped into `Sequence`.
     pub data: Sequence,
 }
 
+/// Wrapped sequence.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Sequence {
     U8(Vec<u8>),
@@ -236,11 +239,15 @@ pub enum Sequence {
     U64(Vec<u64>),
     U128(Vec<u128>),
     VecU8 {
+        /// Sequence itself.
         sequence: Vec<Vec<u8>>,
+
+        /// [`Info`] for individual `u8`.
         inner_element_info: Vec<Info>,
     },
 }
 
+/// Parsed data variants. As many types as possible are preserved.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParsedData {
     BitVecU8Lsb0(BitVec<u8, Lsb0>),
@@ -309,6 +316,7 @@ pub enum ParsedData {
     Variant(VariantData),
 }
 
+/// Transform [`ParsedData`] into single-element `Vec<ExtendedCard>`.
 macro_rules! single_card {
     ($variant:ident, $value:tt, $indent:tt, $info_flat:tt) => {
         vec![ExtendedCard {
@@ -319,6 +327,8 @@ macro_rules! single_card {
     };
 }
 
+/// Transform [`ParsedData`] into single-element `Vec<ExtendedCard>` for types
+/// supporting [`SpecialtyPrimitive`].
 macro_rules! specialty_card {
     ($ty:ty, $variant:ident, $value:tt, $display_balance:tt, $indent:tt, $info_flat:tt, $short_specs:tt, $specialty:tt) => {
         vec![ExtendedCard {
@@ -357,8 +367,10 @@ macro_rules! specialty_card {
     };
 }
 
+/// Transform [`Sequence`] into a vector of [`ExtendedCard`]s.
 macro_rules! sequence {
     ($func:ident, $ty:ty, $variant:ident) => {
+        /// Transform [`Sequence`] of `$ty` into a vector of [`ExtendedCard`]s.
         fn $func(
             set: &[$ty],
             indent: u32,
@@ -391,6 +403,7 @@ sequence!(seq_u64, u64, PrimitiveU64);
 sequence!(seq_u128, u128, PrimitiveU128);
 
 impl ParsedData {
+    /// Transform `ParsedData` into a set of flat formatted [`ExtendedCard`]s.
     pub fn card(
         &self,
         info_flat: Vec<InfoFlat>,
@@ -810,8 +823,6 @@ fn readable(indent: u32, card_type: &str, card_payload: &str) -> String {
 }
 
 /// Formatted and flat decoded data, ready to be displayed.
-///
-/// I suppose it must have as simple fields as possible. To be fixed.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtendedCard {
     pub parser_card: ParserCard,
@@ -819,30 +830,34 @@ pub struct ExtendedCard {
     pub info_flat: Vec<InfoFlat>,
 }
 
+/// Flat [`Type`] information.
+///
+/// At least one of the fields is non-`None`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InfoFlat {
     pub docs: Option<String>,
     pub path_flat: Option<String>,
 }
 
-impl InfoFlat {
-    pub fn print(&self) -> String {
+impl std::fmt::Display for InfoFlat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let docs_printed = self.docs.as_ref().map_or("None", |a| a);
         let path_printed = self.path_flat.as_ref().map_or("None", |a| a);
-        format!("(docs: {}, path: {})", docs_printed, path_printed)
+        write!(f, "(docs: {}, path: {})", docs_printed, path_printed)
     }
 }
 
+/// Id-associated data.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IdData {
+    /// Base58 address
     pub base58: String,
+
+    /// Identicon `png` data
     pub identicon: Vec<u8>,
 }
 
-/// Cards, flat and formatted, ready for display.
-///
-/// Some cards always have associated additional info elements that go into `ExtendedCard`.
-/// Some cards (`Sequence`) have info elements inside.
+/// Flat cards content.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ParserCard {
     Balance(Currency),
@@ -916,6 +931,7 @@ pub enum ParserCard {
 }
 
 impl ExtendedData {
+    /// Transform `ExtendedData` into a set of flat formatted [`ExtendedCard`]s.
     pub fn card(
         &self,
         indent: u32,
@@ -926,17 +942,18 @@ impl ExtendedData {
         self.data
             .card(info_flat, indent, display_balance, short_specs)
     }
+
+    /// Display without associated type info.
     pub fn show(&self, indent: u32, display_balance: bool, short_specs: &ShortSpecs) -> String {
         let cards = self.card(indent, display_balance, short_specs);
-        let mut out = String::new();
-        for (i, x) in cards.iter().enumerate() {
-            if i > 0 {
-                out.push('\n')
-            }
-            out.push_str(&x.show())
-        }
-        out
+        cards
+            .iter()
+            .map(|a| a.show())
+            .collect::<Vec<String>>()
+            .join("\n")
     }
+
+    /// Display with associated type info.
     pub fn show_with_docs(
         &self,
         indent: u32,
@@ -944,18 +961,16 @@ impl ExtendedData {
         short_specs: &ShortSpecs,
     ) -> String {
         let cards = self.card(indent, display_balance, short_specs);
-        let mut out = String::new();
-        for (i, x) in cards.iter().enumerate() {
-            if i > 0 {
-                out.push('\n')
-            }
-            out.push_str(&x.show_with_docs())
-        }
-        out
+        cards
+            .iter()
+            .map(|a| a.show_with_docs())
+            .collect::<Vec<String>>()
+            .join("\n")
     }
 }
 
 impl ExtendedCard {
+    /// Display without associated type info.
     pub fn show(&self) -> String {
         match &self.parser_card {
             ParserCard::Balance(a) => {
@@ -1076,6 +1091,7 @@ impl ExtendedCard {
         }
     }
 
+    /// Display with associated type info.
     pub fn show_with_docs(&self) -> String {
         let mut info_printed = String::new();
         for info_flat in self.info_flat.iter() {
@@ -1083,7 +1099,7 @@ impl ExtendedCard {
                 info_printed,
                 "\n{}{}",
                 "  ".repeat(self.indent as usize),
-                info_flat.print()
+                info_flat
             );
         }
         let card_printed = match &self.parser_card {
@@ -1091,20 +1107,21 @@ impl ExtendedCard {
                 len,
                 element_info_flat,
             } => {
-                let mut element_info_printed = String::new();
-                for (i, info_flat) in element_info_flat.iter().enumerate() {
-                    if i > 0 {
-                        element_info_printed.push('\n')
-                    }
-                    element_info_printed.push_str(&info_flat.print())
-                }
+                let element_info_printed = element_info_flat
+                    .iter()
+                    .map(|a| a.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",");
                 if element_info_printed.is_empty() {
                     readable(self.indent, "Sequence", &format!("{} element(s)", len))
                 } else {
                     readable(
                         self.indent,
                         "Sequence",
-                        &format!("{} element(s), element info: {}", len, element_info_printed),
+                        &format!(
+                            "{} element(s), element info: [{}]",
+                            len, element_info_printed
+                        ),
                     )
                 }
             }
@@ -1113,13 +1130,11 @@ impl ExtendedCard {
                 text,
                 element_info_flat,
             } => {
-                let mut element_info_printed = String::new();
-                for (i, info_flat) in element_info_flat.iter().enumerate() {
-                    if i > 0 {
-                        element_info_printed.push('\n')
-                    }
-                    element_info_printed.push_str(&info_flat.print())
-                }
+                let element_info_printed = element_info_flat
+                    .iter()
+                    .map(|a| a.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",");
                 if element_info_printed.is_empty() {
                     match text {
                         Some(valid_text) => readable(self.indent, "Text", valid_text),
@@ -1130,12 +1145,12 @@ impl ExtendedCard {
                         Some(valid_text) => readable(
                             self.indent,
                             "Text",
-                            &format!("{}, element info: {}", valid_text, element_info_printed),
+                            &format!("{}, element info: [{}]", valid_text, element_info_printed),
                         ),
                         None => readable(
                             self.indent,
                             "Sequence u8",
-                            &format!("{}, element info: {}", hex, element_info_printed),
+                            &format!("{}, element info: [{}]", hex, element_info_printed),
                         ),
                     }
                 }

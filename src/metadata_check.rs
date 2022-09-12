@@ -1,3 +1,13 @@
+//! Determine metadata spec version.
+//!
+//! Metadata spec version is used when decoding signable transactions, to verify
+//! that the metadata used for decoding has the same version as the metadata
+//! used to generate the transaction. The metadata spec version used to
+//! generate the transaction is one of the extensions.
+//!
+//! Metadata could be supplied into parser as `Raw` (metadata only) or as
+//! `Checked` (metadata and spec version derived from elsewhere).
+//! [`CheckedMetadata`] does not get re-checked in this crate.
 use frame_metadata::v14::RuntimeMetadataV14;
 
 use crate::cards::ParsedData;
@@ -5,16 +15,20 @@ use crate::decode_blob_as_type;
 use crate::error::MetaVersionError;
 use crate::special_indicators::SpecialtyPrimitive;
 
+/// Metadata with spec version.
 pub struct CheckedMetadata<'a> {
+    /// Runtime metadata.
     pub meta_v14: &'a RuntimeMetadataV14,
+
+    /// Metadata spec version, printed.
     pub version: String,
 }
 
 /// Metadata used for signable transaction parsing.
 pub enum MetaInput<'a> {
-    /// Metadata is accompanied with spec version already checked elsewhere.
+    /// Metadata is accompanied by spec version already determined elsewhere.
     ///
-    /// No need to check it again.
+    /// No need to check the spec version again.
     Checked(CheckedMetadata<'a>),
 
     /// Spec version is not yet known and must be determined here.
@@ -26,8 +40,7 @@ impl<'a> MetaInput<'a> {
     ///
     /// If `MetaInput` is `Raw`, search metadata for `System` pallet and
     /// `Version` constant within it, decode `Version` constant and find the
-    /// field with `spec_version` name. This is the spec version that goes into
-    /// `CheckedMetadata`.
+    /// field with `SpecVersion` content.
     pub(crate) fn checked(self) -> Result<CheckedMetadata<'a>, MetaVersionError> {
         match self {
             Self::Checked(checked_metadata) => Ok(checked_metadata),

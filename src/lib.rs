@@ -436,9 +436,9 @@ use cards::{Call, ExtendedCard, ExtendedData};
 pub mod compacts;
 use compacts::get_compact;
 mod decoding_sci;
-pub use decoding_sci::{decode_as_call_v14, decode_with_type, Ty};
+pub use decoding_sci::{decode_as_call, decode_with_type, Ty};
 mod decoding_sci_ext;
-pub use decoding_sci_ext::decode_ext_attempt;
+pub use decoding_sci_ext::decode_extensions;
 pub mod error;
 use error::{ParserError, SignableError};
 mod metadata_check;
@@ -524,10 +524,10 @@ pub fn parse_transaction(
 
     // try parsing extensions, check that spec version and genesis hash are
     // correct
-    let extensions = decode_ext_attempt(&mut extensions_data, &checked_metadata, genesis_hash)?;
+    let extensions = decode_extensions(&mut extensions_data, &checked_metadata, genesis_hash)?;
 
     // try parsing call data
-    let call_result = decode_as_call_v14(&mut call_data, checked_metadata.meta_v14);
+    let call_result = decode_as_call(&mut call_data, checked_metadata.meta_v14);
 
     Ok(TransactionParsed {
         call_result,
@@ -535,13 +535,18 @@ pub fn parse_transaction(
     })
 }
 
-/// Decode data blob with known type.
+/// Decode data with a known type using `V14` metadata.
 ///
-/// No check here for all data being used. This check must be added elsewhere.
+/// All data is expected to be used for the decoding.
 pub fn decode_blob_as_type(
     ty_symbol: &UntrackedSymbol<std::any::TypeId>,
     data: &mut Vec<u8>,
     meta_v14: &RuntimeMetadataV14,
 ) -> Result<ExtendedData, ParserError> {
-    decode_with_type(&Ty::Symbol(ty_symbol), data, meta_v14, Propagated::new())
+    let out = decode_with_type(&Ty::Symbol(ty_symbol), data, meta_v14, Propagated::new())?;
+    if !data.is_empty() {
+        Err(ParserError::SomeDataNotUsedBlob)
+    } else {
+        Ok(out)
+    }
 }

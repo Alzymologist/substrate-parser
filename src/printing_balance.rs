@@ -55,7 +55,7 @@
 //! assert!(balance.units == "pSMTH");
 //! ```
 //!
-//! This crate **only formats** the data for output as text, it is not expected
+//! This module **only formats** the data for output as text, it is not expected
 //! that any operations will be performed on the values except displaying them.
 
 /// Trait for correct displaying of balance-related values.
