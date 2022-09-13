@@ -230,6 +230,11 @@ impl Propagated {
         })
     }
 
+    /// Get associated `is_compact`
+    pub fn is_compact(&self) -> bool {
+        self.checker.specialty_set.is_compact
+    }
+
     /// Check that `is_compact` field in associated [`SpecialtySet`] is not
     /// `true`.
     pub fn reject_compact(&self) -> Result<(), ParserError> {

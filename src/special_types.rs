@@ -2,7 +2,7 @@
 use num_bigint::{BigInt, BigUint};
 use parity_scale_codec::{Decode, HasCompact};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
-use sp_core::{crypto::AccountId32, H160, H256, H512};
+use sp_core::{crypto::AccountId32, ByteArray, H160, H256, H512};
 use sp_runtime::generic::Era;
 use std::{convert::TryInto, mem::size_of};
 
@@ -14,21 +14,33 @@ use crate::propagated::SpecialtySet;
 use crate::special_indicators::{SpecialtyH256, SpecialtyPrimitive};
 
 /// Stable length trait.
-pub(crate) trait StLen: Sized {
-    fn decode_value(data: &mut Vec<u8>) -> Result<Self, ParserError>;
+///
+/// Encoded data length in bytes is always identical for the type.
+pub(crate) trait StableLength: Sized {
+    /// Encoded length for the type.
+    fn len_encoded() -> usize;
+
+    /// Type value from the data.
+    ///
+    /// Cut data is consumed.
+    fn cut_and_decode(data: &mut Vec<u8>) -> Result<Self, ParserError>;
 }
 
-macro_rules! impl_stable_length_decodable {
+/// Implement [`StableLength`] for types with stable [`size_of`], value is
+/// decoded.
+macro_rules! impl_stable_length_mem_size_decode {
     ($($ty: ty), *) => {
         $(
-            impl StLen for $ty {
-                fn decode_value(data: &mut Vec<u8>) -> Result<Self, ParserError> {
-                    let length = size_of::<Self>();
-                    match data.get(..length) {
+            impl StableLength for $ty {
+                fn len_encoded() -> usize {
+                    size_of::<Self>()
+                }
+                fn cut_and_decode(data: &mut Vec<u8>) -> Result<Self, ParserError> {
+                    match data.get(..Self::len_encoded()) {
                         Some(slice_to_decode) => {
                             let out = <Self>::decode(&mut &slice_to_decode[..])
                                 .map_err(|_| ParserError::TypeFailure(stringify!($ty)))?;
-                            *data = data[length..].to_vec();
+                            *data = data[Self::len_encoded()..].to_vec();
                             Ok(out)
                         },
                         None => Err(ParserError::DataTooShort)
@@ -39,7 +51,7 @@ macro_rules! impl_stable_length_decodable {
     }
 }
 
-impl_stable_length_decodable!(
+impl_stable_length_mem_size_decode!(
     bool,
     i8,
     i16,
@@ -58,15 +70,25 @@ impl_stable_length_decodable!(
     Perquintill
 );
 
-macro_rules! impl_stable_length_big {
+/// Known size for [`BigInt`] and [`BigUint`].
+const BIG_LEN: usize = 32;
+
+/// Known size for [`char`].
+const CHAR_LEN: usize = 4;
+
+/// Implement [`StableLength`] for [`BigInt`] and [`BigUint`].
+macro_rules! impl_stable_length_big_construct {
     ($($big: ty, $get: ident), *) => {
         $(
-            impl StLen for $big {
-                fn decode_value(data: &mut Vec<u8>) -> Result<Self, ParserError> {
-                    match data.get(0..32) {
+            impl StableLength for $big {
+                fn len_encoded() -> usize {
+                    BIG_LEN
+                }
+                fn cut_and_decode(data: &mut Vec<u8>) -> Result<Self, ParserError> {
+                    match data.get(0..Self::len_encoded()) {
                         Some(slice_to_big256) => {
                             let out = Self::$get(slice_to_big256);
-                            *data = data[32..].to_vec();
+                            *data = data[Self::len_encoded()..].to_vec();
                             Ok(out)
                         },
                         None => Err(ParserError::DataTooShort),
@@ -77,19 +99,22 @@ macro_rules! impl_stable_length_big {
     }
 }
 
-impl_stable_length_big!(BigUint, from_bytes_le);
-impl_stable_length_big!(BigInt, from_signed_bytes_le);
+impl_stable_length_big_construct!(BigUint, from_bytes_le);
+impl_stable_length_big_construct!(BigInt, from_signed_bytes_le);
 
-impl StLen for char {
-    fn decode_value(data: &mut Vec<u8>) -> Result<Self, ParserError> {
-        match data.get(0..4) {
+impl StableLength for char {
+    fn len_encoded() -> usize {
+        CHAR_LEN
+    }
+    fn cut_and_decode(data: &mut Vec<u8>) -> Result<Self, ParserError> {
+        match data.get(0..Self::len_encoded()) {
             Some(slice_to_char) => match char::from_u32(<u32>::from_le_bytes(
                 slice_to_char
                     .try_into()
                     .expect("contstant length, always fit"),
             )) {
                 Some(ch) => {
-                    *data = data[4..].to_vec();
+                    *data = data[Self::len_encoded()..].to_vec();
                     Ok(ch)
                 }
                 None => Err(ParserError::TypeFailure("char")),
@@ -99,24 +124,91 @@ impl StLen for char {
     }
 }
 
-pub(crate) trait StLenCheckSpecialtyCompact:
-    StLen + AsBalance + HasCompact + std::fmt::Display
+/// Implement [`StableLength`] for well-known arrays.
+macro_rules! impl_stable_length_array {
+    ($($array: ty, $length: stmt, $make: ident), *) => {
+        $(
+            impl StableLength for $array {
+                fn len_encoded() -> usize {
+                    $length
+                }
+                fn cut_and_decode(data: &mut Vec<u8>) -> Result<Self, ParserError> {
+                    match data.get(0..Self::len_encoded()) {
+                        Some(slice_to_array) => {
+                            let out = Self::$make(slice_to_array.try_into().expect("stable known length"));
+                            *data = data[Self::len_encoded()..].to_vec();
+                            Ok(out)
+                        },
+                        None => Err(ParserError::DataTooShort),
+                    }
+                }
+            }
+        )*
+    }
+}
+
+impl_stable_length_array!(AccountId32, Self::LEN, new);
+impl_stable_length_array!(sp_core::ed25519::Public, Self::LEN, from_raw);
+impl_stable_length_array!(sp_core::sr25519::Public, Self::LEN, from_raw);
+impl_stable_length_array!(sp_core::ecdsa::Public, Self::LEN, from_raw);
+
+/// Known size for [sp_core::ed25519::Signature] and
+/// [sp_core::sr25519::Signature].
+const SIGNATURE_LEN_64: usize = 64;
+
+/// Known size for [sp_core::ecdsa::Signature].
+const SIGNATURE_LEN_65: usize = 65;
+
+impl_stable_length_array!(sp_core::ed25519::Signature, SIGNATURE_LEN_64, from_raw);
+impl_stable_length_array!(sp_core::sr25519::Signature, SIGNATURE_LEN_64, from_raw);
+impl_stable_length_array!(sp_core::ecdsa::Signature, SIGNATURE_LEN_65, from_raw);
+
+/// Implement [`StableLength`] for well-known hashes.
+macro_rules! impl_stable_length_hash {
+    ($($array: ty), *) => {
+        $(
+            impl StableLength for $array {
+                fn len_encoded() -> usize {
+                    Self::len_bytes()
+                }
+                fn cut_and_decode(data: &mut Vec<u8>) -> Result<Self, ParserError> {
+                    match data.get(0..Self::len_encoded()) {
+                        Some(slice_to_array) => {
+                            let out = Self(slice_to_array.try_into().expect("stable known length"));
+                            *data = data[Self::len_encoded()..].to_vec();
+                            Ok(out)
+                        },
+                        None => Err(ParserError::DataTooShort),
+                    }
+                }
+            }
+        )*
+    }
+}
+
+impl_stable_length_hash!(H160, H256, H512);
+
+/// Unsigned integer trait. Compatible with compacts, uses the propagated
+/// [`SpecialtyPrimitive`].
+pub(crate) trait UnsignedInteger:
+    StableLength + AsBalance + HasCompact + std::fmt::Display
 {
-    fn decode_checked(
+    fn parse_unsigned_integer(
         data: &mut Vec<u8>,
         specialty_set: SpecialtySet,
     ) -> Result<ParsedData, ParserError>;
     fn default_card_name() -> &'static str;
 }
 
-macro_rules! impl_check_specialty_compact {
+/// Implement [`UnsignedInteger`] trait for all unsigned integers.
+macro_rules! impl_unsigned_integer {
     ($($ty: ty, $enum_variant: ident), *) => {
         $(
-            impl StLenCheckSpecialtyCompact for $ty {
-                fn decode_checked(data: &mut Vec<u8>, specialty_set: SpecialtySet) -> Result<ParsedData, ParserError> {
+            impl UnsignedInteger for $ty {
+                fn parse_unsigned_integer(data: &mut Vec<u8>, specialty_set: SpecialtySet) -> Result<ParsedData, ParserError> {
                     let value = {
                         if specialty_set.is_compact {get_compact::<Self>(data)?}
-                        else {<Self>::decode_value(data)?}
+                        else {<Self>::cut_and_decode(data)?}
                     };
                     Ok(ParsedData::$enum_variant{value, specialty: specialty_set.primitive()})
                 }
@@ -128,24 +220,28 @@ macro_rules! impl_check_specialty_compact {
     }
 }
 
-impl_check_specialty_compact!(u8, PrimitiveU8);
-impl_check_specialty_compact!(u16, PrimitiveU16);
-impl_check_specialty_compact!(u32, PrimitiveU32);
-impl_check_specialty_compact!(u64, PrimitiveU64);
-impl_check_specialty_compact!(u128, PrimitiveU128);
+impl_unsigned_integer!(u8, PrimitiveU8);
+impl_unsigned_integer!(u16, PrimitiveU16);
+impl_unsigned_integer!(u32, PrimitiveU32);
+impl_unsigned_integer!(u64, PrimitiveU64);
+impl_unsigned_integer!(u128, PrimitiveU128);
 
-pub(crate) trait StLenCheckCompact: StLen {
-    fn decode_checked(data: &mut Vec<u8>, is_compact: bool) -> Result<ParsedData, ParserError>;
+/// Trait for stable length types that must be checked for propagated compact
+/// flag.
+pub(crate) trait CheckCompact: StableLength {
+    fn parse_check_compact(data: &mut Vec<u8>, is_compact: bool)
+        -> Result<ParsedData, ParserError>;
 }
 
+/// Implement [`CheckCompact`] for `PerThing` that can be compact.
 macro_rules! impl_allow_compact {
     ($($perthing: ident), *) => {
         $(
-            impl StLenCheckCompact for $perthing where $perthing: HasCompact {
-                fn decode_checked(data: &mut Vec<u8>, is_compact: bool) -> Result<ParsedData, ParserError> {
+            impl CheckCompact for $perthing where $perthing: HasCompact {
+                fn parse_check_compact(data: &mut Vec<u8>, is_compact: bool) -> Result<ParsedData, ParserError> {
                     let value = {
                         if is_compact {get_compact::<Self>(data)?}
-                        else {<Self>::decode_value(data)?}
+                        else {<Self>::cut_and_decode(data)?}
                     };
                     Ok(ParsedData::$perthing(value))
                 }
@@ -156,14 +252,15 @@ macro_rules! impl_allow_compact {
 
 impl_allow_compact!(PerU16, Percent, Permill, Perbill, Perquintill);
 
+/// Implement [`CheckCompact`] for types that can not be compact.
 macro_rules! impl_block_compact {
     ($($ty: ty, $enum_variant: ident), *) => {
         $(
-            impl StLenCheckCompact for $ty {
-                fn decode_checked(data: &mut Vec<u8>, is_compact: bool) -> Result<ParsedData, ParserError> {
+            impl CheckCompact for $ty {
+                fn parse_check_compact(data: &mut Vec<u8>, is_compact: bool) -> Result<ParsedData, ParserError> {
                     let value = {
                         if is_compact {return Err(ParserError::UnexpectedCompactInsides)}
-                        else {<Self>::decode_value(data)?}
+                        else {<Self>::cut_and_decode(data)?}
                     };
                     Ok(ParsedData::$enum_variant(value))
                 }
@@ -181,15 +278,36 @@ impl_block_compact!(i64, PrimitiveI64);
 impl_block_compact!(i128, PrimitiveI128);
 impl_block_compact!(BigInt, PrimitiveI256);
 impl_block_compact!(BigUint, PrimitiveU256);
+impl_block_compact!(AccountId32, Id);
+impl_block_compact!(sp_core::ed25519::Public, PublicEd25519);
+impl_block_compact!(sp_core::sr25519::Public, PublicSr25519);
+impl_block_compact!(sp_core::ecdsa::Public, PublicEcdsa);
+impl_block_compact!(sp_core::ed25519::Signature, SignatureEd25519);
+impl_block_compact!(sp_core::sr25519::Signature, SignatureSr25519);
+impl_block_compact!(sp_core::ecdsa::Signature, SignatureEcdsa);
+impl_block_compact!(H160, H160);
+impl_block_compact!(H512, H512);
 
-pub trait Collectable: Sized {
+/// Trait to collect some variants of [`ParsedData`] into [`Sequence`].
+///
+/// Some simple types are easier displayed if `Vec<ParsedData>` is re-arranged
+/// into single `ParsedData::Sequence(_)`. This is expecially true for `u8` and
+/// `Vec<u8>`.
+trait Collectable: Sized {
     fn husk_set(parsed_data_set: &[ParsedData]) -> Option<Sequence>;
 }
 
+/// Implement [`Collectable`] for unsigned integers.
 macro_rules! impl_collect_vec {
     ($($ty: ty, $enum_variant_input: ident, $enum_variant_output: ident), *) => {
         $(
             impl Collectable for $ty {
+                /// Collecting data into `Sequence`.
+                ///
+                /// This function is unfallible. If somehow not all data is
+                /// of the same `ParsedData` variant, the `Sequence` just does
+                /// not get assembled and parsed data would be displayed as
+                /// `SequenceRaw`.
                 fn husk_set(parsed_data_set: &[ParsedData]) -> Option<Sequence> {
                     let mut out: Vec<Self> = Vec::new();
                     for x in parsed_data_set.iter() {
@@ -254,7 +372,9 @@ impl Collectable for Vec<u8> {
     }
 }
 
-pub fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
+/// Try collecting [`Sequence`]. Expected variant of [`ParsedData`] is
+/// determined by the first set element.
+pub(crate) fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
     match set.first() {
         Some(ParsedData::PrimitiveU8 { .. }) => u8::husk_set(set),
         Some(ParsedData::PrimitiveU16 { .. }) => u16::husk_set(set),
@@ -269,130 +389,25 @@ pub fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
     }
 }
 
-/// Function to decode of AccountId special case and transform the result into base58 format.
+/// Parse part of the data as [`H256`], apply available [`SpecialtyH256`].
 ///
-/// The function decodes only a single AccountId type entry,
-/// removes already decoded part of input data Vec<u8>,
-/// and returns whatever remains as DecodedOut field remaining_vector, which is processed later separately.
-///
-/// The function takes as arguments
-/// - data (remaining Vec<u8> of data),
-///
-/// The function outputs the DecodedOut value in case of success.
-///
-/// Resulting AccountId in base58 form is added to fancy_out on js card "Id".
-pub(crate) fn special_case_account_id32(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
-    match data.get(0..32) {
-        Some(a) => {
-            let array_decoded: [u8; 32] = a.try_into().expect("constant length, always fits");
-            *data = data[32..].to_vec();
-            let account_id = AccountId32::new(array_decoded);
-            Ok(ParsedData::Id(account_id))
-        }
-        None => Err(ParserError::DataTooShort),
-    }
-}
-
-macro_rules! crypto_type_decoder {
-    ($func:ident, $module:ident, $target:ident, $len:literal, $enum_variant: ident) => {
-        pub(crate) fn $func(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
-            match data.get(0..$len) {
-                Some(a) => {
-                    let array_decoded: [u8; $len] =
-                        a.try_into().expect("constant length, always fits");
-                    *data = data[$len..].to_vec();
-                    let public = sp_core::$module::$target::from_raw(array_decoded);
-                    Ok(ParsedData::$enum_variant(public))
-                }
-                None => Err(ParserError::DataTooShort),
-            }
-        }
-    };
-}
-
-crypto_type_decoder!(
-    special_case_ed25519_public,
-    ed25519,
-    Public,
-    32,
-    PublicEd25519
-);
-crypto_type_decoder!(
-    special_case_sr25519_public,
-    sr25519,
-    Public,
-    32,
-    PublicSr25519
-);
-crypto_type_decoder!(special_case_ecdsa_public, ecdsa, Public, 33, PublicEcdsa);
-crypto_type_decoder!(
-    special_case_ed25519_signature,
-    ed25519,
-    Signature,
-    64,
-    SignatureEd25519
-);
-crypto_type_decoder!(
-    special_case_sr25519_signature,
-    sr25519,
-    Signature,
-    64,
-    SignatureSr25519
-);
-crypto_type_decoder!(
-    special_case_ecdsa_signature,
-    ecdsa,
-    Signature,
-    65,
-    SignatureEcdsa
-);
-
-pub(crate) trait SpecialArray {
-    fn cut_and_decode(data: &mut Vec<u8>) -> Result<ParsedData, ParserError>;
-}
-
-macro_rules! impl_special_array_h {
-    ($($hash: ident), *) => {
-        $(
-            impl SpecialArray for $hash {
-                fn cut_and_decode(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
-                    let length = <$hash>::len_bytes();
-                    match data.get(..length) {
-                        Some(slice) => {
-                            let out_data = $hash(slice.try_into().expect("fixed checked length, always fits"));
-                            *data = data[length..].to_vec();
-                            Ok(ParsedData::$hash(out_data))
-                        },
-                        None => Err(ParserError::DataTooShort)
-                    }
-                }
-            }
-        )*
-    }
-}
-
-impl_special_array_h!(H160, H512);
-
-pub fn special_case_h256(
+/// Used data gets cut off in the process.
+pub(crate) fn special_case_h256(
     data: &mut Vec<u8>,
     specialty_hash: SpecialtyH256,
 ) -> Result<ParsedData, ParserError> {
-    let length = H256::len_bytes();
-    match data.get(..length) {
-        Some(slice) => {
-            let out_data = H256(slice.try_into().expect("fixed checked length, always fits"));
-            *data = data[length..].to_vec();
-            match specialty_hash {
-                SpecialtyH256::GenesisHash => Ok(ParsedData::GenesisHash(out_data)),
-                SpecialtyH256::BlockHash => Ok(ParsedData::BlockHash(out_data)),
-                SpecialtyH256::None => Ok(ParsedData::H256(out_data)),
-            }
-        }
-        None => Err(ParserError::DataTooShort),
+    let hash = H256::cut_and_decode(data)?;
+    match specialty_hash {
+        SpecialtyH256::GenesisHash => Ok(ParsedData::GenesisHash(hash)),
+        SpecialtyH256::BlockHash => Ok(ParsedData::BlockHash(hash)),
+        SpecialtyH256::None => Ok(ParsedData::H256(hash)),
     }
 }
 
-pub fn special_case_era(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
+/// Parse part of the data as [`Era`].
+///
+/// Used data gets cut off in the process.
+pub(crate) fn special_case_era(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
     let (era_data, remaining_vector) = match data.first() {
         Some(0) => (data[0..1].to_vec(), data[1..].to_vec()),
         Some(_) => match data.get(0..2) {

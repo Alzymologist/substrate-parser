@@ -8,9 +8,21 @@ use crate::error::{ExtensionsError, SignableError};
 use crate::metadata_check::CheckedMetadata;
 use crate::propagated::Propagated;
 use crate::special_indicators::SpecialtyPrimitive;
-use crate::special_types::StLenCheckSpecialtyCompact;
+use crate::special_types::UnsignedInteger;
 
-pub fn decode_ext_attempt(
+/// Parse signable transaction extensions with provided `V14` metadata.
+///
+/// Data gets consumed. All input data is expected to be used in parsing.
+///
+/// Metadata spec version and chain genesis hash are used to check that correct
+/// metadata is used for parsing.
+///
+/// Extensions and their order are determined by `signed_extensions` in
+/// [`ExtrinsicMetadata`](frame_metadata::v14::ExtrinsicMetadata).
+///
+/// Whole `signed_extensions` set is scanned first for types in `ty` field, and
+/// then the second time, for types in `additional_signed` field.
+pub fn decode_extensions(
     data: &mut Vec<u8>,
     checked_metadata: &CheckedMetadata,
     genesis_hash: H256,
@@ -45,68 +57,25 @@ pub fn decode_ext_attempt(
     Ok(extensions)
 }
 
-pub fn check_extensions(
+/// Check collected extensions.
+///
+/// Extensions must include metadata spec version and chain genesis hash.
+/// If extensions also include `Era`, block hash for immortal `Era` must match
+/// chain genesis hash.
+fn check_extensions(
     extensions: &[ExtendedData],
     version: &str,
     genesis_hash: H256,
 ) -> Result<(), SignableError> {
     let mut collected_ext = CollectedExt::new();
     for ext in extensions.iter() {
-        match ext.data {
-            ParsedData::Era(era) => collected_ext.add_era(era)?,
-            ParsedData::GenesisHash(h) => collected_ext.add_genesis_hash(h)?,
-            ParsedData::BlockHash(h) => collected_ext.add_block_hash(h)?,
-            ParsedData::PrimitiveU8 {
-                value,
-                specialty: SpecialtyPrimitive::SpecVersion,
-            } => collected_ext.add_spec_version::<u8>(value)?,
-            ParsedData::PrimitiveU16 {
-                value,
-                specialty: SpecialtyPrimitive::SpecVersion,
-            } => collected_ext.add_spec_version::<u16>(value)?,
-            ParsedData::PrimitiveU32 {
-                value,
-                specialty: SpecialtyPrimitive::SpecVersion,
-            } => collected_ext.add_spec_version::<u32>(value)?,
-            ParsedData::PrimitiveU64 {
-                value,
-                specialty: SpecialtyPrimitive::SpecVersion,
-            } => collected_ext.add_spec_version::<u64>(value)?,
-            ParsedData::PrimitiveU128 {
-                value,
-                specialty: SpecialtyPrimitive::SpecVersion,
-            } => collected_ext.add_spec_version::<u128>(value)?,
-            ParsedData::Composite(ref field_data) => {
-                if field_data.len() == 1 {
-                    match field_data[0].data.data {
-                        ParsedData::Era(era) => collected_ext.add_era(era)?,
-                        ParsedData::GenesisHash(h) => collected_ext.add_genesis_hash(h)?,
-                        ParsedData::BlockHash(h) => collected_ext.add_block_hash(h)?,
-                        ParsedData::PrimitiveU8 {
-                            value,
-                            specialty: SpecialtyPrimitive::SpecVersion,
-                        } => collected_ext.add_spec_version::<u8>(value)?,
-                        ParsedData::PrimitiveU16 {
-                            value,
-                            specialty: SpecialtyPrimitive::SpecVersion,
-                        } => collected_ext.add_spec_version::<u16>(value)?,
-                        ParsedData::PrimitiveU32 {
-                            value,
-                            specialty: SpecialtyPrimitive::SpecVersion,
-                        } => collected_ext.add_spec_version::<u32>(value)?,
-                        ParsedData::PrimitiveU64 {
-                            value,
-                            specialty: SpecialtyPrimitive::SpecVersion,
-                        } => collected_ext.add_spec_version::<u64>(value)?,
-                        ParsedData::PrimitiveU128 {
-                            value,
-                            specialty: SpecialtyPrimitive::SpecVersion,
-                        } => collected_ext.add_spec_version::<u128>(value)?,
-                        _ => (),
-                    }
-                }
+        // single-field structs are also checked
+        if let ParsedData::Composite(ref field_data) = ext.data {
+            if field_data.len() == 1 {
+                collected_ext.update(&field_data[0].data.data)?;
             }
-            _ => (),
+        } else {
+            collected_ext.update(&ext.data)?;
         }
     }
     match collected_ext.spec_version_printed {
@@ -149,6 +118,7 @@ pub fn check_extensions(
     Ok(())
 }
 
+/// Collector for extensions that must be checked.
 struct CollectedExt {
     era: Option<Era>,
     genesis_hash: Option<H256>,
@@ -157,6 +127,7 @@ struct CollectedExt {
 }
 
 impl CollectedExt {
+    /// Initiate new set.
     fn new() -> Self {
         Self {
             era: None,
@@ -165,6 +136,38 @@ impl CollectedExt {
             spec_version_printed: None,
         }
     }
+
+    /// Update set with `ParsedData`.
+    fn update(&mut self, parsed_data: &ParsedData) -> Result<(), SignableError> {
+        match parsed_data {
+            ParsedData::Era(era) => self.add_era(*era),
+            ParsedData::GenesisHash(h) => self.add_genesis_hash(*h),
+            ParsedData::BlockHash(h) => self.add_block_hash(*h),
+            ParsedData::PrimitiveU8 {
+                value,
+                specialty: SpecialtyPrimitive::SpecVersion,
+            } => self.add_spec_version::<u8>(*value),
+            ParsedData::PrimitiveU16 {
+                value,
+                specialty: SpecialtyPrimitive::SpecVersion,
+            } => self.add_spec_version::<u16>(*value),
+            ParsedData::PrimitiveU32 {
+                value,
+                specialty: SpecialtyPrimitive::SpecVersion,
+            } => self.add_spec_version::<u32>(*value),
+            ParsedData::PrimitiveU64 {
+                value,
+                specialty: SpecialtyPrimitive::SpecVersion,
+            } => self.add_spec_version::<u64>(*value),
+            ParsedData::PrimitiveU128 {
+                value,
+                specialty: SpecialtyPrimitive::SpecVersion,
+            } => self.add_spec_version::<u128>(*value),
+            _ => Ok(()),
+        }
+    }
+
+    /// Add `Era` to set.
     fn add_era(&mut self, era: Era) -> Result<(), SignableError> {
         if self.era.is_some() {
             Err(SignableError::ExtensionsList(ExtensionsError::EraTwice))
@@ -173,6 +176,8 @@ impl CollectedExt {
             Ok(())
         }
     }
+
+    /// Add genesis hash to set.
     fn add_genesis_hash(&mut self, genesis_hash: H256) -> Result<(), SignableError> {
         if self.genesis_hash.is_some() {
             Err(SignableError::ExtensionsList(
@@ -183,6 +188,8 @@ impl CollectedExt {
             Ok(())
         }
     }
+
+    /// Add block hash to set.
     fn add_block_hash(&mut self, block_hash: H256) -> Result<(), SignableError> {
         if self.block_hash.is_some() {
             Err(SignableError::ExtensionsList(
@@ -193,7 +200,9 @@ impl CollectedExt {
             Ok(())
         }
     }
-    fn add_spec_version<T: StLenCheckSpecialtyCompact>(
+
+    /// Add metadata spec version to set.
+    fn add_spec_version<T: UnsignedInteger>(
         &mut self,
         spec_version: T,
     ) -> Result<(), SignableError> {

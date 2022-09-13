@@ -147,6 +147,32 @@
 //!         type_name: Some(String::from("<T::Lookup as StaticLookup>::Source")),
 //!         field_docs: String::new(),
 //!         data: ExtendedData {
+//!             data: ParsedData::Variant(VariantData {
+//!                 variant_name: String::from("Id"),
+//!                 variant_docs: String::new(),
+//!                 fields: vec![
+//!                     FieldData {
+//!                         field_name: None,
+//!                         type_name: Some(String::from("AccountId")),
+//!                         field_docs: String::new(),
+//!                         data: ExtendedData {
+//!                             data: ParsedData::Id(AccountId32::from_str("8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48").unwrap()),
+//!                             info: vec![
+//!                                 Info {
+//!                                     docs: String::new(),
+//!                                     path: Path::from_segments(vec![
+//!                                         "sp_core",
+//!                                         "crypto",
+//!                                         "AccountId32"
+//!                                     ])
+//!                                        .unwrap()
+//!                                        .into_portable(&mut Registry::new()),
+//!                                 }
+//!                             ]
+//!                         }
+//!                     }
+//!                 ]
+//!             }),
 //!             info: vec![
 //!                 Info {
 //!                     docs: String::new(),
@@ -159,32 +185,6 @@
 //!                        .into_portable(&mut Registry::new()),
 //!                 }
 //!             ],
-//!             data: ParsedData::Variant(VariantData {
-//!                 variant_name: String::from("Id"),
-//!                 variant_docs: String::new(),
-//!                 fields: vec![
-//!                     FieldData {
-//!                         field_name: None,
-//!                         type_name: Some(String::from("AccountId")),
-//!                         field_docs: String::new(),
-//!                         data: ExtendedData {
-//!                             info: vec![
-//!                                 Info {
-//!                                     docs: String::new(),
-//!                                     path: Path::from_segments(vec![
-//!                                         "sp_core",
-//!                                         "crypto",
-//!                                         "AccountId32"
-//!                                     ])
-//!                                        .unwrap()
-//!                                        .into_portable(&mut Registry::new()),
-//!                                 }
-//!                             ],
-//!                             data: ParsedData::Id(AccountId32::from_str("8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48").unwrap()),
-//!                         }
-//!                     }
-//!                 ]
-//!             })
 //!         }
 //!     },
 //!     FieldData {
@@ -192,11 +192,11 @@
 //!         type_name: Some(String::from("T::Balance")),
 //!         field_docs: String::new(),
 //!         data: ExtendedData {
-//!             info: Vec::new(),
 //!             data: ParsedData::PrimitiveU128{
 //!                 value: 100000000,
 //!                 specialty: SpecialtyPrimitive::Balance,
-//!             }
+//!             },
+//!             info: Vec::new()
 //!         }
 //!     }
 //! ];
@@ -205,6 +205,7 @@
 //! // Parsed extensions. Note that many extensions are empty.
 //! let expected_extensions_data = vec![
 //!     ExtendedData {
+//!         data: ParsedData::Composite(Vec::new()),
 //!         info: vec![
 //!             Info {
 //!                 docs: String::new(),
@@ -217,10 +218,10 @@
 //!                     .unwrap()
 //!                     .into_portable(&mut Registry::new()),
 //!             }
-//!         ],
-//!         data: ParsedData::Composite(Vec::new()),
+//!         ]
 //!     },
 //!     ExtendedData {
+//!         data: ParsedData::Composite(Vec::new()),
 //!         info: vec![
 //!             Info {
 //!                 docs: String::new(),
@@ -233,10 +234,10 @@
 //!                     .unwrap()
 //!                     .into_portable(&mut Registry::new()),
 //!             }
-//!         ],
-//!         data: ParsedData::Composite(Vec::new()),
+//!         ]
 //!     },
 //!     ExtendedData {
+//!         data: ParsedData::Composite(Vec::new()),
 //!         info: vec![
 //!             Info {
 //!                 docs: String::new(),
@@ -249,23 +250,9 @@
 //!                     .unwrap()
 //!                     .into_portable(&mut Registry::new()),
 //!             }
-//!         ],
-//!         data: ParsedData::Composite(Vec::new())
+//!         ]
 //!     },
 //!     ExtendedData {
-//!         info: vec![
-//!             Info {
-//!                 docs: String::new(),
-//!                 path: Path::from_segments(vec![
-//!                     "frame_system",
-//!                     "extensions",
-//!                     "check_mortality",
-//!                     "CheckMortality",
-//!                 ])
-//!                     .unwrap()
-//!                     .into_portable(&mut Registry::new()),
-//!             }
-//!         ],
 //!         data: ParsedData::Composite(vec![
 //!             FieldData {
 //!                 field_name: None,
@@ -288,9 +275,36 @@
 //!                     data: ParsedData::Era(Era::Mortal(64, 61)),
 //!                 }
 //!             }
-//!         ])
+//!         ]),
+//!         info: vec![
+//!             Info {
+//!                 docs: String::new(),
+//!                 path: Path::from_segments(vec![
+//!                     "frame_system",
+//!                     "extensions",
+//!                     "check_mortality",
+//!                     "CheckMortality",
+//!                 ])
+//!                     .unwrap()
+//!                     .into_portable(&mut Registry::new()),
+//!             }
+//!         ]
 //!     },
 //!     ExtendedData {
+//!         data: ParsedData::Composite(vec![
+//!             FieldData {
+//!                 field_name: None,
+//!                 type_name: Some(String::from("T::Index")),
+//!                 field_docs: String::new(),
+//!                 data: ExtendedData {
+//!                     data: ParsedData::PrimitiveU32 {
+//!                         value: 261,
+//!                         specialty: SpecialtyPrimitive::Nonce,
+//!                     },
+//!                     info: Vec::new()
+//!                 }
+//!             }
+//!         ]),
 //!         info: vec![
 //!             Info {
 //!                 docs: String::new(),
@@ -303,23 +317,10 @@
 //!                     .unwrap()
 //!                     .into_portable(&mut Registry::new()),
 //!             }
-//!         ],
-//!         data: ParsedData::Composite(vec![
-//!             FieldData {
-//!                 field_name: None,
-//!                 type_name: Some(String::from("T::Index")),
-//!                 field_docs: String::new(),
-//!                 data: ExtendedData {
-//!                     info: Vec::new(),
-//!                     data: ParsedData::PrimitiveU32 {
-//!                         value: 261,
-//!                         specialty: SpecialtyPrimitive::Nonce,
-//!                     }
-//!                 }
-//!             }
-//!         ])
+//!         ]
 //!     },
 //!     ExtendedData {
+//!         data: ParsedData::Composite(Vec::new()),
 //!         info: vec![
 //!             Info {
 //!                 docs: String::new(),
@@ -332,10 +333,23 @@
 //!                     .unwrap()
 //!                     .into_portable(&mut Registry::new()),
 //!             }
-//!         ],
-//!         data: ParsedData::Composite(Vec::new())
+//!         ]
 //!     },
 //!     ExtendedData {
+//!         data: ParsedData::Composite(vec![
+//!             FieldData {
+//!                 field_name: None,
+//!                 type_name: Some(String::from("BalanceOf<T>")),
+//!                 field_docs: String::new(),
+//!                 data: ExtendedData {
+//!                     data: ParsedData::PrimitiveU128 {
+//!                         value: 10000000,
+//!                         specialty: SpecialtyPrimitive::Tip
+//!                     },
+//!                     info: Vec::new()
+//!                 }
+//!             }
+//!         ]),
 //!         info: vec![
 //!             Info {
 //!                 docs: String::new(),
@@ -346,51 +360,24 @@
 //!                     .unwrap()
 //!                     .into_portable(&mut Registry::new()),
 //!             }
-//!         ],
-//!         data: ParsedData::Composite(vec![
-//!             FieldData {
-//!                 field_name: None,
-//!                 type_name: Some(String::from("BalanceOf<T>")),
-//!                 field_docs: String::new(),
-//!                 data: ExtendedData {
-//!                     info: Vec::new(),
-//!                     data: ParsedData::PrimitiveU128 {
-//!                         value: 10000000,
-//!                         specialty: SpecialtyPrimitive::Tip
-//!                     }
-//!                 }
-//!             }
-//!         ])
+//!         ]
 //!     },
 //!     ExtendedData {
-//!         info: Vec::new(),
 //!         data: ParsedData::PrimitiveU32 {
 //!             value: 9111,
 //!             specialty: SpecialtyPrimitive::SpecVersion
-//!         }
+//!         },
+//!         info: Vec::new()
 //!     },
 //!     ExtendedData {
-//!         info: Vec::new(),
 //!         data: ParsedData::PrimitiveU32 {
 //!             value: 7,
 //!             specialty: SpecialtyPrimitive::TxVersion
-//!         }
+//!         },
+//!         info: Vec::new()
 //!     },
 //!     ExtendedData {
-//!         info: vec![
-//!             Info {
-//!                 docs: String::new(),
-//!                 path: Path::from_segments(vec![
-//!                    "primitive_types",
-//!                    "H256",
-//!                ])
-//!                    .unwrap()
-//!                    .into_portable(&mut Registry::new()),
-//!             }
-//!         ],
 //!         data: ParsedData::GenesisHash(H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap()),
-//!     },
-//!     ExtendedData {
 //!         info: vec![
 //!             Info {
 //!                 docs: String::new(),
@@ -401,20 +388,33 @@
 //!                    .unwrap()
 //!                    .into_portable(&mut Registry::new()),
 //!             }
-//!         ],
+//!         ]
+//!     },
+//!     ExtendedData {
 //!         data: ParsedData::BlockHash(H256::from_str("98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84").unwrap()),
+//!         info: vec![
+//!             Info {
+//!                 docs: String::new(),
+//!                 path: Path::from_segments(vec![
+//!                    "primitive_types",
+//!                    "H256",
+//!                ])
+//!                    .unwrap()
+//!                    .into_portable(&mut Registry::new()),
+//!             }
+//!         ]
 //!     },
 //!     ExtendedData {
-//!         info: Vec::new(),
-//!         data: ParsedData::Tuple(Vec::new())
+//!         data: ParsedData::Tuple(Vec::new()),
+//!         info: Vec::new()
 //!     },
 //!     ExtendedData {
-//!         info: Vec::new(),
-//!         data: ParsedData::Tuple(Vec::new())
+//!         data: ParsedData::Tuple(Vec::new()),
+//!         info: Vec::new()
 //!     },
 //!     ExtendedData {
-//!         info: Vec::new(),
-//!         data: ParsedData::Tuple(Vec::new())
+//!         data: ParsedData::Tuple(Vec::new()),
+//!         info: Vec::new()
 //!     }
 //! ];
 //!
@@ -436,9 +436,9 @@ use cards::{Call, ExtendedCard, ExtendedData};
 pub mod compacts;
 use compacts::get_compact;
 mod decoding_sci;
-pub use decoding_sci::{decode_as_call_v14, decode_with_type, Ty};
+pub use decoding_sci::{decode_as_call, decode_with_type, Ty};
 mod decoding_sci_ext;
-pub use decoding_sci_ext::decode_ext_attempt;
+pub use decoding_sci_ext::decode_extensions;
 pub mod error;
 use error::{ParserError, SignableError};
 mod metadata_check;
@@ -447,7 +447,7 @@ pub mod printing_balance;
 mod propagated;
 use propagated::Propagated;
 pub mod special_indicators;
-pub mod special_types;
+mod special_types;
 
 #[cfg(test)]
 mod tests;
@@ -524,10 +524,10 @@ pub fn parse_transaction(
 
     // try parsing extensions, check that spec version and genesis hash are
     // correct
-    let extensions = decode_ext_attempt(&mut extensions_data, &checked_metadata, genesis_hash)?;
+    let extensions = decode_extensions(&mut extensions_data, &checked_metadata, genesis_hash)?;
 
     // try parsing call data
-    let call_result = decode_as_call_v14(&mut call_data, checked_metadata.meta_v14);
+    let call_result = decode_as_call(&mut call_data, checked_metadata.meta_v14);
 
     Ok(TransactionParsed {
         call_result,
@@ -535,13 +535,18 @@ pub fn parse_transaction(
     })
 }
 
-/// Decode data blob with known type.
+/// Decode data with a known type using `V14` metadata.
 ///
-/// No check here for all data being used. This check must be added elsewhere.
+/// All data is expected to be used for the decoding.
 pub fn decode_blob_as_type(
     ty_symbol: &UntrackedSymbol<std::any::TypeId>,
     data: &mut Vec<u8>,
     meta_v14: &RuntimeMetadataV14,
 ) -> Result<ExtendedData, ParserError> {
-    decode_with_type(&Ty::Symbol(ty_symbol), data, meta_v14, Propagated::new())
+    let out = decode_with_type(&Ty::Symbol(ty_symbol), data, meta_v14, Propagated::new())?;
+    if !data.is_empty() {
+        Err(ParserError::SomeDataNotUsedBlob)
+    } else {
+        Ok(out)
+    }
 }

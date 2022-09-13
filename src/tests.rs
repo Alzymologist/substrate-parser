@@ -173,7 +173,7 @@ bypassing `frame_system::Config::BaseCallFilter`).
 - Complexity: O(C) where C is the number of calls to be batched.
 # </weight>, path: None)
     Field Name: calls
-      Sequence: 2 element(s), element info: (docs: None, path: westend_runtime >> Call)
+      Sequence: 2 element(s), element info: [(docs: None, path: westend_runtime >> Call)]
         Pallet: Staking
         (docs: Contains one variant per dispatchable that can be called by an extrinsic., path: pallet_staking >> pallet >> pallet >> Call)
           Call: bond
@@ -221,7 +221,7 @@ which is capped at CompactAssignments::LIMIT (MAX_NOMINATIONS).
 - Both the reads and writes follow a similar pattern.
 # </weight>, path: None)
             Field Name: targets
-              Sequence: 3 element(s), element info: (docs: None, path: sp_runtime >> multiaddress >> MultiAddress)
+              Sequence: 3 element(s), element info: [(docs: None, path: sp_runtime >> multiaddress >> MultiAddress)]
                 Enum
                   Enum Variant Name: Id
                     Id: 5CFPcUJgYgWryPaV1aYjSbTpbTLu42V32Ytw1L9rfoMAsfGh
@@ -425,18 +425,11 @@ fn storage_1_good() {
 
     let reply = decode_blob_as_type(&system_digest_ty, &mut data, &metadata).unwrap();
     let reply_known = ExtendedData {
-        info: vec![Info {
-            docs: String::new(),
-            path: Path::from_segments(vec!["sp_runtime", "generic", "digest", "Digest"])
-                .unwrap()
-                .into_portable(&mut Registry::new()),
-        }],
         data: ParsedData::Composite(vec![FieldData {
             field_name: Some(String::from("logs")),
             type_name: Some(String::from("Vec<DigestItem>")),
             field_docs: String::new(),
             data: ExtendedData {
-                info: Vec::new(),
                 data: ParsedData::SequenceRaw(SequenceRawData {
                     element_info: vec![Info {
                         docs: String::new(),
@@ -458,11 +451,11 @@ fn storage_1_good() {
                                 type_name: Some(String::from("ConsensusEngineId")),
                                 field_docs: String::new(),
                                 data: ExtendedData {
-                                    info: Vec::new(),
                                     data: ParsedData::Sequence(SequenceData {
                                         element_info: Vec::new(),
                                         data: Sequence::U8(vec![97, 117, 114, 97]),
                                     }),
+                                    info: Vec::new(),
                                 },
                             },
                             FieldData {
@@ -470,18 +463,25 @@ fn storage_1_good() {
                                 type_name: Some(String::from("Vec<u8>")),
                                 field_docs: String::new(),
                                 data: ExtendedData {
-                                    info: Vec::new(),
                                     data: ParsedData::Sequence(SequenceData {
                                         element_info: Vec::new(),
                                         data: Sequence::U8(vec![193, 242, 65, 8, 0, 0, 0, 0]),
                                     }),
+                                    info: Vec::new(),
                                 },
                             },
                         ],
                     })],
                 }),
+                info: Vec::new(),
             },
         }]),
+        info: vec![Info {
+            docs: String::new(),
+            path: Path::from_segments(vec!["sp_runtime", "generic", "digest", "Digest"])
+                .unwrap()
+                .into_portable(&mut Registry::new()),
+        }],
     };
     assert_eq!(reply_known, reply);
 }

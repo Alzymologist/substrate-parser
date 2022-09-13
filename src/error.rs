@@ -64,6 +64,9 @@ pub enum ParserError {
     #[error("Declared type is not suitable BitOrder type for BitVec.")]
     NotBitOrderType,
 
+    #[error("Expected to use all data provided in decoding. Some data remained unused.")]
+    SomeDataNotUsedBlob,
+
     #[error("Unable to decode data piece as {0}.")]
     TypeFailure(&'static str),
 
@@ -117,7 +120,7 @@ pub enum ExtensionsError {
     SpecVersionTwice,
 }
 
-/// Error in metadata version constant.
+/// Error in metadata version constant search.
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum MetaVersionError {
     #[error("No spec version found in decoded `Version` constant.")]
