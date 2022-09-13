@@ -94,11 +94,11 @@ impl_documented!(
 /// Parsed data and collected relevant type information.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExtendedData {
-    /// All non-empty `Info` encountered while resolving the type.
-    pub info: Vec<Info>,
-
     /// Parsed data, nested.
     pub data: ParsedData,
+
+    /// All non-empty `Info` encountered while resolving the type.
+    pub info: Vec<Info>,
 }
 
 /// Parsed data for [`PalletSpecificItem`].

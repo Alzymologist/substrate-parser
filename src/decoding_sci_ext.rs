@@ -8,7 +8,7 @@ use crate::error::{ExtensionsError, SignableError};
 use crate::metadata_check::CheckedMetadata;
 use crate::propagated::Propagated;
 use crate::special_indicators::SpecialtyPrimitive;
-use crate::special_types::StLenCheckSpecialtyCompact;
+use crate::special_types::UnsignedInteger;
 
 /// Parse signable transaction extensions with provided `V14` metadata.
 ///
@@ -202,7 +202,7 @@ impl CollectedExt {
     }
 
     /// Add metadata spec version to set.
-    fn add_spec_version<T: StLenCheckSpecialtyCompact>(
+    fn add_spec_version<T: UnsignedInteger>(
         &mut self,
         spec_version: T,
     ) -> Result<(), SignableError> {
