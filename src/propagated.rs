@@ -170,12 +170,12 @@ impl Default for Checker {
 #[derive(Clone, Debug)]
 pub struct Propagated {
     /// Type data that is collected and checked during parsing.
-    pub checker: Checker,
+    pub(crate) checker: Checker,
 
     /// Set of [`Info`] collected while resolving the type.
     ///
     /// Only non-empty [`Info`] entries are added.
-    pub info: Vec<Info>,
+    pub(crate) info: Vec<Info>,
 }
 
 impl Propagated {
@@ -188,7 +188,7 @@ impl Propagated {
     }
 
     /// Initiate new `Propagated` for signed extensions instance.
-    pub fn from_ext_meta(signed_ext_meta: &SignedExtensionMetadata<PortableForm>) -> Self {
+    pub(crate) fn from_ext_meta(signed_ext_meta: &SignedExtensionMetadata<PortableForm>) -> Self {
         Self {
             checker: Checker {
                 specialty_set: SpecialtySet {
@@ -202,7 +202,7 @@ impl Propagated {
     }
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`.
-    pub fn with_checker(checker: Checker) -> Self {
+    pub(crate) fn with_checker(checker: Checker) -> Self {
         Self {
             checker,
             info: Vec::new(),
@@ -211,7 +211,10 @@ impl Propagated {
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`
     /// for an individual [`Field`].
-    pub fn for_field(checker: &Checker, field: &Field<PortableForm>) -> Result<Self, ParserError> {
+    pub(crate) fn for_field(
+        checker: &Checker,
+        field: &Field<PortableForm>,
+    ) -> Result<Self, ParserError> {
         Ok(Self {
             checker: Checker::update_for_field(checker, field)?,
             info: Vec::new(),
@@ -220,7 +223,7 @@ impl Propagated {
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`
     /// for a [`Type`](scale_info::Type).
-    pub fn for_ty_symbol(
+    pub(crate) fn for_ty_symbol(
         checker: &Checker,
         ty_symbol: &UntrackedSymbol<std::any::TypeId>,
     ) -> Result<Self, ParserError> {
@@ -231,30 +234,30 @@ impl Propagated {
     }
 
     /// Get associated `is_compact`
-    pub fn is_compact(&self) -> bool {
+    pub(crate) fn is_compact(&self) -> bool {
         self.checker.specialty_set.is_compact
     }
 
-    /// Check that `is_compact` field in associated `SpecialtySet` is not
+    /// Check that `is_compact` field in associated [`SpecialtySet`] is not
     /// `true`.
-    pub fn reject_compact(&self) -> Result<(), ParserError> {
+    pub(crate) fn reject_compact(&self) -> Result<(), ParserError> {
         self.checker.specialty_set.reject_compact()
     }
 
     /// Discard previously found [`Hint`].
-    pub fn forget_hint(&mut self) {
+    pub(crate) fn forget_hint(&mut self) {
         self.checker.forget_hint()
     }
 
     /// Add [`Info`] entry (if non-empty) to `info` set.
-    pub fn add_info(&mut self, info_update: &Info) {
+    pub(crate) fn add_info(&mut self, info_update: &Info) {
         if !info_update.is_empty() {
             self.info.push(info_update.clone())
         }
     }
 
     /// Add `&[Info]` to `info` set.
-    pub fn add_info_slice(&mut self, info_update_slice: &[Info]) {
+    pub(crate) fn add_info_slice(&mut self, info_update_slice: &[Info]) {
         self.info.extend_from_slice(info_update_slice)
     }
 }
