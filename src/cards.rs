@@ -1,5 +1,6 @@
 //! Types for parsed data (nested) and parser cards (flat and formatted).
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
+use frame_metadata::v14::StorageEntryMetadata;
 use num_bigint::{BigInt, BigUint};
 use plot_icon::generate_png_scaled_default;
 use scale_info::{form::PortableForm, Field, Path, Type, Variant};
@@ -90,6 +91,12 @@ impl_documented!(
     Field<PortableForm>,
     Variant<PortableForm>
 );
+
+impl Documented for StorageEntryMetadata<PortableForm> {
+    fn collect_docs(&self) -> String {
+        self.docs.join("\n")
+    }
+}
 
 /// Parsed data and collected relevant type information.
 #[derive(Clone, Debug, Eq, PartialEq)]
