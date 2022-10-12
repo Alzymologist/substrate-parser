@@ -4,8 +4,8 @@ use frame_metadata::v14::RuntimeMetadataV14;
 use num_bigint::{BigInt, BigUint};
 use parity_scale_codec::{Decode, OptionBool};
 use scale_info::{
-    form::PortableForm, interner::UntrackedSymbol, Field, Type, TypeDef, TypeDefBitSequence,
-    TypeDefPrimitive, Variant,
+    form::PortableForm, interner::UntrackedSymbol, Field, PortableRegistry, Type, TypeDef,
+    TypeDefBitSequence, TypeDefPrimitive, Variant,
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{crypto::AccountId32, H160, H512};
@@ -123,9 +123,8 @@ pub fn decode_as_call(
     };
 
     let calls_in_pallet_type = match found_calls_in_pallet_type_id {
-        Some(calls_in_pallet_symbol) => {
-            resolve_ty(meta_v14, calls_in_pallet_symbol.id()).map_err(SignableError::Parsing)?
-        }
+        Some(calls_in_pallet_symbol) => resolve_ty(&meta_v14.types, calls_in_pallet_symbol.id())
+            .map_err(SignableError::Parsing)?,
         None => return Err(SignableError::NoCallsInPallet(pallet_name)),
     };
 
@@ -135,8 +134,8 @@ pub fn decode_as_call(
         if let SpecialtyTypeHinted::PalletSpecific(PalletSpecificItem::Call) =
             SpecialtyTypeHinted::from_path(&pallet_info.path)
         {
-            let variant_data =
-                decode_variant(x.variants(), data, meta_v14).map_err(SignableError::Parsing)?;
+            let variant_data = decode_variant(x.variants(), data, &meta_v14.types)
+                .map_err(SignableError::Parsing)?;
             if !data.is_empty() {
                 Err(SignableError::SomeDataNotUsedCall)
             } else {
@@ -190,19 +189,19 @@ pub fn decode_as_call(
 pub fn decode_with_type(
     ty_input: &Ty,
     data: &mut Vec<u8>,
-    meta_v14: &RuntimeMetadataV14,
+    registry: &PortableRegistry,
     mut propagated: Propagated,
 ) -> Result<ExtendedData, ParserError> {
     let ty = match ty_input {
         Ty::Resolved(resolved) => resolved,
-        Ty::Symbol(ty_symbol) => resolve_ty(meta_v14, ty_symbol.id())?,
+        Ty::Symbol(ty_symbol) => resolve_ty(registry, ty_symbol.id())?,
     };
     let info_ty = Info::from_ty(ty);
     propagated.add_info(&info_ty);
-    match SpecialtyTypeChecked::from_type(ty, data, meta_v14) {
+    match SpecialtyTypeChecked::from_type(ty, data, registry) {
         SpecialtyTypeChecked::None => match ty.type_def() {
             TypeDef::Composite(x) => {
-                let field_data_set = decode_fields(x.fields(), data, meta_v14, propagated.checker)?;
+                let field_data_set = decode_fields(x.fields(), data, registry, propagated.checker)?;
                 Ok(ExtendedData {
                     data: ParsedData::Composite(field_data_set),
                     info: propagated.info,
@@ -210,7 +209,7 @@ pub fn decode_with_type(
             }
             TypeDef::Variant(x) => {
                 propagated.reject_compact()?;
-                let variant_data = decode_variant(x.variants(), data, meta_v14)?;
+                let variant_data = decode_variant(x.variants(), data, registry)?;
                 Ok(ExtendedData {
                     data: ParsedData::Variant(variant_data),
                     info: propagated.info,
@@ -223,12 +222,12 @@ pub fn decode_with_type(
                     x.type_param(),
                     number_of_elements,
                     data,
-                    meta_v14,
+                    registry,
                     propagated,
                 )
             }
             TypeDef::Array(x) => {
-                decode_elements_set(x.type_param(), x.len(), data, meta_v14, propagated)
+                decode_elements_set(x.type_param(), x.len(), data, registry, propagated)
             }
             TypeDef::Tuple(x) => {
                 let inner_types_set = x.fields();
@@ -241,7 +240,7 @@ pub fn decode_with_type(
                     let tuple_data_element = decode_with_type(
                         &Ty::Symbol(inner_ty_symbol),
                         data,
-                        meta_v14,
+                        registry,
                         Propagated::for_ty_symbol(&propagated.checker, inner_ty_symbol)?,
                     )?;
                     tuple_data_set.push(tuple_data_element);
@@ -259,12 +258,12 @@ pub fn decode_with_type(
                 propagated.reject_compact()?;
                 propagated.checker.specialty_set.is_compact = true;
                 propagated.checker.check_id(x.type_param().id())?;
-                decode_with_type(&Ty::Symbol(x.type_param()), data, meta_v14, propagated)
+                decode_with_type(&Ty::Symbol(x.type_param()), data, registry, propagated)
             }
             TypeDef::BitSequence(x) => {
                 propagated.reject_compact()?;
                 Ok(ExtendedData {
-                    data: decode_type_def_bit_sequence(x, data, meta_v14)?,
+                    data: decode_type_def_bit_sequence(x, data, registry)?,
                     info: propagated.info,
                 })
             }
@@ -297,7 +296,7 @@ pub fn decode_with_type(
         }),
         SpecialtyTypeChecked::Option(ty_symbol) => {
             propagated.reject_compact()?;
-            let param_ty = resolve_ty(meta_v14, ty_symbol.id())?;
+            let param_ty = resolve_ty(registry, ty_symbol.id())?;
             match param_ty.type_def() {
                 TypeDef::Primitive(TypeDefPrimitive::Bool) => match data.first() {
                     Some(a) => {
@@ -332,7 +331,7 @@ pub fn decode_with_type(
                         let extended_option_data = decode_with_type(
                             &Ty::Resolved(param_ty),
                             data,
-                            meta_v14,
+                            registry,
                             Propagated::new(),
                         )?;
                         propagated.add_info_slice(&extended_option_data.info);
@@ -353,7 +352,7 @@ pub fn decode_with_type(
             item,
         } => {
             propagated.reject_compact()?;
-            let variant_data = decode_variant(variants, data, meta_v14)?;
+            let variant_data = decode_variant(variants, data, registry)?;
             let pallet_specific_data = PalletSpecificData {
                 pallet_info,
                 variant_docs: variant_data.variant_docs.to_owned(),
@@ -426,7 +425,7 @@ pub fn decode_with_type(
 fn decode_fields(
     fields: &[Field<PortableForm>],
     data: &mut Vec<u8>,
-    meta_v14: &RuntimeMetadataV14,
+    registry: &PortableRegistry,
     mut checker: Checker,
 ) -> Result<Vec<FieldData>, ParserError> {
     if fields.len() > 1 {
@@ -446,7 +445,7 @@ fn decode_fields(
         let this_field_data = decode_with_type(
             &Ty::Symbol(field.ty()),
             data,
-            meta_v14,
+            registry,
             Propagated::for_field(&checker, field)?,
         )?;
         out.push(FieldData {
@@ -467,12 +466,12 @@ fn decode_elements_set(
     element: &UntrackedSymbol<std::any::TypeId>,
     number_of_elements: u32,
     data: &mut Vec<u8>,
-    meta_v14: &RuntimeMetadataV14,
+    registry: &PortableRegistry,
     propagated: Propagated,
 ) -> Result<ExtendedData, ParserError> {
     propagated.reject_compact()?;
 
-    let husked = husk_type(element, meta_v14, propagated.checker)?;
+    let husked = husk_type(element, registry, propagated.checker)?;
 
     let data = {
         if number_of_elements == 0 {
@@ -486,7 +485,7 @@ fn decode_elements_set(
                 let element_extended_data = decode_with_type(
                     &Ty::Resolved(husked.ty),
                     data,
-                    meta_v14,
+                    registry,
                     Propagated::with_checker(husked.checker.clone()),
                 )?;
                 out.push(element_extended_data.data);
@@ -540,13 +539,13 @@ pub(crate) fn pick_variant<'a>(
 fn decode_variant(
     variants: &[Variant<PortableForm>],
     data: &mut Vec<u8>,
-    meta_v14: &RuntimeMetadataV14,
+    registry: &PortableRegistry,
 ) -> Result<VariantData, ParserError> {
     let found_variant = pick_variant(variants, data)?;
     *data = data[1..].to_vec();
     let variant_name = found_variant.name().to_owned();
     let variant_docs = found_variant.collect_docs();
-    let fields = decode_fields(found_variant.fields(), data, meta_v14, Checker::new())?;
+    let fields = decode_fields(found_variant.fields(), data, registry, Checker::new())?;
 
     Ok(VariantData {
         variant_name,
@@ -573,7 +572,7 @@ const LSB0: &str = "Lsb0";
 fn decode_type_def_bit_sequence(
     bit_ty: &TypeDefBitSequence<PortableForm>,
     data: &mut Vec<u8>,
-    meta_v14: &RuntimeMetadataV14,
+    registry: &PortableRegistry,
 ) -> Result<ParsedData, ParserError> {
     let found_compact = find_compact::<u32>(data)?;
     let bit_length_found = found_compact.compact;
@@ -599,7 +598,7 @@ fn decode_type_def_bit_sequence(
     };
 
     // BitOrder
-    let bitorder_type = resolve_ty(meta_v14, bit_ty.bit_order_type().id())?;
+    let bitorder_type = resolve_ty(registry, bit_ty.bit_order_type().id())?;
     let bitorder = match bitorder_type.type_def() {
         TypeDef::Composite(_) => match bitorder_type.path().ident() {
             Some(x) => match x.as_str() {
@@ -613,7 +612,7 @@ fn decode_type_def_bit_sequence(
     };
 
     // BitStore
-    let bitstore_type = resolve_ty(meta_v14, bit_ty.bit_store_type().id())?;
+    let bitstore_type = resolve_ty(registry, bit_ty.bit_store_type().id())?;
 
     match bitstore_type.type_def() {
         TypeDef::Primitive(TypeDefPrimitive::U8) => match bitorder {
@@ -672,7 +671,7 @@ struct HuskedType<'a> {
 /// types. All available [`Info`] is collected.
 fn husk_type<'a>(
     entry_symbol: &'a UntrackedSymbol<std::any::TypeId>,
-    meta_v14: &'a RuntimeMetadataV14,
+    registry: &'a PortableRegistry,
     mut checker: Checker,
 ) -> Result<HuskedType<'a>, ParserError> {
     let entry_symbol_id = entry_symbol.id();
@@ -682,7 +681,7 @@ fn husk_type<'a>(
         is_compact: false,
     };
 
-    let mut ty = resolve_ty(meta_v14, entry_symbol_id)?;
+    let mut ty = resolve_ty(registry, entry_symbol_id)?;
     let mut info: Vec<Info> = Vec::new();
 
     loop {
@@ -698,7 +697,7 @@ fn husk_type<'a>(
                     if fields.len() == 1 {
                         let id = fields[0].ty().id();
                         checker.check_id(id)?;
-                        ty = resolve_ty(meta_v14, id)?;
+                        ty = resolve_ty(registry, id)?;
                         if let Hint::None = checker.specialty_set.hint {
                             checker.specialty_set.hint = Hint::from_field(&fields[0])
                         }
@@ -711,7 +710,7 @@ fn husk_type<'a>(
                     checker.specialty_set.is_compact = true;
                     let id = x.type_param().id();
                     checker.check_id(id)?;
-                    ty = resolve_ty(meta_v14, id)?;
+                    ty = resolve_ty(registry, id)?;
                 }
                 _ => break,
             }
@@ -733,8 +732,8 @@ pub enum Ty<'a> {
 }
 
 /// Resolve type id in `V14` metadata types `Registry`.
-fn resolve_ty(meta_v14: &RuntimeMetadataV14, id: u32) -> Result<&Type<PortableForm>, ParserError> {
-    match meta_v14.types.resolve(id) {
+fn resolve_ty(registry: &PortableRegistry, id: u32) -> Result<&Type<PortableForm>, ParserError> {
+    match registry.resolve(id) {
         Some(a) => Ok(a),
         None => Err(ParserError::V14TypeNotResolved(id)),
     }

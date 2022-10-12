@@ -423,7 +423,7 @@ fn storage_1_good() {
         panic!("Expected composite.")
     }
 
-    let reply = decode_blob_as_type(&system_digest_ty, &mut data, &metadata).unwrap();
+    let reply = decode_blob_as_type(&system_digest_ty, &mut data, &metadata.types).unwrap();
     let reply_known = ExtendedData {
         data: ParsedData::Composite(vec![FieldData {
             field_name: Some(String::from("logs")),
@@ -515,7 +515,7 @@ fn storage_2_spoiled_digest() {
         panic!("Expected composite.")
     }
 
-    let reply = decode_blob_as_type(&system_digest_ty, &mut data, &metadata).unwrap_err();
+    let reply = decode_blob_as_type(&system_digest_ty, &mut data, &metadata.types).unwrap_err();
     let reply_known = ParserError::CyclicMetadata(11);
     assert_eq!(reply_known, reply);
 }

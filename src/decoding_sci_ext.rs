@@ -33,7 +33,7 @@ pub fn decode_extensions(
             decode_with_type(
                 &Ty::Symbol(&signed_extensions_metadata.ty),
                 data,
-                checked_metadata.meta_v14,
+                &checked_metadata.meta_v14.types,
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
             .map_err(SignableError::Parsing)?,
@@ -44,7 +44,7 @@ pub fn decode_extensions(
             decode_with_type(
                 &Ty::Symbol(&signed_extensions_metadata.additional_signed),
                 data,
-                checked_metadata.meta_v14,
+                &checked_metadata.meta_v14.types,
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
             .map_err(SignableError::Parsing)?,

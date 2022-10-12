@@ -64,55 +64,57 @@ impl<'a> MetaInput<'a> {
                 }
                 let mut spec_version = None;
                 match runtime_version_data_and_ty {
-                    Some((mut value, ty)) => match decode_blob_as_type(&ty, &mut value, meta_v14) {
-                        Ok(extended_data) => {
-                            if let ParsedData::Composite(fields) = extended_data.data {
-                                for field in fields.iter() {
-                                    match field.data.data {
-                                        ParsedData::PrimitiveU8 {
-                                            value,
-                                            specialty: SpecialtyPrimitive::SpecVersion,
-                                        } => {
-                                            spec_version = Some(value.to_string());
-                                            break;
+                    Some((mut value, ty)) => {
+                        match decode_blob_as_type(&ty, &mut value, &meta_v14.types) {
+                            Ok(extended_data) => {
+                                if let ParsedData::Composite(fields) = extended_data.data {
+                                    for field in fields.iter() {
+                                        match field.data.data {
+                                            ParsedData::PrimitiveU8 {
+                                                value,
+                                                specialty: SpecialtyPrimitive::SpecVersion,
+                                            } => {
+                                                spec_version = Some(value.to_string());
+                                                break;
+                                            }
+                                            ParsedData::PrimitiveU16 {
+                                                value,
+                                                specialty: SpecialtyPrimitive::SpecVersion,
+                                            } => {
+                                                spec_version = Some(value.to_string());
+                                                break;
+                                            }
+                                            ParsedData::PrimitiveU32 {
+                                                value,
+                                                specialty: SpecialtyPrimitive::SpecVersion,
+                                            } => {
+                                                spec_version = Some(value.to_string());
+                                                break;
+                                            }
+                                            ParsedData::PrimitiveU64 {
+                                                value,
+                                                specialty: SpecialtyPrimitive::SpecVersion,
+                                            } => {
+                                                spec_version = Some(value.to_string());
+                                                break;
+                                            }
+                                            ParsedData::PrimitiveU128 {
+                                                value,
+                                                specialty: SpecialtyPrimitive::SpecVersion,
+                                            } => {
+                                                spec_version = Some(value.to_string());
+                                                break;
+                                            }
+                                            _ => (),
                                         }
-                                        ParsedData::PrimitiveU16 {
-                                            value,
-                                            specialty: SpecialtyPrimitive::SpecVersion,
-                                        } => {
-                                            spec_version = Some(value.to_string());
-                                            break;
-                                        }
-                                        ParsedData::PrimitiveU32 {
-                                            value,
-                                            specialty: SpecialtyPrimitive::SpecVersion,
-                                        } => {
-                                            spec_version = Some(value.to_string());
-                                            break;
-                                        }
-                                        ParsedData::PrimitiveU64 {
-                                            value,
-                                            specialty: SpecialtyPrimitive::SpecVersion,
-                                        } => {
-                                            spec_version = Some(value.to_string());
-                                            break;
-                                        }
-                                        ParsedData::PrimitiveU128 {
-                                            value,
-                                            specialty: SpecialtyPrimitive::SpecVersion,
-                                        } => {
-                                            spec_version = Some(value.to_string());
-                                            break;
-                                        }
-                                        _ => (),
                                     }
+                                } else {
+                                    return Err(MetaVersionError::UnexpectedRuntimeVersionFormat);
                                 }
-                            } else {
-                                return Err(MetaVersionError::UnexpectedRuntimeVersionFormat);
                             }
+                            Err(_) => return Err(MetaVersionError::RuntimeVersionNotDecodeable),
                         }
-                        Err(_) => return Err(MetaVersionError::RuntimeVersionNotDecodeable),
-                    },
+                    }
                     None => return Err(MetaVersionError::NoVersionInConstants),
                 }
                 let version = match spec_version {

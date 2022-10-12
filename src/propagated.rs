@@ -165,8 +165,8 @@ impl Default for Checker {
     }
 }
 
-/// Propagating data and collected type information ([`Checker`] and all
-/// non-empty type info).
+/// Propagating data and collected type information (`Checker` and all non-empty
+/// type info).
 #[derive(Clone, Debug)]
 pub struct Propagated {
     /// Type data that is collected and checked during parsing.
@@ -235,7 +235,7 @@ impl Propagated {
         self.checker.specialty_set.is_compact
     }
 
-    /// Check that `is_compact` field in associated [`SpecialtySet`] is not
+    /// Check that `is_compact` field in associated `SpecialtySet` is not
     /// `true`.
     pub fn reject_compact(&self) -> Result<(), ParserError> {
         self.checker.specialty_set.reject_compact()

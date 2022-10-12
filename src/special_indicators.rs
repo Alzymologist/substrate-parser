@@ -1,15 +1,16 @@
 //! Special decoding triggers and indicators.
 //!
-//! Although the [`RuntimeMetadataV14`] has all sufficient data to decode the
+//! Although the [`PortableRegistry`] has all sufficient data to decode the
 //! data for a known type, some types must be treated specially for displaying
 //! and/or further data handling.
 //!
 //! Additionally, some data should better be decoded directly as the custom type
 //! mentioned in metadata descriptors, rather than decoded as more generalized
 //! type and cast into custom type later on.
-use frame_metadata::v14::{RuntimeMetadataV14, SignedExtensionMetadata};
+use frame_metadata::v14::SignedExtensionMetadata;
 use scale_info::{
-    form::PortableForm, interner::UntrackedSymbol, Field, Path, Type, TypeDef, Variant,
+    form::PortableForm, interner::UntrackedSymbol, Field, Path, PortableRegistry, Type, TypeDef,
+    Variant,
 };
 
 use crate::cards::Info;
@@ -410,7 +411,7 @@ impl<'a> SpecialtyTypeChecked<'a> {
     pub fn from_type(
         ty: &'a Type<PortableForm>,
         data: &mut Vec<u8>,
-        meta_v14: &'a RuntimeMetadataV14,
+        registry: &'a PortableRegistry,
     ) -> Self {
         match SpecialtyTypeHinted::from_path(ty.path()) {
             SpecialtyTypeHinted::None => Self::None,
@@ -458,7 +459,7 @@ impl<'a> SpecialtyTypeChecked<'a> {
                             let pallet_name = pallet_variant.name().to_owned();
                             let pallet_fields = pallet_variant.fields();
                             if pallet_fields.len() == 1 {
-                                match meta_v14.types.resolve(pallet_fields[0].ty().id()) {
+                                match registry.resolve(pallet_fields[0].ty().id()) {
                                     Some(variants_ty) => {
                                         if let SpecialtyTypeHinted::PalletSpecific(item_repeated) =
                                             SpecialtyTypeHinted::from_path(variants_ty.path())

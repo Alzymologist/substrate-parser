@@ -427,8 +427,7 @@
 //! Cards could be printed by `show` or `show_with_docs` into readable Strings.
 #![deny(unused_crate_dependencies)]
 
-use frame_metadata::v14::RuntimeMetadataV14;
-use scale_info::interner::UntrackedSymbol;
+use scale_info::{interner::UntrackedSymbol, PortableRegistry};
 use sp_core::H256;
 
 pub mod cards;
@@ -445,7 +444,7 @@ mod metadata_check;
 pub use metadata_check::{CheckedMetadata, MetaInput};
 pub mod printing_balance;
 mod propagated;
-use propagated::Propagated;
+pub use propagated::Propagated;
 pub mod special_indicators;
 mod special_types;
 
@@ -541,9 +540,9 @@ pub fn parse_transaction(
 pub fn decode_blob_as_type(
     ty_symbol: &UntrackedSymbol<std::any::TypeId>,
     data: &mut Vec<u8>,
-    meta_v14: &RuntimeMetadataV14,
+    registry: &PortableRegistry,
 ) -> Result<ExtendedData, ParserError> {
-    let out = decode_with_type(&Ty::Symbol(ty_symbol), data, meta_v14, Propagated::new())?;
+    let out = decode_with_type(&Ty::Symbol(ty_symbol), data, registry, Propagated::new())?;
     if !data.is_empty() {
         Err(ParserError::SomeDataNotUsedBlob)
     } else {
