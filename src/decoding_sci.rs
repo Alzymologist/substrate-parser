@@ -578,7 +578,7 @@ fn decode_type_def_bit_sequence(
     let found_compact = find_compact::<u32>(data)?;
     let bit_length_found = found_compact.compact;
     let byte_length = match bit_length_found % 8 {
-        0 => (bit_length_found / 8),
+        0 => bit_length_found / 8,
         _ => (bit_length_found / 8) + 1,
     } as usize;
 
