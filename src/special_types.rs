@@ -111,7 +111,7 @@ impl StableLength for char {
             Some(slice_to_char) => match char::from_u32(<u32>::from_le_bytes(
                 slice_to_char
                     .try_into()
-                    .expect("contstant length, always fit"),
+                    .expect("constant length, always fit"),
             )) {
                 Some(ch) => {
                     *data = data[Self::len_encoded()..].to_vec();

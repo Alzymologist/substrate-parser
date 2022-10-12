@@ -55,6 +55,18 @@ pub enum ParserError {
     #[error("Resolving type id {0} results in cycling.")]
     CyclicMetadata(u32),
 
+    #[error("Hash part of the storage key does not match the key data.")]
+    KeyPartHashMesmatch,
+
+    #[error("During the storage key parsing a part of the key remained unused.")]
+    KeyPartsUnused,
+
+    #[error("Hashers length is not 1, but the key type is not a tuple.")]
+    MultipleHashesNotATuple,
+
+    #[error("Hashers length does not match the number of fields in a tuple key type.")]
+    MultipleHashesNumberMismatch,
+
     #[error("Expected compact, not found one.")]
     NoCompact,
 
@@ -63,6 +75,9 @@ pub enum ParserError {
 
     #[error("Declared type is not suitable BitOrder type for BitVec.")]
     NotBitOrderType,
+
+    #[error("Plain storage key contains data other than the prefix.")]
+    PlainKeyExceedsPrefix,
 
     #[error("Expected to use all data provided in decoding. Some data remained unused.")]
     SomeDataNotUsedBlob,
