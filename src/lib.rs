@@ -447,6 +447,7 @@ mod propagated;
 pub use propagated::Propagated;
 pub mod special_indicators;
 mod special_types;
+pub mod storage_data;
 
 #[cfg(test)]
 mod tests;

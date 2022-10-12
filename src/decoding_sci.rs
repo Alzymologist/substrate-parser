@@ -732,7 +732,10 @@ pub enum Ty<'a> {
 }
 
 /// Resolve type id in `V14` metadata types `Registry`.
-fn resolve_ty(registry: &PortableRegistry, id: u32) -> Result<&Type<PortableForm>, ParserError> {
+pub(crate) fn resolve_ty(
+    registry: &PortableRegistry,
+    id: u32,
+) -> Result<&Type<PortableForm>, ParserError> {
     match registry.resolve(id) {
         Some(a) => Ok(a),
         None => Err(ParserError::V14TypeNotResolved(id)),
