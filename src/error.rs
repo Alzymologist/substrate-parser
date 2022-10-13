@@ -56,7 +56,7 @@ pub enum ParserError {
     CyclicMetadata(u32),
 
     #[error("Hash part of the storage key does not match the key data.")]
-    KeyPartHashMesmatch,
+    KeyPartHashMismatch,
 
     #[error("During the storage key parsing a part of the key remained unused.")]
     KeyPartsUnused,

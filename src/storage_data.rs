@@ -1,3 +1,14 @@
+//! Interpret storage data.
+//!
+//! Chain storage could be queried by rpc `state_getStorage`.
+//!
+//! Query key has prefix built from `prefix` of
+//! [`PalletStorageMetadata`](frame_metadata::v14::PalletStorageMetadata) and
+//! `name` of
+//! [`StorageEntryMetadata`](frame_metadata::v14::StorageEntryMetadata), both
+//! processed as bytes in [`twox_128`](sp_core::twox_128) and concatenated
+//! together. Remaining path of the query key and the associated value are
+//! described in corresponding [`StorageEntryType`] and are processed here.
 use frame_metadata::v14::{StorageEntryMetadata, StorageEntryType, StorageHasher};
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, PortableRegistry, TypeDef};
 use sp_core::{blake2_128, twox_64};
@@ -8,41 +19,69 @@ use crate::decoding_sci::{decode_with_type, resolve_ty, Ty};
 use crate::error::ParserError;
 use crate::propagated::Propagated;
 
-/// Parsed storage data.
-#[derive(Debug)]
+/// Parsed storage entry data: key, value, general docs.
+#[derive(Debug, Eq, PartialEq)]
 pub struct Storage {
-    /// Storage key data
+    /// Storage key data.
     pub key: KeyData,
 
-    /// Storage value decoded
+    /// Storage value decoded.
     pub value: ExtendedData,
 
-    /// documentation common for all storage entries with the same prefix
+    /// documentation common for all storage entries with the same prefix.
     pub docs: String,
 }
 
-#[derive(Debug)]
+/// Processed key.
+#[derive(Debug, Eq, PartialEq)]
 pub enum KeyData {
-    None,
-    Single { content: KeyPart },
-    Tuple { content: Vec<KeyPart>, info: Info },
+    /// Plain storage. Key contains only prefix, no additional data.
+    Plain,
+
+    /// Map storage with a single [`StorageHasher`].
+    ///
+    /// Key contains prefix and a single hash. No restrictions on key type.
+    SingleHash {
+        /// Processed key data.
+        content: KeyPart,
+    },
+
+    /// Map storage with a set of [`StorageHasher`]s.
+    ///
+    /// Key contains prefix and a set of hashes. Associated key is expected to
+    /// be a tuple type.
+    TupleHash {
+        /// Set of processed key elements. Has the same number of elements as
+        /// the set of [`StorageHasher`]s.
+        content: Vec<KeyPart>,
+
+        /// [`Info`] associated with key type as a whole.
+        info: Info,
+    },
 }
 
-#[derive(Debug)]
+/// Processed key part.
+#[derive(Debug, Eq, PartialEq)]
 pub enum KeyPart {
+    /// Hash has no concatenated raw part, no data decoded.
     Hash(HashData),
+
+    /// Hash decoded.
     Parsed(ExtendedData),
 }
 
-#[derive(Debug)]
+/// Data for hash that was not decoded.
+#[derive(Debug, Eq, PartialEq)]
 pub struct HashData {
+    /// Hash itself.
     pub hash: Hash,
+
+    /// Associated type id in `PortableRegistry`.
     pub type_id: u32,
 }
 
-/// Hashes from [`StorageHasher`] with no concatenated addition, i.e. with no
-/// way to find the hashed value that could be parsed.
-#[derive(Debug)]
+/// Raw hashes.
+#[derive(Debug, Eq, PartialEq)]
 pub enum Hash {
     Blake2_128([u8; BLAKE2_128_LEN]),
     Blake2_256([u8; BLAKE2_256_LEN]),
@@ -50,6 +89,25 @@ pub enum Hash {
     Twox256([u8; TWOX256_LEN]),
 }
 
+/// Lenght in bytes for Blake2_128 hash.
+pub const BLAKE2_128_LEN: usize = 16;
+
+/// Lenght in bytes for Blake2_256 hash.
+pub const BLAKE2_256_LEN: usize = 32;
+
+/// Lenght in bytes for Twox_128 hash.
+pub const TWOX128_LEN: usize = 16;
+
+/// Lenght in bytes for Twox_256 hash.
+pub const TWOX256_LEN: usize = 32;
+
+/// Lenght in bytes for Twox_64 hash.
+pub const TWOX64_LEN: usize = 8;
+
+/// Parse a storage entry (both the key and the corresponding value).
+///
+/// Both the key and the value are expected to get processed completely, i.e.
+/// with no data remaining.
 pub fn decode_as_storage_entry(
     key_trimmed_data: &mut Vec<u8>,
     value_data: &mut Vec<u8>,
@@ -62,7 +120,7 @@ pub fn decode_as_storage_entry(
             if !key_trimmed_data.is_empty() {
                 return Err(ParserError::PlainKeyExceedsPrefix);
             }
-            let key = KeyData::None;
+            let key = KeyData::Plain;
             let value = decode_blob_as_type(value_ty, value_data, registry)?;
             (key, value)
         }
@@ -79,267 +137,164 @@ pub fn decode_as_storage_entry(
     Ok(Storage { key, value, docs })
 }
 
-pub const BLAKE2_128_LEN: usize = 16;
-pub const BLAKE2_256_LEN: usize = 32;
-pub const TWOX128_LEN: usize = 16;
-pub const TWOX256_LEN: usize = 32;
-pub const TWOX64_LEN: usize = 8;
+macro_rules! cut_hash {
+    ($func:ident, $hash_len:ident, $enum_variant:ident) => {
+        fn $func(
+            key_ty: &UntrackedSymbol<std::any::TypeId>,
+            key_trimmed_data: &mut Vec<u8>,
+        ) -> Result<KeyPart, ParserError> {
+            match key_trimmed_data.get(0..$hash_len) {
+                Some(slice) => {
+                    let hash_part: [u8; $hash_len] =
+                        slice.try_into().expect("constant length, always fits");
+                    *key_trimmed_data = key_trimmed_data[$hash_len..].to_vec();
+                    Ok(KeyPart::Hash(HashData {
+                        hash: Hash::$enum_variant(hash_part),
+                        type_id: key_ty.id(),
+                    }))
+                }
+                None => Err(ParserError::DataTooShort),
+            }
+        }
+    };
+}
 
+cut_hash!(cut_blake2_128, BLAKE2_128_LEN, Blake2_128);
+cut_hash!(cut_blake2_256, BLAKE2_256_LEN, Blake2_256);
+cut_hash!(cut_twox_128, TWOX128_LEN, Twox128);
+cut_hash!(cut_twox_256, TWOX256_LEN, Twox256);
+
+macro_rules! check_hash {
+    ($func:ident, $hash_len:ident, $fn_into:ident) => {
+        fn $func(
+            ty: &UntrackedSymbol<std::any::TypeId>,
+            key_trimmed_data: &mut Vec<u8>,
+            registry: &PortableRegistry,
+        ) -> Result<KeyPart, ParserError> {
+            match key_trimmed_data.get(0..$hash_len) {
+                Some(slice) => {
+                    let hash_part: [u8; $hash_len] =
+                        slice.try_into().expect("constant length, always fits");
+                    *key_trimmed_data = key_trimmed_data[$hash_len..].to_vec();
+                    let mut key_into_parsing = key_trimmed_data.clone();
+                    let parsed_key = decode_with_type(
+                        &Ty::Symbol(&ty),
+                        &mut key_into_parsing,
+                        registry,
+                        Propagated::new(),
+                    )?;
+                    let into_hash_checker = key_trimmed_data[..]
+                        .strip_suffix(&key_into_parsing[..])
+                        .expect("just cut the part on decoding");
+                    if hash_part != $fn_into(into_hash_checker) {
+                        return Err(ParserError::KeyPartHashMismatch);
+                    }
+                    *key_trimmed_data = key_into_parsing;
+                    Ok(KeyPart::Parsed(parsed_key))
+                }
+                None => Err(ParserError::DataTooShort),
+            }
+        }
+    };
+}
+
+check_hash!(check_blake2_128, BLAKE2_128_LEN, blake2_128);
+check_hash!(check_twox_64, TWOX64_LEN, twox_64);
+
+/// Process the key.
+///
+/// The key here is trimmed, i.e. the prefix is already removed.
+///
+/// Key is expected to get processed completely, i.e. with no data remaining.
 pub fn process_key(
     hashers: &[StorageHasher],
     key_ty: &UntrackedSymbol<std::any::TypeId>,
     key_trimmed_data: &mut Vec<u8>,
     registry: &PortableRegistry,
 ) -> Result<KeyData, ParserError> {
-    // single hash in key
-    if hashers.len() == 1 {
-        match hashers[0] {
-            StorageHasher::Blake2_128 => match key_trimmed_data.get(..BLAKE2_128_LEN) {
-                Some(hash_part) => {
-                    if key_trimmed_data.len() > BLAKE2_128_LEN {
-                        return Err(ParserError::KeyPartsUnused);
-                    }
-                    Ok(KeyData::Single {
-                        content: KeyPart::Hash(HashData {
-                            hash: Hash::Blake2_128(
-                                hash_part.try_into().expect("stable known length"),
-                            ),
-                            type_id: key_ty.id(),
-                        }),
-                    })
-                }
-                None => Err(ParserError::DataTooShort),
-            },
-            StorageHasher::Blake2_256 => match key_trimmed_data.get(..BLAKE2_256_LEN) {
-                Some(hash_part) => {
-                    if key_trimmed_data.len() > BLAKE2_256_LEN {
-                        return Err(ParserError::KeyPartsUnused);
-                    }
-                    Ok(KeyData::Single {
-                        content: KeyPart::Hash(HashData {
-                            hash: Hash::Blake2_256(
-                                hash_part.try_into().expect("stable known length"),
-                            ),
-                            type_id: key_ty.id(),
-                        }),
-                    })
-                }
-                None => Err(ParserError::DataTooShort),
-            },
-            StorageHasher::Blake2_128Concat => match key_trimmed_data.get(..BLAKE2_128_LEN) {
-                Some(hash_part) => {
-                    if hash_part != blake2_128(&key_trimmed_data[BLAKE2_128_LEN..]) {
-                        return Err(ParserError::KeyPartHashMesmatch);
-                    }
-                    *key_trimmed_data = key_trimmed_data[BLAKE2_128_LEN..].to_vec();
+    let key_data = {
+        if hashers.len() == 1 {
+            match hashers[0] {
+                StorageHasher::Blake2_128 => KeyData::SingleHash {
+                    content: cut_blake2_128(key_ty, key_trimmed_data)?,
+                },
+                StorageHasher::Blake2_256 => KeyData::SingleHash {
+                    content: cut_blake2_256(key_ty, key_trimmed_data)?,
+                },
+                StorageHasher::Blake2_128Concat => KeyData::SingleHash {
+                    content: check_blake2_128(key_ty, key_trimmed_data, registry)?,
+                },
+                StorageHasher::Twox128 => KeyData::SingleHash {
+                    content: cut_twox_128(key_ty, key_trimmed_data)?,
+                },
+                StorageHasher::Twox256 => KeyData::SingleHash {
+                    content: cut_twox_256(key_ty, key_trimmed_data)?,
+                },
+                StorageHasher::Twox64Concat => KeyData::SingleHash {
+                    content: check_twox_64(key_ty, key_trimmed_data, registry)?,
+                },
+                StorageHasher::Identity => {
                     let parsed_key = decode_with_type(
                         &Ty::Symbol(key_ty),
                         key_trimmed_data,
                         registry,
                         Propagated::new(),
                     )?;
-                    if !key_trimmed_data.is_empty() {
-                        return Err(ParserError::KeyPartsUnused);
-                    }
-                    Ok(KeyData::Single {
+                    KeyData::SingleHash {
                         content: KeyPart::Parsed(parsed_key),
-                    })
-                }
-                None => Err(ParserError::DataTooShort),
-            },
-            StorageHasher::Twox128 => match key_trimmed_data.get(..TWOX128_LEN) {
-                Some(hash_part) => {
-                    if key_trimmed_data.len() > TWOX128_LEN {
-                        return Err(ParserError::KeyPartsUnused);
                     }
-                    Ok(KeyData::Single {
-                        content: KeyPart::Hash(HashData {
-                            hash: Hash::Twox128(hash_part.try_into().expect("stable known length")),
-                            type_id: key_ty.id(),
-                        }),
-                    })
                 }
-                None => Err(ParserError::DataTooShort),
-            },
-            StorageHasher::Twox256 => match key_trimmed_data.get(..TWOX256_LEN) {
-                Some(hash_part) => {
-                    if key_trimmed_data.len() > TWOX256_LEN {
-                        return Err(ParserError::KeyPartsUnused);
-                    }
-                    Ok(KeyData::Single {
-                        content: KeyPart::Hash(HashData {
-                            hash: Hash::Twox256(hash_part.try_into().expect("stable known length")),
-                            type_id: key_ty.id(),
-                        }),
-                    })
-                }
-                None => Err(ParserError::DataTooShort),
-            },
-            StorageHasher::Twox64Concat => match key_trimmed_data.get(..TWOX64_LEN) {
-                Some(hash_part) => {
-                    if hash_part != twox_64(&key_trimmed_data[TWOX64_LEN..]) {
-                        return Err(ParserError::KeyPartHashMesmatch);
-                    }
-                    *key_trimmed_data = key_trimmed_data[TWOX64_LEN..].to_vec();
-                    let parsed_key = decode_with_type(
-                        &Ty::Symbol(key_ty),
-                        key_trimmed_data,
-                        registry,
-                        Propagated::new(),
-                    )?;
-                    if !key_trimmed_data.is_empty() {
-                        return Err(ParserError::KeyPartsUnused);
-                    }
-                    Ok(KeyData::Single {
-                        content: KeyPart::Parsed(parsed_key),
-                    })
-                }
-                None => Err(ParserError::DataTooShort),
-            },
-            StorageHasher::Identity => {
-                let parsed_key = decode_with_type(
-                    &Ty::Symbol(key_ty),
-                    key_trimmed_data,
-                    registry,
-                    Propagated::new(),
-                )?;
-                if !key_trimmed_data.is_empty() {
-                    return Err(ParserError::KeyPartsUnused);
-                }
-                Ok(KeyData::Single {
-                    content: KeyPart::Parsed(parsed_key),
-                })
             }
-        }
-    } else {
-        let key_ty_resolved = resolve_ty(registry, key_ty.id())?;
-        let info = Info::from_ty(key_ty_resolved);
-        match key_ty_resolved.type_def() {
-            TypeDef::Tuple(t) => {
-                let tuple_elements = t.fields();
-                if tuple_elements.len() != hashers.len() {
-                    return Err(ParserError::MultipleHashesNumberMismatch);
-                }
-                let mut content: Vec<KeyPart> = Vec::new();
-                for index in 0..tuple_elements.len() {
-                    match hashers[index] {
-                        StorageHasher::Blake2_128 => match key_trimmed_data.get(..BLAKE2_128_LEN) {
-                            Some(hash_part) => {
-                                content.push(KeyPart::Hash(HashData {
-                                    hash: Hash::Blake2_128(
-                                        hash_part.try_into().expect("stable known length"),
-                                    ),
-                                    type_id: key_ty.id(),
-                                }));
-                                *key_trimmed_data = key_trimmed_data[BLAKE2_128_LEN..].to_vec();
-                            }
-                            None => return Err(ParserError::DataTooShort),
-                        },
-                        StorageHasher::Blake2_256 => match key_trimmed_data.get(..BLAKE2_256_LEN) {
-                            Some(hash_part) => {
-                                content.push(KeyPart::Hash(HashData {
-                                    hash: Hash::Blake2_256(
-                                        hash_part.try_into().expect("stable known length"),
-                                    ),
-                                    type_id: key_ty.id(),
-                                }));
-                                *key_trimmed_data = key_trimmed_data[BLAKE2_256_LEN..].to_vec();
-                            }
-                            None => return Err(ParserError::DataTooShort),
-                        },
-                        StorageHasher::Blake2_128Concat => {
-                            match key_trimmed_data.get(..BLAKE2_128_LEN) {
-                                Some(hash_part) => {
-                                    let hash_part = hash_part.to_owned();
-                                    *key_trimmed_data = key_trimmed_data[BLAKE2_128_LEN..].to_vec();
-                                    let mut key_into_parsing = key_trimmed_data.clone();
-                                    let parsed_key = decode_with_type(
-                                        &Ty::Symbol(&tuple_elements[index]),
-                                        &mut key_into_parsing,
-                                        registry,
-                                        Propagated::new(),
-                                    )?;
-
-                                    let into_hash_checker = key_trimmed_data[..]
-                                        .strip_suffix(&key_into_parsing[..])
-                                        .expect("just cut the part on decoding");
-                                    if hash_part != blake2_128(into_hash_checker) {
-                                        return Err(ParserError::KeyPartHashMesmatch);
-                                    }
-
-                                    *key_trimmed_data = key_into_parsing;
-
-                                    content.push(KeyPart::Parsed(parsed_key))
-                                }
-                                None => return Err(ParserError::DataTooShort),
-                            }
-                        }
-                        StorageHasher::Twox128 => match key_trimmed_data.get(..TWOX128_LEN) {
-                            Some(hash_part) => {
-                                content.push(KeyPart::Hash(HashData {
-                                    hash: Hash::Twox128(
-                                        hash_part.try_into().expect("stable known length"),
-                                    ),
-                                    type_id: key_ty.id(),
-                                }));
-                                *key_trimmed_data = key_trimmed_data[TWOX128_LEN..].to_vec();
-                            }
-                            None => return Err(ParserError::DataTooShort),
-                        },
-                        StorageHasher::Twox256 => match key_trimmed_data.get(..TWOX256_LEN) {
-                            Some(hash_part) => {
-                                content.push(KeyPart::Hash(HashData {
-                                    hash: Hash::Twox256(
-                                        hash_part.try_into().expect("stable known length"),
-                                    ),
-                                    type_id: key_ty.id(),
-                                }));
-                                *key_trimmed_data = key_trimmed_data[TWOX256_LEN..].to_vec();
-                            }
-                            None => return Err(ParserError::DataTooShort),
-                        },
-                        StorageHasher::Twox64Concat => match key_trimmed_data.get(..TWOX64_LEN) {
-                            Some(hash_part) => {
-                                let hash_part = hash_part.to_owned();
-                                *key_trimmed_data = key_trimmed_data[TWOX64_LEN..].to_vec();
-                                let mut key_into_parsing = key_trimmed_data.clone();
+        } else {
+            let key_ty_resolved = resolve_ty(registry, key_ty.id())?;
+            let info = Info::from_ty(key_ty_resolved);
+            match key_ty_resolved.type_def() {
+                TypeDef::Tuple(t) => {
+                    let tuple_elements = t.fields();
+                    if tuple_elements.len() != hashers.len() {
+                        return Err(ParserError::MultipleHashesNumberMismatch);
+                    }
+                    let mut content: Vec<KeyPart> = Vec::new();
+                    for index in 0..tuple_elements.len() {
+                        match hashers[index] {
+                            StorageHasher::Blake2_128 => content
+                                .push(cut_blake2_128(&tuple_elements[index], key_trimmed_data)?),
+                            StorageHasher::Blake2_256 => content
+                                .push(cut_blake2_256(&tuple_elements[index], key_trimmed_data)?),
+                            StorageHasher::Blake2_128Concat => content.push(check_blake2_128(
+                                &tuple_elements[index],
+                                key_trimmed_data,
+                                registry,
+                            )?),
+                            StorageHasher::Twox128 => content
+                                .push(cut_twox_128(&tuple_elements[index], key_trimmed_data)?),
+                            StorageHasher::Twox256 => content
+                                .push(cut_twox_256(&tuple_elements[index], key_trimmed_data)?),
+                            StorageHasher::Twox64Concat => content.push(check_twox_64(
+                                &tuple_elements[index],
+                                key_trimmed_data,
+                                registry,
+                            )?),
+                            StorageHasher::Identity => {
                                 let parsed_key = decode_with_type(
                                     &Ty::Symbol(&tuple_elements[index]),
-                                    &mut key_into_parsing,
+                                    key_trimmed_data,
                                     registry,
                                     Propagated::new(),
                                 )?;
-
-                                let into_hash_checker = key_trimmed_data[..]
-                                    .strip_suffix(&key_into_parsing[..])
-                                    .expect("just cut the part on decoding");
-                                if hash_part != twox_64(into_hash_checker) {
-                                    return Err(ParserError::KeyPartHashMesmatch);
-                                }
-
-                                *key_trimmed_data = key_into_parsing;
-
                                 content.push(KeyPart::Parsed(parsed_key))
                             }
-                            None => return Err(ParserError::DataTooShort),
-                        },
-                        StorageHasher::Identity => {
-                            let parsed_key = decode_with_type(
-                                &Ty::Symbol(&tuple_elements[index]),
-                                key_trimmed_data,
-                                registry,
-                                Propagated::new(),
-                            )?;
-                            content.push(KeyPart::Parsed(parsed_key))
                         }
                     }
+                    KeyData::TupleHash { content, info }
                 }
-                if !key_trimmed_data.is_empty() {
-                    return Err(ParserError::KeyPartsUnused);
-                }
-                Ok(KeyData::Tuple { content, info })
+                _ => return Err(ParserError::MultipleHashesNotATuple),
             }
-            _ => Err(ParserError::MultipleHashesNotATuple),
         }
+    };
+    if key_trimmed_data.is_empty() {
+        Ok(key_data)
+    } else {
+        Err(ParserError::KeyPartsUnused)
     }
 }

@@ -1,13 +1,17 @@
-use frame_metadata::v14::RuntimeMetadataV14;
+use frame_metadata::v14::{RuntimeMetadataV14, StorageEntryMetadata};
 use parity_scale_codec::Decode;
-use scale_info::{interner::UntrackedSymbol, IntoPortable, Path, Registry, TypeDef};
-use sp_core::H256;
+use scale_info::{
+    form::PortableForm, interner::UntrackedSymbol, IntoPortable, Path, Registry, TypeDef,
+};
+use sp_core::{twox_128, H256};
 use std::str::FromStr;
 
 use crate::cards::{
     ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
 };
 use crate::error::{ParserError, SignableError};
+use crate::special_indicators::SpecialtyPrimitive;
+use crate::storage_data::{decode_as_storage_entry, KeyData, KeyPart};
 use crate::{decode_blob_as_type, parse_transaction, MetaInput, ShortSpecs};
 
 fn metadata(filename: &str) -> RuntimeMetadataV14 {
@@ -42,6 +46,25 @@ fn system_digest_ty(meta_v14: &RuntimeMetadataV14) -> UntrackedSymbol<std::any::
         }
     }
     ty.unwrap()
+}
+
+fn assets_metadata_storage_entry(
+    meta_v14: &RuntimeMetadataV14,
+) -> &StorageEntryMetadata<PortableForm> {
+    let mut storage_entry_metadata = None;
+    for pallet in meta_v14.pallets.iter() {
+        if let Some(ref storage) = pallet.storage {
+            if storage.prefix == "Assets" {
+                for storage_entry in storage.entries.iter() {
+                    if storage_entry.name == "Metadata" {
+                        storage_entry_metadata = Some(storage_entry);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    storage_entry_metadata.unwrap()
 }
 
 #[test]
@@ -518,4 +541,162 @@ fn storage_2_spoiled_digest() {
     let reply = decode_blob_as_type(&system_digest_ty, &mut data, &metadata.types).unwrap_err();
     let reply_known = ParserError::CyclicMetadata(11);
     assert_eq!(reply_known, reply);
+}
+
+#[test]
+fn storage_3_assets_with_key() {
+    // The key and the value correspond to one of the westmint storage entries
+    // in `Assets` pallet `Metadata` storage.
+    let hex_key = "0x682a59d51ab9e48a8c8cc418ff9708d2b5f3822e35ca2f31ce3526eab1363fd211d2df4e979aa105cf552e9544ebd2b500000000";
+
+    // Cut off the prefix from the key.
+    let mut key = hex::decode(hex_key.trim_start_matches(&format!(
+        "0x{}{}",
+        hex::encode(twox_128(b"Assets")),
+        hex::encode(twox_128(b"Metadata"))
+    )))
+    .unwrap();
+
+    let mut value = hex::decode(
+        "c07a64621700000000000000000000003c4f70656e5371756172652054657374104f534e540a00",
+    )
+    .unwrap();
+
+    // Westmint metadata.
+    let metadata = metadata("for_tests/westmint9270");
+
+    // `StorageEntryMetadata` for `Assets` pallet, `Metadata` entry.
+    let storage_entry_metadata = assets_metadata_storage_entry(&metadata);
+
+    let storage = decode_as_storage_entry(
+        &mut key,
+        &mut value,
+        storage_entry_metadata,
+        &metadata.types,
+    )
+    .unwrap();
+
+    // Parsed key.
+    let expected_key_data = KeyData::SingleHash {
+        content: KeyPart::Parsed(ExtendedData {
+            data: ParsedData::PrimitiveU32 {
+                value: 0,
+                specialty: SpecialtyPrimitive::None,
+            },
+            info: Vec::new(),
+        }),
+    };
+    assert_eq!(storage.key, expected_key_data);
+
+    // Parsed value.
+    let expected_value_data = ExtendedData {
+        data: ParsedData::Composite(vec![
+            FieldData {
+                field_name: Some(String::from("deposit")),
+                type_name: Some(String::from("DepositBalance")),
+                field_docs: String::new(),
+                data: ExtendedData {
+                    data: ParsedData::PrimitiveU128 {
+                        value: 100435000000,
+                        specialty: SpecialtyPrimitive::Balance,
+                    },
+                    info: Vec::new(),
+                },
+            },
+            FieldData {
+                field_name: Some(String::from("name")),
+                type_name: Some(String::from("BoundedString")),
+                field_docs: String::new(),
+                data: ExtendedData {
+                    data: ParsedData::Composite(vec![FieldData {
+                        field_name: None,
+                        type_name: Some(String::from("Vec<T>")),
+                        field_docs: String::new(),
+                        data: ExtendedData {
+                            data: ParsedData::Sequence(SequenceData {
+                                element_info: Vec::new(),
+                                data: Sequence::U8(vec![
+                                    79, 112, 101, 110, 83, 113, 117, 97, 114, 101, 32, 84, 101,
+                                    115, 116,
+                                ]),
+                            }),
+                            info: Vec::new(),
+                        },
+                    }]),
+                    info: vec![Info {
+                        docs: String::new(),
+                        path: Path::from_segments(vec![
+                            "sp_runtime",
+                            "bounded",
+                            "bounded_vec",
+                            "BoundedVec",
+                        ])
+                        .unwrap()
+                        .into_portable(&mut Registry::new()),
+                    }],
+                },
+            },
+            FieldData {
+                field_name: Some(String::from("symbol")),
+                type_name: Some(String::from("BoundedString")),
+                field_docs: String::new(),
+                data: ExtendedData {
+                    data: ParsedData::Composite(vec![FieldData {
+                        field_name: None,
+                        type_name: Some(String::from("Vec<T>")),
+                        field_docs: String::new(),
+                        data: ExtendedData {
+                            data: ParsedData::Sequence(SequenceData {
+                                element_info: Vec::new(),
+                                data: Sequence::U8(vec![79, 83, 78, 84]),
+                            }),
+                            info: Vec::new(),
+                        },
+                    }]),
+                    info: vec![Info {
+                        docs: String::new(),
+                        path: Path::from_segments(vec![
+                            "sp_runtime",
+                            "bounded",
+                            "bounded_vec",
+                            "BoundedVec",
+                        ])
+                        .unwrap()
+                        .into_portable(&mut Registry::new()),
+                    }],
+                },
+            },
+            FieldData {
+                field_name: Some(String::from("decimals")),
+                type_name: Some(String::from("u8")),
+                field_docs: String::new(),
+                data: ExtendedData {
+                    data: ParsedData::PrimitiveU8 {
+                        value: 10,
+                        specialty: SpecialtyPrimitive::None,
+                    },
+                    info: Vec::new(),
+                },
+            },
+            FieldData {
+                field_name: Some(String::from("is_frozen")),
+                type_name: Some(String::from("bool")),
+                field_docs: String::new(),
+                data: ExtendedData {
+                    data: ParsedData::PrimitiveBool(false),
+                    info: Vec::new(),
+                },
+            },
+        ]),
+        info: vec![Info {
+            docs: String::new(),
+            path: Path::from_segments(vec!["pallet_assets", "types", "AssetMetadata"])
+                .unwrap()
+                .into_portable(&mut Registry::new()),
+        }],
+    };
+    assert_eq!(storage.value, expected_value_data);
+
+    // Collected docs.
+    assert_eq!(storage.docs, " Metadata of an asset.");
 }
