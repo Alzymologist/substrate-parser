@@ -46,15 +46,9 @@ pub enum SignableError {
     },
 }
 
-/// Errors in data parsing.
+/// Errors in storage entry parsing.
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
-pub enum ParserError {
-    #[error("Remaining data too short for expected content.")]
-    DataTooShort,
-
-    #[error("Resolving type id {0} results in cycling.")]
-    CyclicMetadata(u32),
-
+pub enum StorageError {
     #[error("Hash part of the storage key does not match the key data.")]
     KeyPartHashMismatch,
 
@@ -67,6 +61,22 @@ pub enum ParserError {
     #[error("Hashers length does not match the number of fields in a tuple key type.")]
     MultipleHashesNumberMismatch,
 
+    #[error("Parsing error. {0}")]
+    Parsing(ParserError),
+
+    #[error("Plain storage key contains data other than the prefix.")]
+    PlainKeyExceedsPrefix,
+}
+
+/// Errors in data parsing.
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
+pub enum ParserError {
+    #[error("Remaining data too short for expected content.")]
+    DataTooShort,
+
+    #[error("Resolving type id {0} results in cycling.")]
+    CyclicMetadata(u32),
+
     #[error("Expected compact, not found one.")]
     NoCompact,
 
@@ -75,9 +85,6 @@ pub enum ParserError {
 
     #[error("Declared type is not suitable BitOrder type for BitVec.")]
     NotBitOrderType,
-
-    #[error("Plain storage key contains data other than the prefix.")]
-    PlainKeyExceedsPrefix,
 
     #[error("Expected to use all data provided in decoding. Some data remained unused.")]
     SomeDataNotUsedBlob,

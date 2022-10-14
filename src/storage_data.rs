@@ -16,7 +16,7 @@ use sp_core::{blake2_128, twox_64};
 use crate::cards::{Documented, ExtendedData, Info};
 use crate::decode_blob_as_type;
 use crate::decoding_sci::{decode_with_type, resolve_ty, Ty};
-use crate::error::ParserError;
+use crate::error::{ParserError, StorageError};
 use crate::propagated::Propagated;
 
 /// Parsed storage entry data: key, value, general docs.
@@ -113,15 +113,16 @@ pub fn decode_as_storage_entry(
     value_data: &[u8],
     entry_metadata: &StorageEntryMetadata<PortableForm>,
     registry: &PortableRegistry,
-) -> Result<Storage, ParserError> {
+) -> Result<Storage, StorageError> {
     let docs = entry_metadata.collect_docs();
     let (key, value) = match &entry_metadata.ty {
         StorageEntryType::Plain(value_ty) => {
             if !key_trimmed_data.is_empty() {
-                return Err(ParserError::PlainKeyExceedsPrefix);
+                return Err(StorageError::PlainKeyExceedsPrefix);
             }
             let key = KeyData::Plain;
-            let value = decode_blob_as_type(value_ty, value_data, registry)?;
+            let value = decode_blob_as_type(value_ty, value_data, registry)
+                .map_err(StorageError::Parsing)?;
             (key, value)
         }
         StorageEntryType::Map {
@@ -130,7 +131,8 @@ pub fn decode_as_storage_entry(
             value: value_ty,
         } => {
             let key = process_key(hashers, key_ty, key_trimmed_data, registry)?;
-            let value = decode_blob_as_type(value_ty, value_data, registry)?;
+            let value = decode_blob_as_type(value_ty, value_data, registry)
+                .map_err(StorageError::Parsing)?;
             (key, value)
         }
     };
@@ -143,7 +145,7 @@ macro_rules! cut_hash {
             key_ty: &UntrackedSymbol<std::any::TypeId>,
             key_trimmed_data: &[u8],
             position: &mut usize,
-        ) -> Result<KeyPart, ParserError> {
+        ) -> Result<KeyPart, StorageError> {
             match key_trimmed_data.get(*position..*position + $hash_len) {
                 Some(slice) => {
                     let hash_part: [u8; $hash_len] =
@@ -154,7 +156,7 @@ macro_rules! cut_hash {
                         type_id: key_ty.id(),
                     }))
                 }
-                None => Err(ParserError::DataTooShort),
+                None => Err(StorageError::Parsing(ParserError::DataTooShort)),
             }
         }
     };
@@ -172,7 +174,7 @@ macro_rules! check_hash {
             key_trimmed_data: &[u8],
             position: &mut usize,
             registry: &PortableRegistry,
-        ) -> Result<KeyPart, ParserError> {
+        ) -> Result<KeyPart, StorageError> {
             match key_trimmed_data.get(*position..*position + $hash_len) {
                 Some(slice) => {
                     let hash_part: [u8; $hash_len] =
@@ -185,14 +187,15 @@ macro_rules! check_hash {
                         position,
                         registry,
                         Propagated::new(),
-                    )?;
+                    )
+                    .map_err(StorageError::Parsing)?;
                     if hash_part != $fn_into(&key_trimmed_data[position_decoder_starts..*position])
                     {
-                        return Err(ParserError::KeyPartHashMismatch);
+                        return Err(StorageError::KeyPartHashMismatch);
                     }
                     Ok(KeyPart::Parsed(parsed_key))
                 }
-                None => Err(ParserError::DataTooShort),
+                None => Err(StorageError::Parsing(ParserError::DataTooShort)),
             }
         }
     };
@@ -211,7 +214,7 @@ pub fn process_key(
     key_ty: &UntrackedSymbol<std::any::TypeId>,
     key_trimmed_data: &[u8],
     registry: &PortableRegistry,
-) -> Result<KeyData, ParserError> {
+) -> Result<KeyData, StorageError> {
     let mut position: usize = 0;
     let key_data = {
         if hashers.len() == 1 {
@@ -241,20 +244,22 @@ pub fn process_key(
                         &mut position,
                         registry,
                         Propagated::new(),
-                    )?;
+                    )
+                    .map_err(StorageError::Parsing)?;
                     KeyData::SingleHash {
                         content: KeyPart::Parsed(parsed_key),
                     }
                 }
             }
         } else {
-            let key_ty_resolved = resolve_ty(registry, key_ty.id())?;
+            let key_ty_resolved =
+                resolve_ty(registry, key_ty.id()).map_err(StorageError::Parsing)?;
             let info = Info::from_ty(key_ty_resolved);
             match key_ty_resolved.type_def() {
                 TypeDef::Tuple(t) => {
                     let tuple_elements = t.fields();
                     if tuple_elements.len() != hashers.len() {
-                        return Err(ParserError::MultipleHashesNumberMismatch);
+                        return Err(StorageError::MultipleHashesNumberMismatch);
                     }
                     let mut content: Vec<KeyPart> = Vec::new();
                     for index in 0..tuple_elements.len() {
@@ -298,20 +303,21 @@ pub fn process_key(
                                     &mut position,
                                     registry,
                                     Propagated::new(),
-                                )?;
+                                )
+                                .map_err(StorageError::Parsing)?;
                                 content.push(KeyPart::Parsed(parsed_key))
                             }
                         }
                     }
                     KeyData::TupleHash { content, info }
                 }
-                _ => return Err(ParserError::MultipleHashesNotATuple),
+                _ => return Err(StorageError::MultipleHashesNotATuple),
             }
         }
     };
     if position == key_trimmed_data.len() {
         Ok(key_data)
     } else {
-        Err(ParserError::KeyPartsUnused)
+        Err(StorageError::KeyPartsUnused)
     }
 }

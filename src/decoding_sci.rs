@@ -10,7 +10,6 @@ use scale_info::{
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{crypto::AccountId32, H160, H512};
 
-use crate::Positions;
 use crate::cards::{
     Call, Documented, Event, ExtendedData, FieldData, Info, PalletSpecificData, ParsedData,
     SequenceData, SequenceRawData, VariantData,
@@ -24,6 +23,7 @@ use crate::special_indicators::{
 use crate::special_types::{
     special_case_era, special_case_h256, wrap_sequence, CheckCompact, UnsignedInteger,
 };
+use crate::Positions;
 
 /// Finalize parsing of primitives (variants of [`TypeDefPrimitive`]).
 ///
@@ -105,7 +105,11 @@ fn decode_str(data: &[u8], position: &mut usize) -> Result<ParsedData, ParserErr
 /// an error occurs.
 ///
 /// Input data gets consumed during the decoding.
-pub fn decode_as_call(data: &[u8], positions: Positions, meta_v14: &RuntimeMetadataV14) -> Result<Call, SignableError> {
+pub fn decode_as_call(
+    data: &[u8],
+    positions: Positions,
+    meta_v14: &RuntimeMetadataV14,
+) -> Result<Call, SignableError> {
     let mut position = positions.call_start();
 
     let pallet_index: u8 = match data.get(position) {

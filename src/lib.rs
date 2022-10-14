@@ -473,13 +473,13 @@ pub struct Positions {
 impl Positions {
     pub fn find(data: &[u8]) -> Result<Self, SignableError> {
         let mut call_start: usize = 0;
-        let call_length =
-            get_compact::<u32>(data, &mut call_start).map_err(|_| SignableError::CutSignable)? as usize;
+        let call_length = get_compact::<u32>(data, &mut call_start)
+            .map_err(|_| SignableError::CutSignable)? as usize;
         let extensions_start = call_start + call_length;
         match data.get(call_start..extensions_start) {
-            Some(_) => Ok(Self{
+            Some(_) => Ok(Self {
                 call_start,
-                extensions_start, 
+                extensions_start,
             }),
             None => Err(SignableError::CutSignable),
         }
@@ -542,7 +542,12 @@ pub fn parse_transaction(
 
     // try parsing extensions, check that spec version and genesis hash are
     // correct
-    let extensions = decode_extensions(data, positions.extensions_start(), &checked_metadata, genesis_hash)?;
+    let extensions = decode_extensions(
+        data,
+        positions.extensions_start(),
+        &checked_metadata,
+        genesis_hash,
+    )?;
 
     // try parsing call data
     let call_result = decode_as_call(data, positions, checked_metadata.meta_v14);
