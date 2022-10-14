@@ -12,7 +12,7 @@
 //!
 //! Chain data is [SCALE-encoded](https://docs.substrate.io/reference/scale-codec/).
 //! Data blobs entering decoder are expected to be decoded completely: all
-//! provided `Vec<u8>` must be used in decoding with no data remaining.
+//! provided `&[u8]` data must be used in decoding with no data remaining.
 //!
 //! For decoding the entry type (such as the type of particular storage item) or
 //! the data internal structure used to find the entry type in metadata (as is
@@ -465,12 +465,15 @@ pub struct ShortSpecs {
     pub unit: String,
 }
 
+/// Start positions for call and extensions data in the signable transaction
+/// data.
 pub struct Positions {
     call_start: usize,
     extensions_start: usize,
 }
 
 impl Positions {
+    /// Determine `Positions` for data slice.
     pub fn find(data: &[u8]) -> Result<Self, SignableError> {
         let mut call_start: usize = 0;
         let call_length = get_compact::<u32>(data, &mut call_start)
@@ -484,9 +487,13 @@ impl Positions {
             None => Err(SignableError::CutSignable),
         }
     }
+
+    /// Start positions for call data
     pub fn call_start(&self) -> usize {
         self.call_start
     }
+
+    /// Start positions for extensions data
     pub fn extensions_start(&self) -> usize {
         self.extensions_start
     }

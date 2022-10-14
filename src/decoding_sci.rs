@@ -27,8 +27,8 @@ use crate::Positions;
 
 /// Finalize parsing of primitives (variants of [`TypeDefPrimitive`]).
 ///
-/// Decoded data gets consumed. Propagated to this point [`SpecialtySet`] is
-/// used.
+/// Current parser position gets changed. Propagated to this point
+/// [`SpecialtySet`] is used.
 fn decode_type_def_primitive(
     found_ty: &TypeDefPrimitive,
     data: &[u8],
@@ -72,7 +72,7 @@ fn decode_type_def_primitive(
 /// `str` is a `Vec<u8>` with utf-convertible elements, and is decoded as a
 /// vector (compact of length precedes the data).
 ///
-/// Decoded data gets consumed.
+/// Current parser position gets changed.
 fn decode_str(data: &[u8], position: &mut usize) -> Result<ParsedData, ParserError> {
     let str_length = get_compact::<u32>(data, position)? as usize;
     if *position != data.len() {
@@ -95,16 +95,16 @@ fn decode_str(data: &[u8], position: &mut usize) -> Result<ParsedData, ParserErr
     }
 }
 
-/// Parse call data with provided `V14` metadata.
+/// Parse call part of the signable transaction with provided `V14` metadata.
 ///
-/// Intended for call part of a signable transaction.
+/// Call data is contained within the provided [`Positions`] determined
+/// elsewhere. Call data is expected to have proper call structure and to be
+/// decoded completely, with no data left.
 ///
-/// Data is expected to be a call. The first `u8` element is a pallet index,
-/// the type within corresponding `PalletCallMetadata` is expected to be an
-/// enum with pallet-specific calls. If the pallet-call pattern is not observed,
-/// an error occurs.
-///
-/// Input data gets consumed during the decoding.
+/// The first `u8` element of the call data is a pallet index, the type within
+/// corresponding `PalletCallMetadata` is expected to be an enum with
+/// pallet-specific calls. If the pallet-call pattern is not observed, an error
+/// occurs.
 pub fn decode_as_call(
     data: &[u8],
     positions: Positions,
@@ -172,8 +172,8 @@ pub fn decode_as_call(
 
 /// General decoder function. Parse part of data as [`Ty`].
 ///
-/// Processes input data byte-by-byte, cutting and decoding data chunks. Input
-/// data is consumed.
+/// Processes input data byte-by-byte, cutting and decoding data chunks. Current
+/// parser position gets changed.
 ///
 /// This function is sometimes used recursively. Specifically, it could be
 /// called on inner element(s) when decoding deals with:
@@ -187,11 +187,11 @@ pub fn decode_as_call(
 /// - calls and events (`SpecialtyTypeChecked::PalletSpecific{..}`)
 /// - options (`SpecialtyTypeChecked:Option{..}`)
 ///
-/// Of those, the input data itself changes on each new iteration for:
+/// Of those, the parser position changes on each new iteration for:
 ///
-/// - enums (variant index gets cut off)
-/// - vectors (compact vector length gets cut off)
-/// - calls and events, options (also variant index gets cut off)
+/// - enums (variant index is passed)
+/// - vectors (compact vector length indicator is passed)
+/// - calls and events, options (also variant index is passed)
 ///
 /// Thus the potential endless cycling could happen for structs, arrays, tuples,
 /// and compacts. Notably, this *should not* happen in good metadata.
@@ -485,7 +485,7 @@ pub fn decode_with_type(
 /// Parse part of data as a set of [`Field`]s. Used for structs, enums and call
 /// decoding.
 ///
-/// Used data gets cut off in the process.
+/// Current parser position gets changed.
 fn decode_fields(
     fields: &[Field<PortableForm>],
     data: &[u8],
@@ -527,7 +527,7 @@ fn decode_fields(
 /// Parse part of data as a known number of identical elements. Used for vectors
 /// and arrays.
 ///
-/// Used data gets cut off in the process.
+/// Current parser position gets changed.
 fn decode_elements_set(
     element: &UntrackedSymbol<std::any::TypeId>,
     number_of_elements: u32,
@@ -605,6 +605,8 @@ pub(crate) fn pick_variant<'a>(
 }
 
 /// Parse part of data as a variant. Used for enums and call decoding.
+///
+/// Current parser position gets changed.
 fn decode_variant(
     variants: &[Variant<PortableForm>],
     data: &[u8],

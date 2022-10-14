@@ -49,7 +49,7 @@ where
     }
 }
 
-/// Find compact and cut it from the input data.
+/// Find compact and move current parser position accordingly.
 pub(crate) fn get_compact<T>(data: &[u8], position: &mut usize) -> Result<T, ParserError>
 where
     T: HasCompact,
