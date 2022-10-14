@@ -30,28 +30,39 @@ use crate::special_types::{
 /// used.
 fn decode_type_def_primitive(
     found_ty: &TypeDefPrimitive,
-    data: &mut Vec<u8>,
+    data: &[u8],
+    position: &mut usize,
     specialty_set: SpecialtySet,
 ) -> Result<ParsedData, ParserError> {
     match found_ty {
-        TypeDefPrimitive::Bool => bool::parse_check_compact(data, specialty_set.is_compact),
-        TypeDefPrimitive::Char => char::parse_check_compact(data, specialty_set.is_compact),
+        TypeDefPrimitive::Bool => {
+            bool::parse_check_compact(data, position, specialty_set.is_compact)
+        }
+        TypeDefPrimitive::Char => {
+            char::parse_check_compact(data, position, specialty_set.is_compact)
+        }
         TypeDefPrimitive::Str => {
             specialty_set.reject_compact()?;
-            decode_str(data)
+            decode_str(data, position)
         }
-        TypeDefPrimitive::U8 => u8::parse_unsigned_integer(data, specialty_set),
-        TypeDefPrimitive::U16 => u16::parse_unsigned_integer(data, specialty_set),
-        TypeDefPrimitive::U32 => u32::parse_unsigned_integer(data, specialty_set),
-        TypeDefPrimitive::U64 => u64::parse_unsigned_integer(data, specialty_set),
-        TypeDefPrimitive::U128 => u128::parse_unsigned_integer(data, specialty_set),
-        TypeDefPrimitive::U256 => BigUint::parse_check_compact(data, specialty_set.is_compact),
-        TypeDefPrimitive::I8 => i8::parse_check_compact(data, specialty_set.is_compact),
-        TypeDefPrimitive::I16 => i16::parse_check_compact(data, specialty_set.is_compact),
-        TypeDefPrimitive::I32 => i32::parse_check_compact(data, specialty_set.is_compact),
-        TypeDefPrimitive::I64 => i64::parse_check_compact(data, specialty_set.is_compact),
-        TypeDefPrimitive::I128 => i128::parse_check_compact(data, specialty_set.is_compact),
-        TypeDefPrimitive::I256 => BigInt::parse_check_compact(data, specialty_set.is_compact),
+        TypeDefPrimitive::U8 => u8::parse_unsigned_integer(data, position, specialty_set),
+        TypeDefPrimitive::U16 => u16::parse_unsigned_integer(data, position, specialty_set),
+        TypeDefPrimitive::U32 => u32::parse_unsigned_integer(data, position, specialty_set),
+        TypeDefPrimitive::U64 => u64::parse_unsigned_integer(data, position, specialty_set),
+        TypeDefPrimitive::U128 => u128::parse_unsigned_integer(data, position, specialty_set),
+        TypeDefPrimitive::U256 => {
+            BigUint::parse_check_compact(data, position, specialty_set.is_compact)
+        }
+        TypeDefPrimitive::I8 => i8::parse_check_compact(data, position, specialty_set.is_compact),
+        TypeDefPrimitive::I16 => i16::parse_check_compact(data, position, specialty_set.is_compact),
+        TypeDefPrimitive::I32 => i32::parse_check_compact(data, position, specialty_set.is_compact),
+        TypeDefPrimitive::I64 => i64::parse_check_compact(data, position, specialty_set.is_compact),
+        TypeDefPrimitive::I128 => {
+            i128::parse_check_compact(data, position, specialty_set.is_compact)
+        }
+        TypeDefPrimitive::I256 => {
+            BigInt::parse_check_compact(data, position, specialty_set.is_compact)
+        }
     }
 }
 
@@ -61,9 +72,9 @@ fn decode_type_def_primitive(
 /// vector (compact of length precedes the data).
 ///
 /// Decoded data gets consumed.
-fn decode_str(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
-    let str_length = get_compact::<u32>(data)? as usize;
-    if !data.is_empty() {
+fn decode_str(data: &[u8], position: &mut usize) -> Result<ParsedData, ParserError> {
+    let str_length = get_compact::<u32>(data, position)? as usize;
+    if *position != data.len() {
         match data.get(..str_length) {
             Some(a) => {
                 let text = match String::from_utf8(a.to_vec()) {
@@ -71,7 +82,7 @@ fn decode_str(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
                     Err(_) => return Err(ParserError::TypeFailure("str")),
                 };
                 let out = ParsedData::Text(text);
-                *data = data[str_length..].to_vec();
+                *position += str_length;
                 Ok(out)
             }
             None => Err(ParserError::DataTooShort),
@@ -93,16 +104,15 @@ fn decode_str(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
 /// an error occurs.
 ///
 /// Input data gets consumed during the decoding.
-pub fn decode_as_call(
-    data: &mut Vec<u8>,
-    meta_v14: &RuntimeMetadataV14,
-) -> Result<Call, SignableError> {
+pub fn decode_as_call(data: &[u8], meta_v14: &RuntimeMetadataV14) -> Result<Call, SignableError> {
+    let mut position: usize = 0;
+
     let pallet_index: u8 = match data.first() {
         Some(x) => *x,
         None => return Err(SignableError::Parsing(ParserError::DataTooShort)),
     };
 
-    *data = data[1..].to_vec();
+    position += 1;
 
     let mut found_calls_in_pallet_type_id: Option<UntrackedSymbol<std::any::TypeId>> = None;
 
@@ -134,9 +144,9 @@ pub fn decode_as_call(
         if let SpecialtyTypeHinted::PalletSpecific(PalletSpecificItem::Call) =
             SpecialtyTypeHinted::from_path(&pallet_info.path)
         {
-            let variant_data = decode_variant(x.variants(), data, &meta_v14.types)
+            let variant_data = decode_variant(x.variants(), data, &mut position, &meta_v14.types)
                 .map_err(SignableError::Parsing)?;
-            if !data.is_empty() {
+            if position != data.len() {
                 Err(SignableError::SomeDataNotUsedCall)
             } else {
                 Ok(Call(PalletSpecificData {
@@ -188,7 +198,8 @@ pub fn decode_as_call(
 /// type is encountered.
 pub fn decode_with_type(
     ty_input: &Ty,
-    data: &mut Vec<u8>,
+    data: &[u8],
+    position: &mut usize,
     registry: &PortableRegistry,
     mut propagated: Propagated,
 ) -> Result<ExtendedData, ParserError> {
@@ -198,10 +209,11 @@ pub fn decode_with_type(
     };
     let info_ty = Info::from_ty(ty);
     propagated.add_info(&info_ty);
-    match SpecialtyTypeChecked::from_type(ty, data, registry) {
+    match SpecialtyTypeChecked::from_type(ty, data, position, registry) {
         SpecialtyTypeChecked::None => match ty.type_def() {
             TypeDef::Composite(x) => {
-                let field_data_set = decode_fields(x.fields(), data, registry, propagated.checker)?;
+                let field_data_set =
+                    decode_fields(x.fields(), data, position, registry, propagated.checker)?;
                 Ok(ExtendedData {
                     data: ParsedData::Composite(field_data_set),
                     info: propagated.info,
@@ -209,26 +221,32 @@ pub fn decode_with_type(
             }
             TypeDef::Variant(x) => {
                 propagated.reject_compact()?;
-                let variant_data = decode_variant(x.variants(), data, registry)?;
+                let variant_data = decode_variant(x.variants(), data, position, registry)?;
                 Ok(ExtendedData {
                     data: ParsedData::Variant(variant_data),
                     info: propagated.info,
                 })
             }
             TypeDef::Sequence(x) => {
-                let number_of_elements = get_compact::<u32>(data)?;
+                let number_of_elements = get_compact::<u32>(data, position)?;
                 propagated.checker.drop_cycle_check();
                 decode_elements_set(
                     x.type_param(),
                     number_of_elements,
                     data,
+                    position,
                     registry,
                     propagated,
                 )
             }
-            TypeDef::Array(x) => {
-                decode_elements_set(x.type_param(), x.len(), data, registry, propagated)
-            }
+            TypeDef::Array(x) => decode_elements_set(
+                x.type_param(),
+                x.len(),
+                data,
+                position,
+                registry,
+                propagated,
+            ),
             TypeDef::Tuple(x) => {
                 let inner_types_set = x.fields();
                 if inner_types_set.len() > 1 {
@@ -240,6 +258,7 @@ pub fn decode_with_type(
                     let tuple_data_element = decode_with_type(
                         &Ty::Symbol(inner_ty_symbol),
                         data,
+                        position,
                         registry,
                         Propagated::for_ty_symbol(&propagated.checker, inner_ty_symbol)?,
                     )?;
@@ -251,54 +270,69 @@ pub fn decode_with_type(
                 })
             }
             TypeDef::Primitive(x) => Ok(ExtendedData {
-                data: decode_type_def_primitive(x, data, propagated.checker.specialty_set)?,
+                data: decode_type_def_primitive(
+                    x,
+                    data,
+                    position,
+                    propagated.checker.specialty_set,
+                )?,
                 info: propagated.info,
             }),
             TypeDef::Compact(x) => {
                 propagated.reject_compact()?;
                 propagated.checker.specialty_set.is_compact = true;
                 propagated.checker.check_id(x.type_param().id())?;
-                decode_with_type(&Ty::Symbol(x.type_param()), data, registry, propagated)
+                decode_with_type(
+                    &Ty::Symbol(x.type_param()),
+                    data,
+                    position,
+                    registry,
+                    propagated,
+                )
             }
             TypeDef::BitSequence(x) => {
                 propagated.reject_compact()?;
                 Ok(ExtendedData {
-                    data: decode_type_def_bit_sequence(x, data, registry)?,
+                    data: decode_type_def_bit_sequence(x, data, position, registry)?,
                     info: propagated.info,
                 })
             }
         },
         SpecialtyTypeChecked::AccountId32 => Ok(ExtendedData {
-            data: AccountId32::parse_check_compact(data, propagated.is_compact())?,
+            data: AccountId32::parse_check_compact(data, position, propagated.is_compact())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::Era => {
             propagated.reject_compact()?;
             Ok(ExtendedData {
-                data: special_case_era(data)?,
+                data: special_case_era(data, position)?,
                 info: propagated.info,
             })
         }
         SpecialtyTypeChecked::H160 => Ok(ExtendedData {
-            data: H160::parse_check_compact(data, propagated.is_compact())?,
+            data: H160::parse_check_compact(data, position, propagated.is_compact())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::H256 => {
             propagated.reject_compact()?;
             Ok(ExtendedData {
-                data: special_case_h256(data, propagated.checker.specialty_set.hash256())?,
+                data: special_case_h256(
+                    data,
+                    position,
+                    propagated.checker.specialty_set.hash256(),
+                )?,
                 info: propagated.info,
             })
         }
         SpecialtyTypeChecked::H512 => Ok(ExtendedData {
-            data: H512::parse_check_compact(data, propagated.is_compact())?,
+            data: H512::parse_check_compact(data, position, propagated.is_compact())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::Option(ty_symbol) => {
             propagated.reject_compact()?;
             let param_ty = resolve_ty(registry, ty_symbol.id())?;
             match param_ty.type_def() {
-                TypeDef::Primitive(TypeDefPrimitive::Bool) => match data.first() {
+                TypeDef::Primitive(TypeDefPrimitive::Bool) => match data.get(*position) {
                     Some(a) => {
                         let parsed_data = match OptionBool::decode(&mut [*a].as_slice()) {
                             Ok(OptionBool(Some(true))) => {
@@ -310,7 +344,7 @@ pub fn decode_with_type(
                             Ok(OptionBool(None)) => ParsedData::Option(None),
                             Err(_) => return Err(ParserError::UnexpectedOptionVariant),
                         };
-                        *data = data[1..].to_vec();
+                        *position += 1;
                         Ok(ExtendedData {
                             data: parsed_data,
                             info: propagated.info,
@@ -318,19 +352,20 @@ pub fn decode_with_type(
                     }
                     None => Err(ParserError::DataTooShort),
                 },
-                _ => match data.first() {
+                _ => match data.get(*position) {
                     Some(0) => {
-                        *data = data[1..].to_vec();
+                        *position += 1;
                         Ok(ExtendedData {
                             data: ParsedData::Option(None),
                             info: propagated.info,
                         })
                     }
                     Some(1) => {
-                        *data = data[1..].to_vec();
+                        *position += 1;
                         let extended_option_data = decode_with_type(
                             &Ty::Resolved(param_ty),
                             data,
+                            position,
                             registry,
                             Propagated::new(),
                         )?;
@@ -352,7 +387,7 @@ pub fn decode_with_type(
             item,
         } => {
             propagated.reject_compact()?;
-            let variant_data = decode_variant(variants, data, registry)?;
+            let variant_data = decode_variant(variants, data, position, registry)?;
             let pallet_specific_data = PalletSpecificData {
                 pallet_info,
                 variant_docs: variant_data.variant_docs.to_owned(),
@@ -372,47 +407,71 @@ pub fn decode_with_type(
             }
         }
         SpecialtyTypeChecked::Perbill => Ok(ExtendedData {
-            data: Perbill::parse_check_compact(data, propagated.is_compact())?,
+            data: Perbill::parse_check_compact(data, position, propagated.is_compact())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::Percent => Ok(ExtendedData {
-            data: Percent::parse_check_compact(data, propagated.is_compact())?,
+            data: Percent::parse_check_compact(data, position, propagated.is_compact())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::Permill => Ok(ExtendedData {
-            data: Permill::parse_check_compact(data, propagated.is_compact())?,
+            data: Permill::parse_check_compact(data, position, propagated.is_compact())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::Perquintill => Ok(ExtendedData {
-            data: Perquintill::parse_check_compact(data, propagated.is_compact())?,
+            data: Perquintill::parse_check_compact(data, position, propagated.is_compact())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::PerU16 => Ok(ExtendedData {
-            data: PerU16::parse_check_compact(data, propagated.is_compact())?,
+            data: PerU16::parse_check_compact(data, position, propagated.is_compact())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::PublicEd25519 => Ok(ExtendedData {
-            data: sp_core::ed25519::Public::parse_check_compact(data, propagated.is_compact())?,
+            data: sp_core::ed25519::Public::parse_check_compact(
+                data,
+                position,
+                propagated.is_compact(),
+            )?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::PublicSr25519 => Ok(ExtendedData {
-            data: sp_core::sr25519::Public::parse_check_compact(data, propagated.is_compact())?,
+            data: sp_core::sr25519::Public::parse_check_compact(
+                data,
+                position,
+                propagated.is_compact(),
+            )?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::PublicEcdsa => Ok(ExtendedData {
-            data: sp_core::ecdsa::Public::parse_check_compact(data, propagated.is_compact())?,
+            data: sp_core::ecdsa::Public::parse_check_compact(
+                data,
+                position,
+                propagated.is_compact(),
+            )?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::SignatureEd25519 => Ok(ExtendedData {
-            data: sp_core::ed25519::Signature::parse_check_compact(data, propagated.is_compact())?,
+            data: sp_core::ed25519::Signature::parse_check_compact(
+                data,
+                position,
+                propagated.is_compact(),
+            )?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::SignatureSr25519 => Ok(ExtendedData {
-            data: sp_core::sr25519::Signature::parse_check_compact(data, propagated.is_compact())?,
+            data: sp_core::sr25519::Signature::parse_check_compact(
+                data,
+                position,
+                propagated.is_compact(),
+            )?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::SignatureEcdsa => Ok(ExtendedData {
-            data: sp_core::ecdsa::Signature::parse_check_compact(data, propagated.is_compact())?,
+            data: sp_core::ecdsa::Signature::parse_check_compact(
+                data,
+                position,
+                propagated.is_compact(),
+            )?,
             info: propagated.info,
         }),
     }
@@ -424,7 +483,8 @@ pub fn decode_with_type(
 /// Used data gets cut off in the process.
 fn decode_fields(
     fields: &[Field<PortableForm>],
-    data: &mut Vec<u8>,
+    data: &[u8],
+    position: &mut usize,
     registry: &PortableRegistry,
     mut checker: Checker,
 ) -> Result<Vec<FieldData>, ParserError> {
@@ -445,6 +505,7 @@ fn decode_fields(
         let this_field_data = decode_with_type(
             &Ty::Symbol(field.ty()),
             data,
+            position,
             registry,
             Propagated::for_field(&checker, field)?,
         )?;
@@ -465,7 +526,8 @@ fn decode_fields(
 fn decode_elements_set(
     element: &UntrackedSymbol<std::any::TypeId>,
     number_of_elements: u32,
-    data: &mut Vec<u8>,
+    data: &[u8],
+    position: &mut usize,
     registry: &PortableRegistry,
     propagated: Propagated,
 ) -> Result<ExtendedData, ParserError> {
@@ -485,6 +547,7 @@ fn decode_elements_set(
                 let element_extended_data = decode_with_type(
                     &Ty::Resolved(husked.ty),
                     data,
+                    position,
                     registry,
                     Propagated::with_checker(husked.checker.clone()),
                 )?;
@@ -516,8 +579,9 @@ fn decode_elements_set(
 pub(crate) fn pick_variant<'a>(
     variants: &'a [Variant<PortableForm>],
     data: &[u8],
+    position: &usize,
 ) -> Result<&'a Variant<PortableForm>, ParserError> {
-    let enum_index = match data.first() {
+    let enum_index = match data.get(*position) {
         Some(x) => *x,
         None => return Err(ParserError::DataTooShort),
     };
@@ -538,14 +602,21 @@ pub(crate) fn pick_variant<'a>(
 /// Parse part of data as a variant. Used for enums and call decoding.
 fn decode_variant(
     variants: &[Variant<PortableForm>],
-    data: &mut Vec<u8>,
+    data: &[u8],
+    position: &mut usize,
     registry: &PortableRegistry,
 ) -> Result<VariantData, ParserError> {
-    let found_variant = pick_variant(variants, data)?;
-    *data = data[1..].to_vec();
+    let found_variant = pick_variant(variants, data, position)?;
+    *position += 1;
     let variant_name = found_variant.name().to_owned();
     let variant_docs = found_variant.collect_docs();
-    let fields = decode_fields(found_variant.fields(), data, registry, Checker::new())?;
+    let fields = decode_fields(
+        found_variant.fields(),
+        data,
+        position,
+        registry,
+        Checker::new(),
+    )?;
 
     Ok(VariantData {
         variant_name,
@@ -571,30 +642,24 @@ const LSB0: &str = "Lsb0";
 /// Parse part of data as a bitvec.
 fn decode_type_def_bit_sequence(
     bit_ty: &TypeDefBitSequence<PortableForm>,
-    data: &mut Vec<u8>,
+    data: &[u8],
+    position: &mut usize,
     registry: &PortableRegistry,
 ) -> Result<ParsedData, ParserError> {
-    let found_compact = find_compact::<u32>(data)?;
+    let found_compact = find_compact::<u32>(data, *position)?;
     let bit_length_found = found_compact.compact;
     let byte_length = match bit_length_found % 8 {
         0 => bit_length_found / 8,
         _ => (bit_length_found / 8) + 1,
     } as usize;
 
-    let into_decode = match found_compact.start_next_unit {
-        Some(start) => match data.get(..start + byte_length) {
-            Some(a) => {
-                let into_decode = a.to_vec();
-                *data = data[start + byte_length..].to_vec();
-                into_decode
-            }
-            None => return Err(ParserError::DataTooShort),
-        },
-        None => {
-            let into_decode = data.to_vec();
-            *data = Vec::new();
+    let into_decode = match data.get(*position..found_compact.start_next_unit + byte_length) {
+        Some(a) => {
+            let into_decode = a.to_vec();
+            *position = found_compact.start_next_unit + byte_length;
             into_decode
         }
+        None => return Err(ParserError::DataTooShort),
     };
 
     // BitOrder

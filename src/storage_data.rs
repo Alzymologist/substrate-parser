@@ -109,8 +109,8 @@ pub const TWOX64_LEN: usize = 8;
 /// Both the key and the value are expected to get processed completely, i.e.
 /// with no data remaining.
 pub fn decode_as_storage_entry(
-    key_trimmed_data: &mut Vec<u8>,
-    value_data: &mut Vec<u8>,
+    key_trimmed_data: &[u8],
+    value_data: &[u8],
     entry_metadata: &StorageEntryMetadata<PortableForm>,
     registry: &PortableRegistry,
 ) -> Result<Storage, ParserError> {
@@ -141,13 +141,14 @@ macro_rules! cut_hash {
     ($func:ident, $hash_len:ident, $enum_variant:ident) => {
         fn $func(
             key_ty: &UntrackedSymbol<std::any::TypeId>,
-            key_trimmed_data: &mut Vec<u8>,
+            key_trimmed_data: &[u8],
+            position: &mut usize,
         ) -> Result<KeyPart, ParserError> {
-            match key_trimmed_data.get(0..$hash_len) {
+            match key_trimmed_data.get(*position..*position + $hash_len) {
                 Some(slice) => {
                     let hash_part: [u8; $hash_len] =
                         slice.try_into().expect("constant length, always fits");
-                    *key_trimmed_data = key_trimmed_data[$hash_len..].to_vec();
+                    *position += $hash_len;
                     Ok(KeyPart::Hash(HashData {
                         hash: Hash::$enum_variant(hash_part),
                         type_id: key_ty.id(),
@@ -168,28 +169,27 @@ macro_rules! check_hash {
     ($func:ident, $hash_len:ident, $fn_into:ident) => {
         fn $func(
             ty: &UntrackedSymbol<std::any::TypeId>,
-            key_trimmed_data: &mut Vec<u8>,
+            key_trimmed_data: &[u8],
+            position: &mut usize,
             registry: &PortableRegistry,
         ) -> Result<KeyPart, ParserError> {
-            match key_trimmed_data.get(0..$hash_len) {
+            match key_trimmed_data.get(*position..*position + $hash_len) {
                 Some(slice) => {
                     let hash_part: [u8; $hash_len] =
                         slice.try_into().expect("constant length, always fits");
-                    *key_trimmed_data = key_trimmed_data[$hash_len..].to_vec();
-                    let mut key_into_parsing = key_trimmed_data.clone();
+                    *position += $hash_len;
+                    let position_decoder_starts = *position;
                     let parsed_key = decode_with_type(
                         &Ty::Symbol(&ty),
-                        &mut key_into_parsing,
+                        key_trimmed_data,
+                        position,
                         registry,
                         Propagated::new(),
                     )?;
-                    let into_hash_checker = key_trimmed_data[..]
-                        .strip_suffix(&key_into_parsing[..])
-                        .expect("just cut the part on decoding");
-                    if hash_part != $fn_into(into_hash_checker) {
+                    if hash_part != $fn_into(&key_trimmed_data[position_decoder_starts..*position])
+                    {
                         return Err(ParserError::KeyPartHashMismatch);
                     }
-                    *key_trimmed_data = key_into_parsing;
                     Ok(KeyPart::Parsed(parsed_key))
                 }
                 None => Err(ParserError::DataTooShort),
@@ -209,34 +209,36 @@ check_hash!(check_twox_64, TWOX64_LEN, twox_64);
 pub fn process_key(
     hashers: &[StorageHasher],
     key_ty: &UntrackedSymbol<std::any::TypeId>,
-    key_trimmed_data: &mut Vec<u8>,
+    key_trimmed_data: &[u8],
     registry: &PortableRegistry,
 ) -> Result<KeyData, ParserError> {
+    let mut position: usize = 0;
     let key_data = {
         if hashers.len() == 1 {
             match hashers[0] {
                 StorageHasher::Blake2_128 => KeyData::SingleHash {
-                    content: cut_blake2_128(key_ty, key_trimmed_data)?,
+                    content: cut_blake2_128(key_ty, key_trimmed_data, &mut position)?,
                 },
                 StorageHasher::Blake2_256 => KeyData::SingleHash {
-                    content: cut_blake2_256(key_ty, key_trimmed_data)?,
+                    content: cut_blake2_256(key_ty, key_trimmed_data, &mut position)?,
                 },
                 StorageHasher::Blake2_128Concat => KeyData::SingleHash {
-                    content: check_blake2_128(key_ty, key_trimmed_data, registry)?,
+                    content: check_blake2_128(key_ty, key_trimmed_data, &mut position, registry)?,
                 },
                 StorageHasher::Twox128 => KeyData::SingleHash {
-                    content: cut_twox_128(key_ty, key_trimmed_data)?,
+                    content: cut_twox_128(key_ty, key_trimmed_data, &mut position)?,
                 },
                 StorageHasher::Twox256 => KeyData::SingleHash {
-                    content: cut_twox_256(key_ty, key_trimmed_data)?,
+                    content: cut_twox_256(key_ty, key_trimmed_data, &mut position)?,
                 },
                 StorageHasher::Twox64Concat => KeyData::SingleHash {
-                    content: check_twox_64(key_ty, key_trimmed_data, registry)?,
+                    content: check_twox_64(key_ty, key_trimmed_data, &mut position, registry)?,
                 },
                 StorageHasher::Identity => {
                     let parsed_key = decode_with_type(
                         &Ty::Symbol(key_ty),
                         key_trimmed_data,
+                        &mut position,
                         registry,
                         Propagated::new(),
                     )?;
@@ -257,28 +259,43 @@ pub fn process_key(
                     let mut content: Vec<KeyPart> = Vec::new();
                     for index in 0..tuple_elements.len() {
                         match hashers[index] {
-                            StorageHasher::Blake2_128 => content
-                                .push(cut_blake2_128(&tuple_elements[index], key_trimmed_data)?),
-                            StorageHasher::Blake2_256 => content
-                                .push(cut_blake2_256(&tuple_elements[index], key_trimmed_data)?),
+                            StorageHasher::Blake2_128 => content.push(cut_blake2_128(
+                                &tuple_elements[index],
+                                key_trimmed_data,
+                                &mut position,
+                            )?),
+                            StorageHasher::Blake2_256 => content.push(cut_blake2_256(
+                                &tuple_elements[index],
+                                key_trimmed_data,
+                                &mut position,
+                            )?),
                             StorageHasher::Blake2_128Concat => content.push(check_blake2_128(
                                 &tuple_elements[index],
                                 key_trimmed_data,
+                                &mut position,
                                 registry,
                             )?),
-                            StorageHasher::Twox128 => content
-                                .push(cut_twox_128(&tuple_elements[index], key_trimmed_data)?),
-                            StorageHasher::Twox256 => content
-                                .push(cut_twox_256(&tuple_elements[index], key_trimmed_data)?),
+                            StorageHasher::Twox128 => content.push(cut_twox_128(
+                                &tuple_elements[index],
+                                key_trimmed_data,
+                                &mut position,
+                            )?),
+                            StorageHasher::Twox256 => content.push(cut_twox_256(
+                                &tuple_elements[index],
+                                key_trimmed_data,
+                                &mut position,
+                            )?),
                             StorageHasher::Twox64Concat => content.push(check_twox_64(
                                 &tuple_elements[index],
                                 key_trimmed_data,
+                                &mut position,
                                 registry,
                             )?),
                             StorageHasher::Identity => {
                                 let parsed_key = decode_with_type(
                                     &Ty::Symbol(&tuple_elements[index]),
                                     key_trimmed_data,
+                                    &mut position,
                                     registry,
                                     Propagated::new(),
                                 )?;
@@ -292,7 +309,7 @@ pub fn process_key(
             }
         }
     };
-    if key_trimmed_data.is_empty() {
+    if position == key_trimmed_data.len() {
         Ok(key_data)
     } else {
         Err(ParserError::KeyPartsUnused)

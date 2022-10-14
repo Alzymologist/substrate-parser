@@ -466,10 +466,12 @@ pub struct ShortSpecs {
 }
 
 /// Cut a signable transaction data into call part and extensions part.
-pub fn cut_call_extensions(data: &mut Vec<u8>) -> Result<(Vec<u8>, Vec<u8>), SignableError> {
-    let call_length = get_compact::<u32>(data).map_err(|_| SignableError::CutSignable)? as usize;
-    match data.get(..call_length) {
-        Some(a) => Ok((a.to_vec(), data[call_length..].to_vec())),
+pub fn cut_call_extensions(data: &[u8]) -> Result<(Vec<u8>, Vec<u8>), SignableError> {
+    let mut position: usize = 0;
+    let call_length =
+        get_compact::<u32>(data, &mut position).map_err(|_| SignableError::CutSignable)? as usize;
+    match data.get(position..position + call_length) {
+        Some(a) => Ok((a.to_vec(), data[position + call_length..].to_vec())),
         None => Err(SignableError::CutSignable),
     }
 }
@@ -512,7 +514,7 @@ impl TransactionParsed {
 
 /// Parse a signable transaction.
 pub fn parse_transaction(
-    data: &mut Vec<u8>,
+    data: &[u8],
     meta_input: MetaInput,
     genesis_hash: H256,
 ) -> Result<TransactionParsed, SignableError> {
@@ -520,14 +522,14 @@ pub fn parse_transaction(
 
     // if unable to separate call date and extensions, then there is
     // some fundamental flaw is in transaction itself
-    let (mut call_data, mut extensions_data) = cut_call_extensions(data)?;
+    let (call_data, extensions_data) = cut_call_extensions(data)?;
 
     // try parsing extensions, check that spec version and genesis hash are
     // correct
-    let extensions = decode_extensions(&mut extensions_data, &checked_metadata, genesis_hash)?;
+    let extensions = decode_extensions(&extensions_data, &checked_metadata, genesis_hash)?;
 
     // try parsing call data
-    let call_result = decode_as_call(&mut call_data, checked_metadata.meta_v14);
+    let call_result = decode_as_call(&call_data, checked_metadata.meta_v14);
 
     Ok(TransactionParsed {
         call_result,
@@ -540,11 +542,18 @@ pub fn parse_transaction(
 /// All data is expected to be used for the decoding.
 pub fn decode_blob_as_type(
     ty_symbol: &UntrackedSymbol<std::any::TypeId>,
-    data: &mut Vec<u8>,
+    data: &[u8],
     registry: &PortableRegistry,
 ) -> Result<ExtendedData, ParserError> {
-    let out = decode_with_type(&Ty::Symbol(ty_symbol), data, registry, Propagated::new())?;
-    if !data.is_empty() {
+    let mut position: usize = 0;
+    let out = decode_with_type(
+        &Ty::Symbol(ty_symbol),
+        data,
+        &mut position,
+        registry,
+        Propagated::new(),
+    )?;
+    if position != data.len() {
         Err(ParserError::SomeDataNotUsedBlob)
     } else {
         Ok(out)
