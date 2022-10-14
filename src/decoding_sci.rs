@@ -10,6 +10,7 @@ use scale_info::{
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{crypto::AccountId32, H160, H512};
 
+use crate::Positions;
 use crate::cards::{
     Call, Documented, Event, ExtendedData, FieldData, Info, PalletSpecificData, ParsedData,
     SequenceData, SequenceRawData, VariantData,
@@ -104,10 +105,10 @@ fn decode_str(data: &[u8], position: &mut usize) -> Result<ParsedData, ParserErr
 /// an error occurs.
 ///
 /// Input data gets consumed during the decoding.
-pub fn decode_as_call(data: &[u8], meta_v14: &RuntimeMetadataV14) -> Result<Call, SignableError> {
-    let mut position: usize = 0;
+pub fn decode_as_call(data: &[u8], positions: Positions, meta_v14: &RuntimeMetadataV14) -> Result<Call, SignableError> {
+    let mut position = positions.call_start();
 
-    let pallet_index: u8 = match data.first() {
+    let pallet_index: u8 = match data.get(position) {
         Some(x) => *x,
         None => return Err(SignableError::Parsing(ParserError::DataTooShort)),
     };
@@ -146,7 +147,7 @@ pub fn decode_as_call(data: &[u8], meta_v14: &RuntimeMetadataV14) -> Result<Call
         {
             let variant_data = decode_variant(x.variants(), data, &mut position, &meta_v14.types)
                 .map_err(SignableError::Parsing)?;
-            if position != data.len() {
+            if position != positions.extensions_start() {
                 Err(SignableError::SomeDataNotUsedCall)
             } else {
                 Ok(Call(PalletSpecificData {

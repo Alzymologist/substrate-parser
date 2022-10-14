@@ -465,14 +465,30 @@ pub struct ShortSpecs {
     pub unit: String,
 }
 
-/// Cut a signable transaction data into call part and extensions part.
-pub fn cut_call_extensions(data: &[u8]) -> Result<(Vec<u8>, Vec<u8>), SignableError> {
-    let mut position: usize = 0;
-    let call_length =
-        get_compact::<u32>(data, &mut position).map_err(|_| SignableError::CutSignable)? as usize;
-    match data.get(position..position + call_length) {
-        Some(a) => Ok((a.to_vec(), data[position + call_length..].to_vec())),
-        None => Err(SignableError::CutSignable),
+pub struct Positions {
+    call_start: usize,
+    extensions_start: usize,
+}
+
+impl Positions {
+    pub fn find(data: &[u8]) -> Result<Self, SignableError> {
+        let mut call_start: usize = 0;
+        let call_length =
+            get_compact::<u32>(data, &mut call_start).map_err(|_| SignableError::CutSignable)? as usize;
+        let extensions_start = call_start + call_length;
+        match data.get(call_start..extensions_start) {
+            Some(_) => Ok(Self{
+                call_start,
+                extensions_start, 
+            }),
+            None => Err(SignableError::CutSignable),
+        }
+    }
+    pub fn call_start(&self) -> usize {
+        self.call_start
+    }
+    pub fn extensions_start(&self) -> usize {
+        self.extensions_start
     }
 }
 
@@ -522,14 +538,14 @@ pub fn parse_transaction(
 
     // if unable to separate call date and extensions, then there is
     // some fundamental flaw is in transaction itself
-    let (call_data, extensions_data) = cut_call_extensions(data)?;
+    let positions = Positions::find(data)?;
 
     // try parsing extensions, check that spec version and genesis hash are
     // correct
-    let extensions = decode_extensions(&extensions_data, &checked_metadata, genesis_hash)?;
+    let extensions = decode_extensions(data, positions.extensions_start(), &checked_metadata, genesis_hash)?;
 
     // try parsing call data
-    let call_result = decode_as_call(&call_data, checked_metadata.meta_v14);
+    let call_result = decode_as_call(data, positions, checked_metadata.meta_v14);
 
     Ok(TransactionParsed {
         call_result,
