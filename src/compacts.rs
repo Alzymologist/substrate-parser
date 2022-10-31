@@ -45,7 +45,7 @@ where
     }
     match out {
         Some(c) => Ok(c),
-        None => Err(ParserError::NoCompact{position}),
+        None => Err(ParserError::NoCompact { position }),
     }
 }
 

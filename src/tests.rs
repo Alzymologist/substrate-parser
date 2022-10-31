@@ -706,7 +706,7 @@ fn parser_error_2() {
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
-    let call_error_known = SignableError::SomeDataNotUsedCall{from: 26, to: 42};
+    let call_error_known = SignableError::SomeDataNotUsedCall { from: 26, to: 42 };
     assert_eq!(call_error_known, call_error);
 }
 
@@ -719,7 +719,7 @@ fn parser_error3() {
         H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
     )
     .unwrap_err();
-    let signable_error_known = SignableError::SomeDataNotUsedExtensions{from: 118};
+    let signable_error_known = SignableError::SomeDataNotUsedExtensions { from: 118 };
     assert_eq!(signable_error_known, signable_error);
 }
 
@@ -733,7 +733,7 @@ fn parser_error_4() {
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
-    let call_error_known = SignableError::Parsing(ParserError::NoCompact{position: 36});
+    let call_error_known = SignableError::Parsing(ParserError::NoCompact { position: 36 });
     assert_eq!(call_error_known, call_error);
 }
 
@@ -747,7 +747,8 @@ fn parser_error_5() {
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
-    let call_error_known = SignableError::Parsing(ParserError::UnexpectedEnumVariant{position: 3});
+    let call_error_known =
+        SignableError::Parsing(ParserError::UnexpectedEnumVariant { position: 3 });
     assert_eq!(call_error_known, call_error);
 }
 

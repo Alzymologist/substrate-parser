@@ -152,7 +152,10 @@ pub fn decode_as_call(
             let variant_data = decode_variant(x.variants(), data, &mut position, &meta_v14.types)
                 .map_err(SignableError::Parsing)?;
             if position != positions.extensions_start() {
-                Err(SignableError::SomeDataNotUsedCall{from: position, to: positions.extensions_start()})
+                Err(SignableError::SomeDataNotUsedCall {
+                    from: position,
+                    to: positions.extensions_start(),
+                })
             } else {
                 Ok(Call(PalletSpecificData {
                     pallet_info,
@@ -347,7 +350,11 @@ pub fn decode_with_type(
                                 ParsedData::Option(Some(Box::new(ParsedData::PrimitiveBool(false))))
                             }
                             Ok(OptionBool(None)) => ParsedData::Option(None),
-                            Err(_) => return Err(ParserError::UnexpectedOptionVariant{position: *position}),
+                            Err(_) => {
+                                return Err(ParserError::UnexpectedOptionVariant {
+                                    position: *position,
+                                })
+                            }
                         };
                         *position += 1;
                         Ok(ExtendedData {
@@ -380,7 +387,9 @@ pub fn decode_with_type(
                             info: propagated.info,
                         })
                     }
-                    Some(_) => Err(ParserError::UnexpectedOptionVariant{position: *position}),
+                    Some(_) => Err(ParserError::UnexpectedOptionVariant {
+                        position: *position,
+                    }),
                     None => Err(ParserError::DataTooShort),
                 },
             }
@@ -600,7 +609,7 @@ pub(crate) fn pick_variant<'a>(
     }
     match found_variant {
         Some(a) => Ok(a),
-        None => Err(ParserError::UnexpectedEnumVariant{position}),
+        None => Err(ParserError::UnexpectedEnumVariant { position }),
     }
 }
 

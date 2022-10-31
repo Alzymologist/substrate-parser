@@ -54,7 +54,7 @@ pub fn decode_extensions(
         )
     }
     if position != data.len() {
-        return Err(SignableError::SomeDataNotUsedExtensions{from: position});
+        return Err(SignableError::SomeDataNotUsedExtensions { from: position });
     }
     check_extensions(&extensions, &checked_metadata.version, genesis_hash)?;
     Ok(extensions)

@@ -31,10 +31,10 @@ pub enum SignableError {
     Parsing(ParserError),
 
     #[error("Some call data (input positions [{from}..{to}]) remained unused after decoding.")]
-    SomeDataNotUsedCall{from: usize, to: usize},
+    SomeDataNotUsedCall { from: usize, to: usize },
 
     #[error("Some extensions data (input positions [{from}..]) remained unused after decoding.")]
-    SomeDataNotUsedExtensions{from: usize},
+    SomeDataNotUsedExtensions { from: usize },
 
     #[error("Wrong chain. Apparent genesis hash in extensions {} does not match the expected one {}.", hex::encode(as_decoded.0), hex::encode(expected.0))]
     WrongGenesisHash { as_decoded: H256, expected: H256 },
@@ -78,7 +78,7 @@ pub enum ParserError {
     CyclicMetadata(u32),
 
     #[error("Expected compact starting at position {position}, not found one.")]
-    NoCompact{position: usize},
+    NoCompact { position: usize },
 
     #[error("Declared type is not suitable BitOrder type for BitVec.")]
     NotBitOrderType,
@@ -96,10 +96,10 @@ pub enum ParserError {
     UnexpectedCompactInsides,
 
     #[error("Encountered unexpected enum variant at position {position}.")]
-    UnexpectedEnumVariant{position: usize},
+    UnexpectedEnumVariant { position: usize },
 
     #[error("Encountered unexpected Option<_> variant at position {position}.")]
-    UnexpectedOptionVariant{position: usize},
+    UnexpectedOptionVariant { position: usize },
 
     #[error("Unable to resolve type id {0} in metadata type registry.")]
     V14TypeNotResolved(u32),
