@@ -455,7 +455,7 @@ impl<'a> SpecialtyTypeChecked<'a> {
                 if let TypeDef::Variant(x) = ty.type_def() {
                     // found specific variant corresponding to pallet,
                     // get pallet name from here
-                    match pick_variant(x.variants(), data, position) {
+                    match pick_variant(x.variants(), data, *position) {
                         Ok(pallet_variant) => {
                             let pallet_name = pallet_variant.name().to_owned();
                             let pallet_fields = pallet_variant.fields();

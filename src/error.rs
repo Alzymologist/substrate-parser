@@ -30,11 +30,11 @@ pub enum SignableError {
     #[error("Parsing error. {0}")]
     Parsing(ParserError),
 
-    #[error("Some call data remained unused after decoding.")]
-    SomeDataNotUsedCall,
+    #[error("Some call data (input positions [{from}..{to}]) remained unused after decoding.")]
+    SomeDataNotUsedCall{from: usize, to: usize},
 
-    #[error("Some extensions data remained unused after decoding.")]
-    SomeDataNotUsedExtensions,
+    #[error("Some extensions data (input positions [{from}..]) remained unused after decoding.")]
+    SomeDataNotUsedExtensions{from: usize},
 
     #[error("Wrong chain. Apparent genesis hash in extensions {} does not match the expected one {}.", hex::encode(as_decoded.0), hex::encode(expected.0))]
     WrongGenesisHash { as_decoded: H256, expected: H256 },
@@ -77,14 +77,14 @@ pub enum ParserError {
     #[error("Resolving type id {0} results in cycling.")]
     CyclicMetadata(u32),
 
-    #[error("Expected compact, not found one.")]
-    NoCompact,
-
-    #[error("Declared type is not suitable BitStore type for BitVec.")]
-    NotBitStoreType,
+    #[error("Expected compact starting at position {position}, not found one.")]
+    NoCompact{position: usize},
 
     #[error("Declared type is not suitable BitOrder type for BitVec.")]
     NotBitOrderType,
+
+    #[error("Declared type is not suitable BitStore type for BitVec.")]
+    NotBitStoreType,
 
     #[error("Expected to use all data provided in decoding. Some data remained unused.")]
     SomeDataNotUsedBlob,
@@ -92,14 +92,14 @@ pub enum ParserError {
     #[error("Unable to decode data piece as {0}.")]
     TypeFailure(&'static str),
 
-    #[error("Encountered unexpected Option<_> variant.")]
-    UnexpectedOptionVariant,
-
-    #[error("Encountered unexpected enum variant.")]
-    UnexpectedEnumVariant,
-
     #[error("Unexpected type inside compact.")]
     UnexpectedCompactInsides,
+
+    #[error("Encountered unexpected enum variant at position {position}.")]
+    UnexpectedEnumVariant{position: usize},
+
+    #[error("Encountered unexpected Option<_> variant at position {position}.")]
+    UnexpectedOptionVariant{position: usize},
 
     #[error("Unable to resolve type id {0} in metadata type registry.")]
     V14TypeNotResolved(u32),

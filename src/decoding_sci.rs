@@ -152,7 +152,7 @@ pub fn decode_as_call(
             let variant_data = decode_variant(x.variants(), data, &mut position, &meta_v14.types)
                 .map_err(SignableError::Parsing)?;
             if position != positions.extensions_start() {
-                Err(SignableError::SomeDataNotUsedCall)
+                Err(SignableError::SomeDataNotUsedCall{from: position, to: positions.extensions_start()})
             } else {
                 Ok(Call(PalletSpecificData {
                     pallet_info,
@@ -347,7 +347,7 @@ pub fn decode_with_type(
                                 ParsedData::Option(Some(Box::new(ParsedData::PrimitiveBool(false))))
                             }
                             Ok(OptionBool(None)) => ParsedData::Option(None),
-                            Err(_) => return Err(ParserError::UnexpectedOptionVariant),
+                            Err(_) => return Err(ParserError::UnexpectedOptionVariant{position: *position}),
                         };
                         *position += 1;
                         Ok(ExtendedData {
@@ -380,7 +380,7 @@ pub fn decode_with_type(
                             info: propagated.info,
                         })
                     }
-                    Some(_) => Err(ParserError::UnexpectedOptionVariant),
+                    Some(_) => Err(ParserError::UnexpectedOptionVariant{position: *position}),
                     None => Err(ParserError::DataTooShort),
                 },
             }
@@ -584,9 +584,9 @@ fn decode_elements_set(
 pub(crate) fn pick_variant<'a>(
     variants: &'a [Variant<PortableForm>],
     data: &[u8],
-    position: &usize,
+    position: usize,
 ) -> Result<&'a Variant<PortableForm>, ParserError> {
-    let enum_index = match data.get(*position) {
+    let enum_index = match data.get(position) {
         Some(x) => *x,
         None => return Err(ParserError::DataTooShort),
     };
@@ -600,7 +600,7 @@ pub(crate) fn pick_variant<'a>(
     }
     match found_variant {
         Some(a) => Ok(a),
-        None => Err(ParserError::UnexpectedEnumVariant),
+        None => Err(ParserError::UnexpectedEnumVariant{position}),
     }
 }
 
@@ -613,7 +613,7 @@ fn decode_variant(
     position: &mut usize,
     registry: &PortableRegistry,
 ) -> Result<VariantData, ParserError> {
-    let found_variant = pick_variant(variants, data, position)?;
+    let found_variant = pick_variant(variants, data, *position)?;
     *position += 1;
     let variant_name = found_variant.name().to_owned();
     let variant_docs = found_variant.collect_docs();

@@ -24,7 +24,7 @@ use crate::special_types::UnsignedInteger;
 /// then the second time, for types in `additional_signed` field.
 pub fn decode_extensions(
     data: &[u8],
-    mut extensions_start_position: usize,
+    mut position: usize,
     checked_metadata: &CheckedMetadata,
     genesis_hash: H256,
 ) -> Result<Vec<ExtendedData>, SignableError> {
@@ -34,7 +34,7 @@ pub fn decode_extensions(
             decode_with_type(
                 &Ty::Symbol(&signed_extensions_metadata.ty),
                 data,
-                &mut extensions_start_position,
+                &mut position,
                 &checked_metadata.meta_v14.types,
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
@@ -46,15 +46,15 @@ pub fn decode_extensions(
             decode_with_type(
                 &Ty::Symbol(&signed_extensions_metadata.additional_signed),
                 data,
-                &mut extensions_start_position,
+                &mut position,
                 &checked_metadata.meta_v14.types,
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
             .map_err(SignableError::Parsing)?,
         )
     }
-    if extensions_start_position != data.len() {
-        return Err(SignableError::SomeDataNotUsedExtensions);
+    if position != data.len() {
+        return Err(SignableError::SomeDataNotUsedExtensions{from: position});
     }
     check_extensions(&extensions, &checked_metadata.version, genesis_hash)?;
     Ok(extensions)

@@ -698,7 +698,7 @@ fn parser_error_1() {
 
 #[test]
 fn parser_error_2() {
-    let data = hex::decode("a40403018eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480700e8764817b501b8009723000005000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f33").unwrap();
+    let data = hex::decode("a40403048eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480700e8764817b501b8009723000005000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f33").unwrap();
     let parsed = parse_transaction(
         &data,
         MetaInput::Raw(&metadata("for_tests/westend9111")),
@@ -706,12 +706,39 @@ fn parser_error_2() {
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
-    let call_error_known = SignableError::SomeDataNotUsedCall;
+    let call_error_known = SignableError::SomeDataNotUsedCall{from: 26, to: 42};
     assert_eq!(call_error_known, call_error);
 }
 
 #[test]
-fn parser_error_3() {
+fn parser_error3() {
+    let data = hex::decode("a40403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480700e8764817b501b8009723000005000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f3300").unwrap();
+    let signable_error = parse_transaction(
+        &data,
+        MetaInput::Raw(&metadata("for_tests/westend9111")),
+        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
+    )
+    .unwrap_err();
+    let signable_error_known = SignableError::SomeDataNotUsedExtensions{from: 118};
+    assert_eq!(signable_error_known, signable_error);
+}
+
+#[test]
+fn parser_error_4() {
+    let data = hex::decode("a40403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a481700e8764817b501b8009723000005000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f33").unwrap();
+    let parsed = parse_transaction(
+        &data,
+        MetaInput::Raw(&metadata("for_tests/westend9111")),
+        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
+    )
+    .unwrap();
+    let call_error = parsed.call_result.unwrap_err();
+    let call_error_known = SignableError::Parsing(ParserError::NoCompact{position: 36});
+    assert_eq!(call_error_known, call_error);
+}
+
+#[test]
+fn parser_error_5() {
     let data = hex::decode("a40403068eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480700e8764817b501b8009723000005000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f33").unwrap();
     let parsed = parse_transaction(
         &data,
@@ -720,12 +747,12 @@ fn parser_error_3() {
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
-    let call_error_known = SignableError::Parsing(ParserError::UnexpectedEnumVariant);
+    let call_error_known = SignableError::Parsing(ParserError::UnexpectedEnumVariant{position: 3});
     assert_eq!(call_error_known, call_error);
 }
 
 #[test]
-fn parser_error_4() {
+fn parser_error_6() {
     let data = hex::decode("a40403028eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480700e8764817b501b8009723000005000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f33").unwrap();
     let parsed = parse_transaction(
         &data,
