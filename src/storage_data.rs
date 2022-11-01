@@ -156,7 +156,10 @@ macro_rules! cut_hash {
                         type_id: key_ty.id(),
                     }))
                 }
-                None => Err(StorageError::Parsing(ParserError::DataTooShort)),
+                None => Err(StorageError::Parsing(ParserError::DataTooShort {
+                    position: *position,
+                    minimal_length: $hash_len,
+                })),
             }
         }
     };
@@ -195,7 +198,10 @@ macro_rules! check_hash {
                     }
                     Ok(KeyPart::Parsed(parsed_key))
                 }
-                None => Err(StorageError::Parsing(ParserError::DataTooShort)),
+                None => Err(StorageError::Parsing(ParserError::DataTooShort {
+                    position: *position,
+                    minimal_length: $hash_len,
+                })),
             }
         }
     };

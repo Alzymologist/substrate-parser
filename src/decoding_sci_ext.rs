@@ -9,6 +9,7 @@ use crate::metadata_check::CheckedMetadata;
 use crate::propagated::Propagated;
 use crate::special_indicators::SpecialtyPrimitive;
 use crate::special_types::UnsignedInteger;
+use crate::MarkedData;
 
 /// Parse signable transaction extensions with provided `V14` metadata.
 ///
@@ -23,11 +24,13 @@ use crate::special_types::UnsignedInteger;
 /// Whole `signed_extensions` set is scanned first for types in `ty` field, and
 /// then the second time, for types in `additional_signed` field.
 pub fn decode_extensions(
-    data: &[u8],
-    mut position: usize,
+    marked_data: &MarkedData,
     checked_metadata: &CheckedMetadata,
     genesis_hash: H256,
 ) -> Result<Vec<ExtendedData>, SignableError> {
+    let mut position = marked_data.extensions_start();
+    let data = marked_data.data();
+
     let mut extensions: Vec<ExtendedData> = Vec::new();
     for signed_extensions_metadata in checked_metadata.meta_v14.extrinsic.signed_extensions.iter() {
         extensions.push(

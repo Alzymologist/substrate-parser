@@ -465,27 +465,41 @@ pub struct ShortSpecs {
     pub unit: String,
 }
 
-/// Start positions for call and extensions data in the signable transaction
-/// data.
-pub struct Positions {
+/// Marked signable transaction data, with associated start positions for call
+/// and extensions data.
+pub struct MarkedData<'a> {
+    data: &'a [u8],
     call_start: usize,
     extensions_start: usize,
 }
 
-impl Positions {
+impl<'a> MarkedData<'a> {
     /// Determine `Positions` for data slice.
-    pub fn find(data: &[u8]) -> Result<Self, SignableError> {
+    pub fn mark(data: &'a [u8]) -> Result<Self, SignableError> {
         let mut call_start: usize = 0;
         let call_length = get_compact::<u32>(data, &mut call_start)
             .map_err(|_| SignableError::CutSignable)? as usize;
         let extensions_start = call_start + call_length;
         match data.get(call_start..extensions_start) {
             Some(_) => Ok(Self {
+                data,
                 call_start,
                 extensions_start,
             }),
             None => Err(SignableError::CutSignable),
         }
+    }
+
+    /// Whole signable transaction data
+    pub fn data(&self) -> &[u8] {
+        self.data
+    }
+
+    /// Signable transaction data with extensions data cut off.
+    ///
+    /// To ensure the call decoding never gets outside the call data.
+    pub(crate) fn data_no_extensions(&self) -> &[u8] {
+        &self.data[..self.extensions_start()]
     }
 
     /// Start positions for call data
@@ -545,19 +559,14 @@ pub fn parse_transaction(
 
     // if unable to separate call date and extensions, then there is
     // some fundamental flaw is in transaction itself
-    let positions = Positions::find(data)?;
+    let marked_data = MarkedData::mark(data)?;
 
     // try parsing extensions, check that spec version and genesis hash are
     // correct
-    let extensions = decode_extensions(
-        data,
-        positions.extensions_start(),
-        &checked_metadata,
-        genesis_hash,
-    )?;
+    let extensions = decode_extensions(&marked_data, &checked_metadata, genesis_hash)?;
 
     // try parsing call data
-    let call_result = decode_as_call(data, positions, checked_metadata.meta_v14);
+    let call_result = decode_as_call(&marked_data, checked_metadata.meta_v14);
 
     Ok(TransactionParsed {
         call_result,
@@ -582,7 +591,7 @@ pub fn decode_blob_as_type(
         Propagated::new(),
     )?;
     if position != data.len() {
-        Err(ParserError::SomeDataNotUsedBlob)
+        Err(ParserError::SomeDataNotUsedBlob { from: position })
     } else {
         Ok(out)
     }

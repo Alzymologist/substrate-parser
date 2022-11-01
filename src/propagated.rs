@@ -151,7 +151,7 @@ impl Checker {
     /// If not, type `id` is added into `cycle_check`.
     pub fn check_id(&mut self, id: u32) -> Result<(), ParserError> {
         if self.cycle_check.contains(&id) {
-            Err(ParserError::CyclicMetadata(id))
+            Err(ParserError::CyclicMetadata { id })
         } else {
             self.cycle_check.push(id);
             Ok(())

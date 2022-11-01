@@ -23,7 +23,7 @@ use crate::special_indicators::{
 use crate::special_types::{
     special_case_era, special_case_h256, wrap_sequence, CheckCompact, UnsignedInteger,
 };
-use crate::Positions;
+use crate::MarkedData;
 
 /// Finalize parsing of primitives (variants of [`TypeDefPrimitive`]).
 ///
@@ -74,24 +74,29 @@ fn decode_type_def_primitive(
 ///
 /// Current parser position gets changed.
 fn decode_str(data: &[u8], position: &mut usize) -> Result<ParsedData, ParserError> {
-    let str_length = get_compact::<u32>(data, position)? as usize;
-    if *position != data.len() {
-        match data.get(..str_length) {
-            Some(a) => {
-                let text = match String::from_utf8(a.to_vec()) {
-                    Ok(b) => b,
-                    Err(_) => return Err(ParserError::TypeFailure("str")),
-                };
-                let out = ParsedData::Text(text);
-                *position += str_length;
-                Ok(out)
-            }
-            None => Err(ParserError::DataTooShort),
+    let found_compact = find_compact::<u32>(data, *position)?;
+    let str_length = found_compact.compact as usize;
+    let text_start = found_compact.start_next_unit;
+    let text_end = found_compact.start_next_unit + str_length;
+    match data.get(text_start..text_end) {
+        Some(a) => {
+            let text = match String::from_utf8(a.to_vec()) {
+                Ok(b) => b,
+                Err(_) => {
+                    return Err(ParserError::TypeFailure {
+                        position: *position,
+                        ty: "str",
+                    })
+                }
+            };
+            let out = ParsedData::Text(text);
+            *position = text_end;
+            Ok(out)
         }
-    } else if str_length != 0 {
-        Err(ParserError::DataTooShort)
-    } else {
-        Ok(ParsedData::Text(String::new()))
+        None => Err(ParserError::DataTooShort {
+            position: text_start,
+            minimal_length: str_length,
+        }),
     }
 }
 
@@ -106,15 +111,20 @@ fn decode_str(data: &[u8], position: &mut usize) -> Result<ParsedData, ParserErr
 /// pallet-specific calls. If the pallet-call pattern is not observed, an error
 /// occurs.
 pub fn decode_as_call(
-    data: &[u8],
-    positions: Positions,
+    marked_data: &MarkedData,
     meta_v14: &RuntimeMetadataV14,
 ) -> Result<Call, SignableError> {
-    let mut position = positions.call_start();
+    let data = marked_data.data_no_extensions();
+    let mut position = marked_data.call_start();
 
     let pallet_index: u8 = match data.get(position) {
         Some(x) => *x,
-        None => return Err(SignableError::Parsing(ParserError::DataTooShort)),
+        None => {
+            return Err(SignableError::Parsing(ParserError::DataTooShort {
+                position,
+                minimal_length: 1,
+            }))
+        }
     };
 
     position += 1;
@@ -151,10 +161,10 @@ pub fn decode_as_call(
         {
             let variant_data = decode_variant(x.variants(), data, &mut position, &meta_v14.types)
                 .map_err(SignableError::Parsing)?;
-            if position != positions.extensions_start() {
+            if position != marked_data.extensions_start() {
                 Err(SignableError::SomeDataNotUsedCall {
                     from: position,
-                    to: positions.extensions_start(),
+                    to: marked_data.extensions_start(),
                 })
             } else {
                 Ok(Call(PalletSpecificData {
@@ -362,7 +372,10 @@ pub fn decode_with_type(
                             info: propagated.info,
                         })
                     }
-                    None => Err(ParserError::DataTooShort),
+                    None => Err(ParserError::DataTooShort {
+                        position: *position,
+                        minimal_length: 1,
+                    }),
                 },
                 _ => match data.get(*position) {
                     Some(0) => {
@@ -390,7 +403,10 @@ pub fn decode_with_type(
                     Some(_) => Err(ParserError::UnexpectedOptionVariant {
                         position: *position,
                     }),
-                    None => Err(ParserError::DataTooShort),
+                    None => Err(ParserError::DataTooShort {
+                        position: *position,
+                        minimal_length: 1,
+                    }),
                 },
             }
         }
@@ -597,7 +613,12 @@ pub(crate) fn pick_variant<'a>(
 ) -> Result<&'a Variant<PortableForm>, ParserError> {
     let enum_index = match data.get(position) {
         Some(x) => *x,
-        None => return Err(ParserError::DataTooShort),
+        None => {
+            return Err(ParserError::DataTooShort {
+                position,
+                minimal_length: 1,
+            })
+        }
     };
 
     let mut found_variant = None;
@@ -669,13 +690,21 @@ fn decode_type_def_bit_sequence(
         _ => (bit_length_found / 8) + 1,
     } as usize;
 
-    let into_decode = match data.get(*position..found_compact.start_next_unit + byte_length) {
+    let bitvec_start = *position;
+    let bitvec_end = found_compact.start_next_unit + byte_length;
+
+    let into_decode = match data.get(bitvec_start..bitvec_end) {
         Some(a) => {
             let into_decode = a.to_vec();
-            *position = found_compact.start_next_unit + byte_length;
+            *position = bitvec_end;
             into_decode
         }
-        None => return Err(ParserError::DataTooShort),
+        None => {
+            return Err(ParserError::DataTooShort {
+                position: bitvec_start,
+                minimal_length: bitvec_end - bitvec_start,
+            })
+        }
     };
 
     // BitOrder
@@ -730,7 +759,10 @@ fn decode_type_def_bit_sequence(
         }
         _ => return Err(ParserError::NotBitStoreType),
     }
-    .map_err(|_| ParserError::TypeFailure("BitVec"))
+    .map_err(|_| ParserError::TypeFailure {
+        position: bitvec_start,
+        ty: "BitVec",
+    })
 }
 
 /// Type of set element, resolved as completely as possible.
@@ -819,6 +851,6 @@ pub(crate) fn resolve_ty(
 ) -> Result<&Type<PortableForm>, ParserError> {
     match registry.resolve(id) {
         Some(a) => Ok(a),
-        None => Err(ParserError::V14TypeNotResolved(id)),
+        None => Err(ParserError::V14TypeNotResolved { id }),
     }
 }

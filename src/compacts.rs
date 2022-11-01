@@ -22,7 +22,10 @@ where
     Compact<T>: Decode,
 {
     if data.len() < position {
-        return Err(ParserError::DataTooShort);
+        return Err(ParserError::OutOfRange {
+            position,
+            total_length: data.len(),
+        });
     }
     let mut out = None;
     for i in 0..(data.len() - position) {

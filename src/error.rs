@@ -71,11 +71,14 @@ pub enum StorageError {
 /// Errors in data parsing.
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ParserError {
-    #[error("Remaining data too short for expected content.")]
-    DataTooShort,
+    #[error("Data is too short for expected content. Expected at least {minimal_length} element(s) after position {position}.")]
+    DataTooShort {
+        position: usize,
+        minimal_length: usize,
+    },
 
-    #[error("Resolving type id {0} results in cycling.")]
-    CyclicMetadata(u32),
+    #[error("Resolving type id {id} in metadata type registry results in cycling.")]
+    CyclicMetadata { id: u32 },
 
     #[error("Expected compact starting at position {position}, not found one.")]
     NoCompact { position: usize },
@@ -86,11 +89,17 @@ pub enum ParserError {
     #[error("Declared type is not suitable BitStore type for BitVec.")]
     NotBitStoreType,
 
-    #[error("Expected to use all data provided in decoding. Some data remained unused.")]
-    SomeDataNotUsedBlob,
+    #[error("Position {position} is out of range for data length {total_length}.")]
+    OutOfRange {
+        position: usize,
+        total_length: usize,
+    },
 
-    #[error("Unable to decode data piece as {0}.")]
-    TypeFailure(&'static str),
+    #[error("Some data (input positions [{from}..]) remained unused after decoding.")]
+    SomeDataNotUsedBlob { from: usize },
+
+    #[error("Unable to decode data starting at position {position} as {ty}.")]
+    TypeFailure { position: usize, ty: &'static str },
 
     #[error("Unexpected type inside compact.")]
     UnexpectedCompactInsides,
@@ -101,8 +110,8 @@ pub enum ParserError {
     #[error("Encountered unexpected Option<_> variant at position {position}.")]
     UnexpectedOptionVariant { position: usize },
 
-    #[error("Unable to resolve type id {0} in metadata type registry.")]
-    V14TypeNotResolved(u32),
+    #[error("Unable to resolve type id {id} in metadata type registry.")]
+    V14TypeNotResolved { id: u32 },
 }
 
 /// Errors caused by [`RuntimeMetadataV14`](frame_metadata::v14::RuntimeMetadataV14)

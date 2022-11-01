@@ -39,11 +39,11 @@ macro_rules! impl_stable_length_mem_size_decode {
                     match data.get(*position..*position+Self::len_encoded()) {
                         Some(slice_to_decode) => {
                             let out = <Self>::decode(&mut &slice_to_decode[..])
-                                .map_err(|_| ParserError::TypeFailure(stringify!($ty)))?;
+                                .map_err(|_| ParserError::TypeFailure{position: *position, ty: stringify!($ty)})?;
                             *position += Self::len_encoded();
                             Ok(out)
                         },
-                        None => Err(ParserError::DataTooShort)
+                        None => Err(ParserError::DataTooShort{position: *position, minimal_length: Self::len_encoded()})
                     }
                 }
             }
@@ -91,7 +91,7 @@ macro_rules! impl_stable_length_big_construct {
                             *position += Self::len_encoded();
                             Ok(out)
                         },
-                        None => Err(ParserError::DataTooShort),
+                        None => Err(ParserError::DataTooShort{position: *position, minimal_length: Self::len_encoded()}),
                     }
                 }
             }
@@ -117,9 +117,15 @@ impl StableLength for char {
                     *position += Self::len_encoded();
                     Ok(ch)
                 }
-                None => Err(ParserError::TypeFailure("char")),
+                None => Err(ParserError::TypeFailure {
+                    position: *position,
+                    ty: "char",
+                }),
             },
-            None => Err(ParserError::DataTooShort),
+            None => Err(ParserError::DataTooShort {
+                position: *position,
+                minimal_length: Self::len_encoded(),
+            }),
         }
     }
 }
@@ -139,7 +145,7 @@ macro_rules! impl_stable_length_array {
                             *position += Self::len_encoded();
                             Ok(out)
                         },
-                        None => Err(ParserError::DataTooShort),
+                        None => Err(ParserError::DataTooShort{position: *position, minimal_length: Self::len_encoded()}),
                     }
                 }
             }
@@ -178,7 +184,7 @@ macro_rules! impl_stable_length_hash {
                             *position += Self::len_encoded();
                             Ok(out)
                         },
-                        None => Err(ParserError::DataTooShort),
+                        None => Err(ParserError::DataTooShort{position: *position, minimal_length: Self::len_encoded()}),
                     }
                 }
             }
@@ -420,15 +426,28 @@ pub(crate) fn special_case_era(
         Some(0) => (&data[*position..*position + 1], 1),
         Some(_) => match data.get(*position..*position + 2) {
             Some(a) => (a, 2),
-            None => return Err(ParserError::DataTooShort),
+            None => {
+                return Err(ParserError::DataTooShort {
+                    position: *position,
+                    minimal_length: 2,
+                })
+            }
         },
-        None => return Err(ParserError::DataTooShort),
+        None => {
+            return Err(ParserError::DataTooShort {
+                position: *position,
+                minimal_length: 1,
+            })
+        }
     };
     match Era::decode(&mut &era_data[..]) {
         Ok(a) => {
             *position += position_modifier;
             Ok(ParsedData::Era(a))
         }
-        Err(_) => Err(ParserError::TypeFailure("Era")),
+        Err(_) => Err(ParserError::TypeFailure {
+            position: *position,
+            ty: "Era",
+        }),
     }
 }

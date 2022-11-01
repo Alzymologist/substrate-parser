@@ -523,7 +523,7 @@ fn storage_2_spoiled_digest() {
     }
 
     let reply = decode_blob_as_type(&system_digest_ty, &data, &metadata.types).unwrap_err();
-    let reply_known = ParserError::CyclicMetadata(11);
+    let reply_known = ParserError::CyclicMetadata { id: 11 };
     assert_eq!(reply_known, reply);
 }
 
@@ -762,6 +762,17 @@ fn parser_error_6() {
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
-    let call_error_known = SignableError::Parsing(ParserError::DataTooShort);
+
+    // `0x02` in position 3 indicates that `Raw` variant of `MultiAddress` is
+    // used.
+    //
+    // `Raw` is `Vec<u8>`, first the shortest compact is found (`0x8eaf0415`,
+    //  i.e. `88157155` `u8` elements are expected to be found).  When all call
+    // data is exhausted, i.e. after element `42` of the data, no new `u8`
+    // element could be found, therefore the error.
+    let call_error_known = SignableError::Parsing(ParserError::DataTooShort {
+        position: 42,
+        minimal_length: 1,
+    });
     assert_eq!(call_error_known, call_error);
 }
