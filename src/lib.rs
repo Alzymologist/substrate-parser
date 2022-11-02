@@ -12,15 +12,16 @@
 //!
 //! Chain data is [SCALE-encoded](https://docs.substrate.io/reference/scale-codec/).
 //! Data blobs entering decoder are expected to be decoded completely: all
-//! provided `&[u8]` data must be used in decoding with no data remaining.
+//! provided `&[u8]` data must be used in decoding with no data remaining
+//! unparsed.
 //!
-//! For decoding the entry type (such as the type of particular storage item) or
-//! the data internal structure used to find the entry type in metadata (as is
-//! the case for signable transactions) must be known.
+//! For decoding either the entry type (such as the type of particular storage
+//! item) or the data internal structure used to find the entry type in metadata
+//! (as is the case for signable transactions) must be known.
 //!
 //! Entry type gets resolved into constituting types with metadata in-built
-//! types registry and appropriate `&[u8]` chunks get cut from input blob and
-//! decoded. The process follows what the `decode` from the
+//! types registry and appropriate `&[u8]` chunks are selected from input blob
+//! and decoded. The process follows what the `decode` from the
 //! [SCALE codec](parity_scale_codec) does, except the types that go into the
 //! decoder are found dynamically during the decoding itself.
 //!
@@ -421,10 +422,11 @@
 //!  assert_eq!(parsed.extensions, expected_extensions_data);
 //!```
 //!
-//! Parsed data could be transformed into flat formatted cards with `card`
-//! method.
+//! Parsed data could be transformed into set of flat and formatted
+//! [`ExtendedCard`] cards using `card` method.
 //!
-//! Cards could be printed by `show` or `show_with_docs` into readable Strings.
+//! Cards could be printed using `show` or `show_with_docs` methods into
+//! readable Strings.
 #![deny(unused_crate_dependencies)]
 
 use scale_info::{interner::UntrackedSymbol, PortableRegistry};
@@ -474,7 +476,7 @@ pub struct MarkedData<'a> {
 }
 
 impl<'a> MarkedData<'a> {
-    /// Determine `Positions` for data slice.
+    /// Make `MarkedData` from a signable transaction data slice.
     pub fn mark(data: &'a [u8]) -> Result<Self, SignableError> {
         let mut call_start: usize = 0;
         let call_length = get_compact::<u32>(data, &mut call_start)
@@ -490,24 +492,28 @@ impl<'a> MarkedData<'a> {
         }
     }
 
-    /// Whole signable transaction data
+    /// Whole signable transaction data.
     pub fn data(&self) -> &[u8] {
         self.data
     }
 
     /// Signable transaction data with extensions data cut off.
     ///
-    /// To ensure the call decoding never gets outside the call data.
+    /// Positions in resulting slice exactly match the positions in original
+    /// input.
+    ///
+    /// Extensions are cut to ensure the call decoding never gets outside the
+    /// call data.
     pub(crate) fn data_no_extensions(&self) -> &[u8] {
         &self.data[..self.extensions_start()]
     }
 
-    /// Start positions for call data
+    /// Start positions for call data.
     pub fn call_start(&self) -> usize {
         self.call_start
     }
 
-    /// Start positions for extensions data
+    /// Start positions for extensions data.
     pub fn extensions_start(&self) -> usize {
         self.extensions_start
     }
@@ -557,7 +563,7 @@ pub fn parse_transaction(
 ) -> Result<TransactionParsed, SignableError> {
     let checked_metadata = meta_input.checked().map_err(SignableError::MetaVersion)?;
 
-    // if unable to separate call date and extensions, then there is
+    // unable to separate call date and extensions,
     // some fundamental flaw is in transaction itself
     let marked_data = MarkedData::mark(data)?;
 

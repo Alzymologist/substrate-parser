@@ -83,11 +83,11 @@ pub enum ParserError {
     #[error("Expected compact starting at position {position}, not found one.")]
     NoCompact { position: usize },
 
-    #[error("Declared type is not suitable BitOrder type for BitVec.")]
-    NotBitOrderType,
+    #[error("BitVec type {id} in metadata type registry has unexpected BitOrder type.")]
+    NotBitOrderType { id: u32 },
 
-    #[error("Declared type is not suitable BitStore type for BitVec.")]
-    NotBitStoreType,
+    #[error("BitVec type {id} in metadata type registry has unexpected BitStore type.")]
+    NotBitStoreType { id: u32 },
 
     #[error("Position {position} is out of range for data length {total_length}.")]
     OutOfRange {
@@ -101,8 +101,8 @@ pub enum ParserError {
     #[error("Unable to decode data starting at position {position} as {ty}.")]
     TypeFailure { position: usize, ty: &'static str },
 
-    #[error("Unexpected type inside compact.")]
-    UnexpectedCompactInsides,
+    #[error("Compact type {id} in metadata type registry has unexpected type inside compact.")]
+    UnexpectedCompactInsides { id: u32 },
 
     #[error("Encountered unexpected enum variant at position {position}.")]
     UnexpectedEnumVariant { position: usize },

@@ -214,7 +214,7 @@ macro_rules! impl_unsigned_integer {
             impl UnsignedInteger for $ty {
                 fn parse_unsigned_integer(data: &[u8], position: &mut usize, specialty_set: SpecialtySet) -> Result<ParsedData, ParserError> {
                     let value = {
-                        if specialty_set.is_compact {get_compact::<Self>(data, position)?}
+                        if specialty_set.compact_at.is_some() {get_compact::<Self>(data, position)?}
                         else {<Self>::cut_and_decode(data, position)?}
                     };
                     Ok(ParsedData::$enum_variant{value, specialty: specialty_set.primitive()})
@@ -239,7 +239,7 @@ pub(crate) trait CheckCompact: StableLength {
     fn parse_check_compact(
         data: &[u8],
         position: &mut usize,
-        is_compact: bool,
+        compact_at: Option<u32>,
     ) -> Result<ParsedData, ParserError>;
 }
 
@@ -248,9 +248,9 @@ macro_rules! impl_allow_compact {
     ($($perthing: ident), *) => {
         $(
             impl CheckCompact for $perthing where $perthing: HasCompact {
-                fn parse_check_compact(data: &[u8], position: &mut usize, is_compact: bool) -> Result<ParsedData, ParserError> {
+                fn parse_check_compact(data: &[u8], position: &mut usize, compact_at: Option<u32>) -> Result<ParsedData, ParserError> {
                     let value = {
-                        if is_compact {get_compact::<Self>(data, position)?}
+                        if compact_at.is_some() {get_compact::<Self>(data, position)?}
                         else {<Self>::cut_and_decode(data, position)?}
                     };
                     Ok(ParsedData::$perthing(value))
@@ -267,9 +267,9 @@ macro_rules! impl_block_compact {
     ($($ty: ty, $enum_variant: ident), *) => {
         $(
             impl CheckCompact for $ty {
-                fn parse_check_compact(data: &[u8], position: &mut usize, is_compact: bool) -> Result<ParsedData, ParserError> {
+                fn parse_check_compact(data: &[u8], position: &mut usize, compact_at: Option<u32>) -> Result<ParsedData, ParserError> {
                     let value = {
-                        if is_compact {return Err(ParserError::UnexpectedCompactInsides)}
+                        if let Some(id) = compact_at {return Err(ParserError::UnexpectedCompactInsides{id})}
                         else {<Self>::cut_and_decode(data, position)?}
                     };
                     Ok(ParsedData::$enum_variant(value))

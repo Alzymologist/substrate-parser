@@ -13,18 +13,21 @@ use crate::special_indicators::{Hint, SpecialtyH256, SpecialtyPrimitive};
 /// further processing.
 #[derive(Clone, Copy, Debug)]
 pub struct SpecialtySet {
-    /// Compact flag.
+    /// Compact info.
     ///
-    /// True if the parser has encountered type with a type definition
-    /// `TypeDef::Compact(_)` for this `SpecialtySet` instance. Once true, never
-    /// gets removed from an instance.
+    /// `Some(id)` if the parser has encountered type with definition
+    /// `TypeDef::Compact(_)` for this `SpecialtySet` instance.
     ///
-    /// Must cause parser error if `true`, but the type inside compact has no
+    /// `id` corresponds to type id in metadata types `Registry`.
+    ///
+    /// Once `Some(_)`, never changes back to `None`.
+    ///
+    /// Must cause parser error if `Some(_)`, but the type inside compact has no
     /// [`HasCompact`](parity_scale_codec::HasCompact) implementation.
     ///
-    /// Currently is allowed to be `true` for unsigned integers and single-field
-    /// structs with unsigned integer as a field.
-    pub is_compact: bool,
+    /// Currently is allowed to be `Some(_)` for unsigned integers and
+    /// single-field structs with unsigned integer as a field.
+    pub compact_at: Option<u32>,
 
     /// `Hint` the parser has encountered for this `SpecialtySet` instance.
     ///
@@ -39,15 +42,16 @@ impl SpecialtySet {
     /// Initiate new `SpecialtySet`.
     pub fn new() -> Self {
         Self {
-            is_compact: false,
+            compact_at: None,
             hint: Hint::None,
         }
     }
 
-    /// Check that `is_compact` field is not `true`.
+    /// Check that `compact_at` field is not `Some(_)`, i.e. there was no
+    /// compact type encountered.
     pub fn reject_compact(&self) -> Result<(), ParserError> {
-        if self.is_compact {
-            Err(ParserError::UnexpectedCompactInsides)
+        if let Some(id) = self.compact_at {
+            Err(ParserError::UnexpectedCompactInsides { id })
         } else {
             Ok(())
         }
@@ -98,8 +102,8 @@ impl Checker {
         }
     }
 
-    /// Check that `is_compact` field in associated [`SpecialtySet`] is not
-    /// `true`.
+    /// Check that `compact_at` field in associated [`SpecialtySet`] is not
+    /// `Some(_)`, i.e. there was no compact type encountered.
     pub fn reject_compact(&self) -> Result<(), ParserError> {
         self.specialty_set.reject_compact()
     }
@@ -192,7 +196,7 @@ impl Propagated {
         Self {
             checker: Checker {
                 specialty_set: SpecialtySet {
-                    is_compact: false,
+                    compact_at: None,
                     hint: Hint::from_ext_meta(signed_ext_meta),
                 },
                 cycle_check: Vec::new(),
@@ -233,13 +237,13 @@ impl Propagated {
         })
     }
 
-    /// Get associated `is_compact`
-    pub(crate) fn is_compact(&self) -> bool {
-        self.checker.specialty_set.is_compact
+    /// Get associated `compact_at`
+    pub(crate) fn compact_at(&self) -> Option<u32> {
+        self.checker.specialty_set.compact_at
     }
 
-    /// Check that `is_compact` field in associated [`SpecialtySet`] is not
-    /// `true`.
+    /// Check that `compact_at` field in associated [`SpecialtySet`] is not
+    /// `Some(_)`, i.e. there was no compact type encountered.
     pub(crate) fn reject_compact(&self) -> Result<(), ParserError> {
         self.checker.specialty_set.reject_compact()
     }

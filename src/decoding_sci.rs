@@ -37,10 +37,10 @@ fn decode_type_def_primitive(
 ) -> Result<ParsedData, ParserError> {
     match found_ty {
         TypeDefPrimitive::Bool => {
-            bool::parse_check_compact(data, position, specialty_set.is_compact)
+            bool::parse_check_compact(data, position, specialty_set.compact_at)
         }
         TypeDefPrimitive::Char => {
-            char::parse_check_compact(data, position, specialty_set.is_compact)
+            char::parse_check_compact(data, position, specialty_set.compact_at)
         }
         TypeDefPrimitive::Str => {
             specialty_set.reject_compact()?;
@@ -52,17 +52,17 @@ fn decode_type_def_primitive(
         TypeDefPrimitive::U64 => u64::parse_unsigned_integer(data, position, specialty_set),
         TypeDefPrimitive::U128 => u128::parse_unsigned_integer(data, position, specialty_set),
         TypeDefPrimitive::U256 => {
-            BigUint::parse_check_compact(data, position, specialty_set.is_compact)
+            BigUint::parse_check_compact(data, position, specialty_set.compact_at)
         }
-        TypeDefPrimitive::I8 => i8::parse_check_compact(data, position, specialty_set.is_compact),
-        TypeDefPrimitive::I16 => i16::parse_check_compact(data, position, specialty_set.is_compact),
-        TypeDefPrimitive::I32 => i32::parse_check_compact(data, position, specialty_set.is_compact),
-        TypeDefPrimitive::I64 => i64::parse_check_compact(data, position, specialty_set.is_compact),
+        TypeDefPrimitive::I8 => i8::parse_check_compact(data, position, specialty_set.compact_at),
+        TypeDefPrimitive::I16 => i16::parse_check_compact(data, position, specialty_set.compact_at),
+        TypeDefPrimitive::I32 => i32::parse_check_compact(data, position, specialty_set.compact_at),
+        TypeDefPrimitive::I64 => i64::parse_check_compact(data, position, specialty_set.compact_at),
         TypeDefPrimitive::I128 => {
-            i128::parse_check_compact(data, position, specialty_set.is_compact)
+            i128::parse_check_compact(data, position, specialty_set.compact_at)
         }
         TypeDefPrimitive::I256 => {
-            BigInt::parse_check_compact(data, position, specialty_set.is_compact)
+            BigInt::parse_check_compact(data, position, specialty_set.compact_at)
         }
     }
 }
@@ -102,9 +102,11 @@ fn decode_str(data: &[u8], position: &mut usize) -> Result<ParsedData, ParserErr
 
 /// Parse call part of the signable transaction with provided `V14` metadata.
 ///
-/// Call data is contained within the provided [`Positions`] determined
-/// elsewhere. Call data is expected to have proper call structure and to be
-/// decoded completely, with no data left.
+/// Signable transaction data is input already as [`MarkedData`] with determined
+/// start and end positions for the call data.
+///
+/// Call data is expected to have proper call structure and to be decoded
+/// completely, with no data left.
 ///
 /// The first `u8` element of the call data is a pallet index, the type within
 /// corresponding `PalletCallMetadata` is expected to be an enum with
@@ -221,9 +223,9 @@ pub fn decode_with_type(
     registry: &PortableRegistry,
     mut propagated: Propagated,
 ) -> Result<ExtendedData, ParserError> {
-    let ty = match ty_input {
-        Ty::Resolved(resolved) => resolved,
-        Ty::Symbol(ty_symbol) => resolve_ty(registry, ty_symbol.id())?,
+    let (ty, id) = match ty_input {
+        Ty::Resolved { ty, id } => (*ty, *id),
+        Ty::Symbol(ty_symbol) => (resolve_ty(registry, ty_symbol.id())?, ty_symbol.id()),
     };
     let info_ty = Info::from_ty(ty);
     propagated.add_info(&info_ty);
@@ -298,7 +300,7 @@ pub fn decode_with_type(
             }),
             TypeDef::Compact(x) => {
                 propagated.reject_compact()?;
-                propagated.checker.specialty_set.is_compact = true;
+                propagated.checker.specialty_set.compact_at = Some(id);
                 propagated.checker.check_id(x.type_param().id())?;
                 decode_with_type(
                     &Ty::Symbol(x.type_param()),
@@ -311,13 +313,13 @@ pub fn decode_with_type(
             TypeDef::BitSequence(x) => {
                 propagated.reject_compact()?;
                 Ok(ExtendedData {
-                    data: decode_type_def_bit_sequence(x, data, position, registry)?,
+                    data: decode_type_def_bit_sequence(x, id, data, position, registry)?,
                     info: propagated.info,
                 })
             }
         },
         SpecialtyTypeChecked::AccountId32 => Ok(ExtendedData {
-            data: AccountId32::parse_check_compact(data, position, propagated.is_compact())?,
+            data: AccountId32::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::Era => {
@@ -328,7 +330,7 @@ pub fn decode_with_type(
             })
         }
         SpecialtyTypeChecked::H160 => Ok(ExtendedData {
-            data: H160::parse_check_compact(data, position, propagated.is_compact())?,
+            data: H160::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::H256 => {
@@ -343,7 +345,7 @@ pub fn decode_with_type(
             })
         }
         SpecialtyTypeChecked::H512 => Ok(ExtendedData {
-            data: H512::parse_check_compact(data, position, propagated.is_compact())?,
+            data: H512::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::Option(ty_symbol) => {
@@ -388,7 +390,10 @@ pub fn decode_with_type(
                     Some(1) => {
                         *position += 1;
                         let extended_option_data = decode_with_type(
-                            &Ty::Resolved(param_ty),
+                            &Ty::Resolved {
+                                ty: param_ty,
+                                id: ty_symbol.id(),
+                            },
                             data,
                             position,
                             registry,
@@ -437,30 +442,30 @@ pub fn decode_with_type(
             }
         }
         SpecialtyTypeChecked::Perbill => Ok(ExtendedData {
-            data: Perbill::parse_check_compact(data, position, propagated.is_compact())?,
+            data: Perbill::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::Percent => Ok(ExtendedData {
-            data: Percent::parse_check_compact(data, position, propagated.is_compact())?,
+            data: Percent::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::Permill => Ok(ExtendedData {
-            data: Permill::parse_check_compact(data, position, propagated.is_compact())?,
+            data: Permill::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::Perquintill => Ok(ExtendedData {
-            data: Perquintill::parse_check_compact(data, position, propagated.is_compact())?,
+            data: Perquintill::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::PerU16 => Ok(ExtendedData {
-            data: PerU16::parse_check_compact(data, position, propagated.is_compact())?,
+            data: PerU16::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::PublicEd25519 => Ok(ExtendedData {
             data: sp_core::ed25519::Public::parse_check_compact(
                 data,
                 position,
-                propagated.is_compact(),
+                propagated.compact_at(),
             )?,
             info: propagated.info,
         }),
@@ -468,7 +473,7 @@ pub fn decode_with_type(
             data: sp_core::sr25519::Public::parse_check_compact(
                 data,
                 position,
-                propagated.is_compact(),
+                propagated.compact_at(),
             )?,
             info: propagated.info,
         }),
@@ -476,7 +481,7 @@ pub fn decode_with_type(
             data: sp_core::ecdsa::Public::parse_check_compact(
                 data,
                 position,
-                propagated.is_compact(),
+                propagated.compact_at(),
             )?,
             info: propagated.info,
         }),
@@ -484,7 +489,7 @@ pub fn decode_with_type(
             data: sp_core::ed25519::Signature::parse_check_compact(
                 data,
                 position,
-                propagated.is_compact(),
+                propagated.compact_at(),
             )?,
             info: propagated.info,
         }),
@@ -492,7 +497,7 @@ pub fn decode_with_type(
             data: sp_core::sr25519::Signature::parse_check_compact(
                 data,
                 position,
-                propagated.is_compact(),
+                propagated.compact_at(),
             )?,
             info: propagated.info,
         }),
@@ -500,7 +505,7 @@ pub fn decode_with_type(
             data: sp_core::ecdsa::Signature::parse_check_compact(
                 data,
                 position,
-                propagated.is_compact(),
+                propagated.compact_at(),
             )?,
             info: propagated.info,
         }),
@@ -575,7 +580,10 @@ fn decode_elements_set(
             let mut out: Vec<ParsedData> = Vec::new();
             for _i in 0..number_of_elements {
                 let element_extended_data = decode_with_type(
-                    &Ty::Resolved(husked.ty),
+                    &Ty::Resolved {
+                        ty: husked.ty,
+                        id: element.id(),
+                    },
                     data,
                     position,
                     registry,
@@ -679,6 +687,7 @@ const LSB0: &str = "Lsb0";
 /// Parse part of data as a bitvec.
 fn decode_type_def_bit_sequence(
     bit_ty: &TypeDefBitSequence<PortableForm>,
+    id: u32,
     data: &[u8],
     position: &mut usize,
     registry: &PortableRegistry,
@@ -714,11 +723,11 @@ fn decode_type_def_bit_sequence(
             Some(x) => match x.as_str() {
                 LSB0 => FoundBitOrder::Lsb0,
                 MSB0 => FoundBitOrder::Msb0,
-                _ => return Err(ParserError::NotBitOrderType),
+                _ => return Err(ParserError::NotBitOrderType { id }),
             },
-            None => return Err(ParserError::NotBitOrderType),
+            None => return Err(ParserError::NotBitOrderType { id }),
         },
-        _ => return Err(ParserError::NotBitOrderType),
+        _ => return Err(ParserError::NotBitOrderType { id }),
     };
 
     // BitStore
@@ -757,7 +766,7 @@ fn decode_type_def_bit_sequence(
                     .map(ParsedData::BitVecU64Msb0),
             }
         }
-        _ => return Err(ParserError::NotBitStoreType),
+        _ => return Err(ParserError::NotBitStoreType { id }),
     }
     .map_err(|_| ParserError::TypeFailure {
         position: bitvec_start,
@@ -790,11 +799,12 @@ fn husk_type<'a>(
     let entry_symbol_id = entry_symbol.id();
     checker.check_id(entry_symbol_id)?;
     checker.specialty_set = SpecialtySet {
+        compact_at: None,
         hint: Hint::None,
-        is_compact: false,
     };
 
     let mut ty = resolve_ty(registry, entry_symbol_id)?;
+    let mut id = entry_symbol_id;
     let mut info: Vec<Info> = Vec::new();
 
     loop {
@@ -808,7 +818,7 @@ fn husk_type<'a>(
                 TypeDef::Composite(x) => {
                     let fields = x.fields();
                     if fields.len() == 1 {
-                        let id = fields[0].ty().id();
+                        id = fields[0].ty().id();
                         checker.check_id(id)?;
                         ty = resolve_ty(registry, id)?;
                         if let Hint::None = checker.specialty_set.hint {
@@ -820,8 +830,8 @@ fn husk_type<'a>(
                 }
                 TypeDef::Compact(x) => {
                     checker.reject_compact()?;
-                    checker.specialty_set.is_compact = true;
-                    let id = x.type_param().id();
+                    checker.specialty_set.compact_at = Some(id);
+                    id = x.type_param().id();
                     checker.check_id(id)?;
                     ty = resolve_ty(registry, id)?;
                 }
@@ -838,7 +848,7 @@ fn husk_type<'a>(
 /// Type information used for parsing.
 pub enum Ty<'a> {
     /// Type is already resolved in metadata `Registry`.
-    Resolved(&'a Type<PortableForm>),
+    Resolved { ty: &'a Type<PortableForm>, id: u32 },
 
     /// Type is not yet resolved.
     Symbol(&'a UntrackedSymbol<std::any::TypeId>),

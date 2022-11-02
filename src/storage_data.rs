@@ -7,7 +7,9 @@
 //! `name` of
 //! [`StorageEntryMetadata`](frame_metadata::v14::StorageEntryMetadata), both
 //! processed as bytes in [`twox_128`](sp_core::twox_128) and concatenated
-//! together. Remaining path of the query key and the associated value are
+//! together.
+//!
+//! Part of the query key **after** the prefix and the associated value are
 //! described in corresponding [`StorageEntryType`] and are processed here.
 use frame_metadata::v14::{StorageEntryMetadata, StorageEntryType, StorageHasher};
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, PortableRegistry, TypeDef};
@@ -49,7 +51,8 @@ pub enum KeyData {
     /// Map storage with a set of [`StorageHasher`]s.
     ///
     /// Key contains prefix and a set of hashes. Associated key is expected to
-    /// be a tuple type.
+    /// be a tuple type, the number of fields in tuple is exactly the same as
+    /// the number of elements in `Vec<StorageHasher>`.
     TupleHash {
         /// Set of processed key elements. Has the same number of elements as
         /// the set of [`StorageHasher`]s.
