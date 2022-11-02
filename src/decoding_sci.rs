@@ -18,7 +18,7 @@ use crate::compacts::{find_compact, get_compact};
 use crate::error::{ParserError, SignableError};
 use crate::propagated::{Checker, Propagated, SpecialtySet};
 use crate::special_indicators::{
-    Hint, PalletSpecificItem, SpecialtyTypeChecked, SpecialtyTypeHinted,
+    Hint, PalletSpecificItem, SpecialtyTypeChecked, SpecialtyTypeHinted, ENUM_INDEX_ENCODED_LEN,
 };
 use crate::special_types::{
     special_case_era, special_case_h256, wrap_sequence, CheckCompact, UnsignedInteger,
@@ -124,12 +124,12 @@ pub fn decode_as_call(
         None => {
             return Err(SignableError::Parsing(ParserError::DataTooShort {
                 position,
-                minimal_length: 1,
+                minimal_length: ENUM_INDEX_ENCODED_LEN,
             }))
         }
     };
 
-    position += 1;
+    position += ENUM_INDEX_ENCODED_LEN;
 
     let mut found_calls_in_pallet_type_id: Option<UntrackedSymbol<std::any::TypeId>> = None;
 
@@ -368,7 +368,7 @@ pub fn decode_with_type(
                                 })
                             }
                         };
-                        *position += 1;
+                        *position += ENUM_INDEX_ENCODED_LEN;
                         Ok(ExtendedData {
                             data: parsed_data,
                             info: propagated.info,
@@ -376,19 +376,19 @@ pub fn decode_with_type(
                     }
                     None => Err(ParserError::DataTooShort {
                         position: *position,
-                        minimal_length: 1,
+                        minimal_length: ENUM_INDEX_ENCODED_LEN,
                     }),
                 },
                 _ => match data.get(*position) {
                     Some(0) => {
-                        *position += 1;
+                        *position += ENUM_INDEX_ENCODED_LEN;
                         Ok(ExtendedData {
                             data: ParsedData::Option(None),
                             info: propagated.info,
                         })
                     }
                     Some(1) => {
-                        *position += 1;
+                        *position += ENUM_INDEX_ENCODED_LEN;
                         let extended_option_data = decode_with_type(
                             &Ty::Resolved {
                                 ty: param_ty,
@@ -410,7 +410,7 @@ pub fn decode_with_type(
                     }),
                     None => Err(ParserError::DataTooShort {
                         position: *position,
-                        minimal_length: 1,
+                        minimal_length: ENUM_INDEX_ENCODED_LEN,
                     }),
                 },
             }
@@ -624,7 +624,7 @@ pub(crate) fn pick_variant<'a>(
         None => {
             return Err(ParserError::DataTooShort {
                 position,
-                minimal_length: 1,
+                minimal_length: ENUM_INDEX_ENCODED_LEN,
             })
         }
     };
@@ -652,7 +652,7 @@ fn decode_variant(
     registry: &PortableRegistry,
 ) -> Result<VariantData, ParserError> {
     let found_variant = pick_variant(variants, data, *position)?;
-    *position += 1;
+    *position += ENUM_INDEX_ENCODED_LEN;
     let variant_name = found_variant.name().to_owned();
     let variant_docs = found_variant.collect_docs();
     let fields = decode_fields(

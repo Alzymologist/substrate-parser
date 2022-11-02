@@ -415,39 +415,45 @@ pub(crate) fn special_case_h256(
     }
 }
 
+/// Encoded length of the immortal [`Era`].
+const IMMORTAL_ERA_ENCODED_LEN: usize = 1;
+
+/// Encoded length of the mortal [`Era`].
+const MORTAL_ERA_ENCODED_LEN: usize = 2;
+
 /// Parse part of the data as [`Era`].
 ///
-/// Used data gets cut off in the process.
+/// Position marker gets changed accordingly.
 pub(crate) fn special_case_era(
     data: &[u8],
     position: &mut usize,
 ) -> Result<ParsedData, ParserError> {
-    let (era_data, position_modifier) = match data.get(*position) {
-        Some(0) => (&data[*position..*position + 1], 1),
-        Some(_) => match data.get(*position..*position + 2) {
-            Some(a) => (a, 2),
-            None => {
-                return Err(ParserError::DataTooShort {
-                    position: *position,
-                    minimal_length: 2,
-                })
+    match data.get(*position..*position + IMMORTAL_ERA_ENCODED_LEN) {
+        Some(immortal_era_data) => match Era::decode(&mut &immortal_era_data[..]) {
+            Ok(era) => {
+                *position += IMMORTAL_ERA_ENCODED_LEN;
+                Ok(ParsedData::Era(era))
             }
+            Err(_) => match data.get(*position..*position + MORTAL_ERA_ENCODED_LEN) {
+                Some(mortal_era_data) => match Era::decode(&mut &mortal_era_data[..]) {
+                    Ok(era) => {
+                        *position += MORTAL_ERA_ENCODED_LEN;
+                        Ok(ParsedData::Era(era))
+                    }
+                    Err(_) => Err(ParserError::TypeFailure {
+                        position: *position,
+                        ty: "Era",
+                    }),
+                },
+                None => Err(ParserError::DataTooShort {
+                    position: *position,
+                    minimal_length: MORTAL_ERA_ENCODED_LEN,
+                }),
+            },
         },
-        None => {
-            return Err(ParserError::DataTooShort {
-                position: *position,
-                minimal_length: 1,
-            })
-        }
-    };
-    match Era::decode(&mut &era_data[..]) {
-        Ok(a) => {
-            *position += position_modifier;
-            Ok(ParsedData::Era(a))
-        }
-        Err(_) => Err(ParserError::TypeFailure {
+        None => Err(ParserError::DataTooShort {
             position: *position,
-            ty: "Era",
+            minimal_length: IMMORTAL_ERA_ENCODED_LEN,
         }),
     }
 }

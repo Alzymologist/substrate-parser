@@ -156,6 +156,9 @@ pub const CHECK_NONCE: &str = "CheckNonce";
 /// Apparently established `identifier` across different chains.
 pub const CHARGE_TRANSACTION_PAYMENT: &str = "ChargeTransactionPayment";
 
+/// Encoded length of an enum variant index.
+pub const ENUM_INDEX_ENCODED_LEN: usize = 1;
+
 /// Specialty attributed to unsigned integer.
 ///
 /// `SpecialtyPrimitive` is stored in unsigned integer `ParsedData` and
@@ -471,7 +474,7 @@ impl<'a> SpecialtyTypeChecked<'a> {
                                                 variants_ty.type_def()
                                             {
                                                 let pallet_info = Info::from_ty(variants_ty);
-                                                *position += 1;
+                                                *position += ENUM_INDEX_ENCODED_LEN;
                                                 Self::PalletSpecific {
                                                     pallet_name,
                                                     pallet_info,
