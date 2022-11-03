@@ -55,14 +55,20 @@ pub enum StorageError {
     #[error("During the storage key parsing a part of the key remained unused.")]
     KeyPartsUnused,
 
+    #[error("Provided storage key is shorter than the expected prefix.")]
+    KeyShorterThanPrefix,
+
     #[error("Hashers length is not 1, but the key type is not a tuple.")]
     MultipleHashesNotATuple,
 
     #[error("Hashers length does not match the number of fields in a tuple key type.")]
     MultipleHashesNumberMismatch,
 
-    #[error("Parsing error. {0}")]
-    Parsing(ParserError),
+    #[error("Error parsing the storage key. {0}")]
+    ParsingKey(ParserError),
+
+    #[error("Error parsing the storage value. {0}")]
+    ParsingValue(ParserError),
 
     #[error("Plain storage key contains data other than the prefix.")]
     PlainKeyExceedsPrefix,

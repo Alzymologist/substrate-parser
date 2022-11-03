@@ -100,10 +100,8 @@ fn decode_str(data: &[u8], position: &mut usize) -> Result<ParsedData, ParserErr
     }
 }
 
-/// Parse call part of the signable transaction with provided `V14` metadata.
-///
-/// Signable transaction data is input already as [`MarkedData`] with determined
-/// start and end positions for the call data.
+/// Parse call part of the signable transaction [`MarkedData`] using provided
+/// `V14` metadata.
 ///
 /// Call data is expected to have proper call structure and to be decoded
 /// completely, with no data left.
@@ -187,8 +185,8 @@ pub fn decode_as_call(
 
 /// General decoder function. Parse part of data as [`Ty`].
 ///
-/// Processes input data byte-by-byte, cutting and decoding data chunks. Current
-/// parser position gets changed.
+/// Processes input data byte-by-byte, starting at given position, cutting and
+/// decoding data chunks. Position changes as decoding proceeds.
 ///
 /// This function is sometimes used recursively. Specifically, it could be
 /// called on inner element(s) when decoding deals with:
@@ -214,8 +212,8 @@ pub fn decode_as_call(
 /// Decoder checks the type sequence encountered when resolving individual
 /// fields, tuple elements, array elements and compacts to make sure there are
 /// no repeating types that would cause an endless cycle. Cycle tracker gets
-/// nullified if data gets cut, e.g. if new enum, vector, primitive or special
-/// type is encountered.
+/// nullified if the parser position gets changed, e.g. if new enum, vector,
+/// primitive or special type is encountered.
 pub fn decode_with_type(
     ty_input: &Ty,
     data: &[u8],

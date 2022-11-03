@@ -11,7 +11,7 @@
 use frame_metadata::v14::RuntimeMetadataV14;
 
 use crate::cards::ParsedData;
-use crate::decode_blob_as_type;
+use crate::decode_all_as_type;
 use crate::error::MetaVersionError;
 use crate::special_indicators::SpecialtyPrimitive;
 
@@ -64,7 +64,7 @@ impl<'a> MetaInput<'a> {
                 }
                 let mut spec_version = None;
                 match runtime_version_data_and_ty {
-                    Some((value, ty)) => match decode_blob_as_type(&ty, &value, &meta_v14.types) {
+                    Some((value, ty)) => match decode_all_as_type(&ty, &value, &meta_v14.types) {
                         Ok(extended_data) => {
                             if let ParsedData::Composite(fields) = extended_data.data {
                                 for field in fields.iter() {

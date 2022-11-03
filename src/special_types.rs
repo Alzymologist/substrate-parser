@@ -20,14 +20,15 @@ pub(crate) trait StableLength: Sized {
     /// Encoded length for the type.
     fn len_encoded() -> usize;
 
-    /// Type value from the data.
+    /// Get type value from the data.
     ///
-    /// Cut data is consumed.
+    /// Slice of appropriate length is selected from input `&[u8]` starting at
+    /// `position`, and decoded as the type. `position` marker gets moved after
+    /// decoding.
     fn cut_and_decode(data: &[u8], position: &mut usize) -> Result<Self, ParserError>;
 }
 
-/// Implement [`StableLength`] for types with stable [`size_of`], value is
-/// decoded.
+/// Implement [`StableLength`] for types with stable [`size_of`].
 macro_rules! impl_stable_length_mem_size_decode {
     ($($ty: ty), *) => {
         $(
@@ -401,7 +402,7 @@ pub(crate) fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
 
 /// Parse part of the data as [`H256`], apply available [`SpecialtyH256`].
 ///
-/// Used data gets cut off in the process.
+/// Position marker gets changed accordingly.
 pub(crate) fn special_case_h256(
     data: &[u8],
     position: &mut usize,

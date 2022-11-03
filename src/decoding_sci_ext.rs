@@ -11,9 +11,10 @@ use crate::special_indicators::SpecialtyPrimitive;
 use crate::special_types::UnsignedInteger;
 use crate::MarkedData;
 
-/// Parse signable transaction extensions with provided `V14` metadata.
+/// Parse extensions part of the signable transaction [`MarkedData`] using
+/// provided `V14` metadata.
 ///
-/// Data gets consumed. All input data is expected to be used in parsing.
+/// Extensions data is expected to be decoded completely, with no data left.
 ///
 /// Metadata spec version and chain genesis hash are used to check that correct
 /// metadata is used for parsing.

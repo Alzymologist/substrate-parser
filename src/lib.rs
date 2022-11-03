@@ -437,7 +437,8 @@ use cards::{Call, ExtendedCard, ExtendedData};
 pub mod compacts;
 use compacts::get_compact;
 mod decoding_sci;
-pub use decoding_sci::{decode_as_call, decode_with_type, Ty};
+pub use decoding_sci::decode_as_call;
+use decoding_sci::{decode_with_type, Ty};
 mod decoding_sci_ext;
 pub use decoding_sci_ext::decode_extensions;
 pub mod error;
@@ -446,7 +447,7 @@ mod metadata_check;
 pub use metadata_check::{CheckedMetadata, MetaInput};
 pub mod printing_balance;
 mod propagated;
-pub use propagated::Propagated;
+use propagated::Propagated;
 pub mod special_indicators;
 mod special_types;
 pub mod storage_data;
@@ -580,22 +581,40 @@ pub fn parse_transaction(
     })
 }
 
-/// Decode data with a known type using `V14` metadata.
+/// Decode part of `&[u8]` slice as a known type using `V14` metadata.
+///
+/// Input `start_position` marks the first element in data that goes into the
+/// decoding.
+///
+/// Some data may remain undecoded here.
+///
+/// [`decode_all_as_type`] is suggested instead if all input is expected to be
+/// used.
+pub fn decode_as_type_at_position(
+    ty_symbol: &UntrackedSymbol<std::any::TypeId>,
+    data: &[u8],
+    registry: &PortableRegistry,
+    start_position: &mut usize,
+) -> Result<ExtendedData, ParserError> {
+    decode_with_type(
+        &Ty::Symbol(ty_symbol),
+        data,
+        start_position,
+        registry,
+        Propagated::new(),
+    )
+}
+
+/// Decode whole `&[u8]` slice as a known type using `V14` metadata.
 ///
 /// All data is expected to be used for the decoding.
-pub fn decode_blob_as_type(
+pub fn decode_all_as_type(
     ty_symbol: &UntrackedSymbol<std::any::TypeId>,
     data: &[u8],
     registry: &PortableRegistry,
 ) -> Result<ExtendedData, ParserError> {
     let mut position: usize = 0;
-    let out = decode_with_type(
-        &Ty::Symbol(ty_symbol),
-        data,
-        &mut position,
-        registry,
-        Propagated::new(),
-    )?;
+    let out = decode_as_type_at_position(ty_symbol, data, registry, &mut position)?;
     if position != data.len() {
         Err(ParserError::SomeDataNotUsedBlob { from: position })
     } else {

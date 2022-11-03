@@ -3,7 +3,7 @@ use parity_scale_codec::Decode;
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, IntoPortable, Path, Registry, TypeDef,
 };
-use sp_core::{twox_128, H256};
+use sp_core::H256;
 use std::str::FromStr;
 
 use crate::cards::{
@@ -12,7 +12,7 @@ use crate::cards::{
 use crate::error::{ParserError, SignableError};
 use crate::special_indicators::SpecialtyPrimitive;
 use crate::storage_data::{decode_as_storage_entry, KeyData, KeyPart};
-use crate::{decode_blob_as_type, parse_transaction, MetaInput, ShortSpecs};
+use crate::{decode_all_as_type, parse_transaction, MetaInput, ShortSpecs};
 
 fn metadata(filename: &str) -> RuntimeMetadataV14 {
     let metadata_hex = std::fs::read_to_string(&filename).unwrap();
@@ -430,7 +430,7 @@ fn storage_1_good() {
         panic!("Expected composite.")
     }
 
-    let reply = decode_blob_as_type(&system_digest_ty, &data, &metadata.types).unwrap();
+    let reply = decode_all_as_type(&system_digest_ty, &data, &metadata.types).unwrap();
     let reply_known = ExtendedData {
         data: ParsedData::Composite(vec![FieldData {
             field_name: Some(String::from("logs")),
@@ -522,7 +522,7 @@ fn storage_2_spoiled_digest() {
         panic!("Expected composite.")
     }
 
-    let reply = decode_blob_as_type(&system_digest_ty, &data, &metadata.types).unwrap_err();
+    let reply = decode_all_as_type(&system_digest_ty, &data, &metadata.types).unwrap_err();
     let reply_known = ParserError::CyclicMetadata { id: 11 };
     assert_eq!(reply_known, reply);
 }
@@ -531,17 +531,9 @@ fn storage_2_spoiled_digest() {
 fn storage_3_assets_with_key() {
     // The key and the value correspond to one of the westmint storage entries
     // in `Assets` pallet `Metadata` storage.
-    let hex_key = "0x682a59d51ab9e48a8c8cc418ff9708d2b5f3822e35ca2f31ce3526eab1363fd211d2df4e979aa105cf552e9544ebd2b500000000";
+    let key_input = hex::decode("682a59d51ab9e48a8c8cc418ff9708d2b5f3822e35ca2f31ce3526eab1363fd211d2df4e979aa105cf552e9544ebd2b500000000").unwrap();
 
-    // Cut off the prefix from the key.
-    let key = hex::decode(hex_key.trim_start_matches(&format!(
-        "0x{}{}",
-        hex::encode(twox_128(b"Assets")),
-        hex::encode(twox_128(b"Metadata"))
-    )))
-    .unwrap();
-
-    let value = hex::decode(
+    let value_input = hex::decode(
         "c07a64621700000000000000000000003c4f70656e5371756172652054657374104f534e540a00",
     )
     .unwrap();
@@ -552,8 +544,13 @@ fn storage_3_assets_with_key() {
     // `StorageEntryMetadata` for `Assets` pallet, `Metadata` entry.
     let storage_entry_metadata = assets_metadata_storage_entry(&metadata);
 
-    let storage =
-        decode_as_storage_entry(&key, &value, storage_entry_metadata, &metadata.types).unwrap();
+    let storage = decode_as_storage_entry(
+        &key_input,
+        &value_input,
+        storage_entry_metadata,
+        &metadata.types,
+    )
+    .unwrap();
 
     // Parsed key.
     let expected_key_data = KeyData::SingleHash {
