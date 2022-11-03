@@ -15,8 +15,8 @@ use crate::storage_data::{decode_as_storage_entry, KeyData, KeyPart};
 use crate::{decode_all_as_type, parse_transaction, MetaInput, ShortSpecs};
 
 fn metadata(filename: &str) -> RuntimeMetadataV14 {
-    let metadata_hex = std::fs::read_to_string(&filename).unwrap();
-    let metadata_vec = hex::decode(&metadata_hex.trim()).unwrap()[5..].to_vec();
+    let metadata_hex = std::fs::read_to_string(filename).unwrap();
+    let metadata_vec = hex::decode(metadata_hex.trim()).unwrap()[5..].to_vec();
     RuntimeMetadataV14::decode(&mut &metadata_vec[..]).unwrap()
 }
 
