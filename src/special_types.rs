@@ -20,14 +20,15 @@ pub(crate) trait StableLength: Sized {
     /// Encoded length for the type.
     fn len_encoded() -> usize;
 
-    /// Type value from the data.
+    /// Get type value from the data.
     ///
-    /// Cut data is consumed.
-    fn cut_and_decode(data: &mut Vec<u8>) -> Result<Self, ParserError>;
+    /// Slice of appropriate length is selected from input `&[u8]` starting at
+    /// `position`, and decoded as the type. `position` marker gets moved after
+    /// decoding.
+    fn cut_and_decode(data: &[u8], position: &mut usize) -> Result<Self, ParserError>;
 }
 
-/// Implement [`StableLength`] for types with stable [`size_of`], value is
-/// decoded.
+/// Implement [`StableLength`] for types with stable [`size_of`].
 macro_rules! impl_stable_length_mem_size_decode {
     ($($ty: ty), *) => {
         $(
@@ -35,15 +36,15 @@ macro_rules! impl_stable_length_mem_size_decode {
                 fn len_encoded() -> usize {
                     size_of::<Self>()
                 }
-                fn cut_and_decode(data: &mut Vec<u8>) -> Result<Self, ParserError> {
-                    match data.get(..Self::len_encoded()) {
+                fn cut_and_decode(data: &[u8], position: &mut usize) -> Result<Self, ParserError> {
+                    match data.get(*position..*position+Self::len_encoded()) {
                         Some(slice_to_decode) => {
                             let out = <Self>::decode(&mut &slice_to_decode[..])
-                                .map_err(|_| ParserError::TypeFailure(stringify!($ty)))?;
-                            *data = data[Self::len_encoded()..].to_vec();
+                                .map_err(|_| ParserError::TypeFailure{position: *position, ty: stringify!($ty)})?;
+                            *position += Self::len_encoded();
                             Ok(out)
                         },
-                        None => Err(ParserError::DataTooShort)
+                        None => Err(ParserError::DataTooShort{position: *position, minimal_length: Self::len_encoded()})
                     }
                 }
             }
@@ -84,14 +85,14 @@ macro_rules! impl_stable_length_big_construct {
                 fn len_encoded() -> usize {
                     BIG_LEN
                 }
-                fn cut_and_decode(data: &mut Vec<u8>) -> Result<Self, ParserError> {
-                    match data.get(0..Self::len_encoded()) {
+                fn cut_and_decode(data: &[u8], position: &mut usize) -> Result<Self, ParserError> {
+                    match data.get(*position..*position+Self::len_encoded()) {
                         Some(slice_to_big256) => {
                             let out = Self::$get(slice_to_big256);
-                            *data = data[Self::len_encoded()..].to_vec();
+                            *position += Self::len_encoded();
                             Ok(out)
                         },
-                        None => Err(ParserError::DataTooShort),
+                        None => Err(ParserError::DataTooShort{position: *position, minimal_length: Self::len_encoded()}),
                     }
                 }
             }
@@ -106,20 +107,26 @@ impl StableLength for char {
     fn len_encoded() -> usize {
         CHAR_LEN
     }
-    fn cut_and_decode(data: &mut Vec<u8>) -> Result<Self, ParserError> {
-        match data.get(0..Self::len_encoded()) {
+    fn cut_and_decode(data: &[u8], position: &mut usize) -> Result<Self, ParserError> {
+        match data.get(*position..*position + Self::len_encoded()) {
             Some(slice_to_char) => match char::from_u32(<u32>::from_le_bytes(
                 slice_to_char
                     .try_into()
                     .expect("constant length, always fit"),
             )) {
                 Some(ch) => {
-                    *data = data[Self::len_encoded()..].to_vec();
+                    *position += Self::len_encoded();
                     Ok(ch)
                 }
-                None => Err(ParserError::TypeFailure("char")),
+                None => Err(ParserError::TypeFailure {
+                    position: *position,
+                    ty: "char",
+                }),
             },
-            None => Err(ParserError::DataTooShort),
+            None => Err(ParserError::DataTooShort {
+                position: *position,
+                minimal_length: Self::len_encoded(),
+            }),
         }
     }
 }
@@ -132,14 +139,14 @@ macro_rules! impl_stable_length_array {
                 fn len_encoded() -> usize {
                     $length
                 }
-                fn cut_and_decode(data: &mut Vec<u8>) -> Result<Self, ParserError> {
-                    match data.get(0..Self::len_encoded()) {
+                fn cut_and_decode(data: &[u8], position: &mut usize) -> Result<Self, ParserError> {
+                    match data.get(*position..*position+Self::len_encoded()) {
                         Some(slice_to_array) => {
                             let out = Self::$make(slice_to_array.try_into().expect("stable known length"));
-                            *data = data[Self::len_encoded()..].to_vec();
+                            *position += Self::len_encoded();
                             Ok(out)
                         },
-                        None => Err(ParserError::DataTooShort),
+                        None => Err(ParserError::DataTooShort{position: *position, minimal_length: Self::len_encoded()}),
                     }
                 }
             }
@@ -171,14 +178,14 @@ macro_rules! impl_stable_length_hash {
                 fn len_encoded() -> usize {
                     Self::len_bytes()
                 }
-                fn cut_and_decode(data: &mut Vec<u8>) -> Result<Self, ParserError> {
-                    match data.get(0..Self::len_encoded()) {
+                fn cut_and_decode(data: &[u8], position: &mut usize) -> Result<Self, ParserError> {
+                    match data.get(*position..*position+Self::len_encoded()) {
                         Some(slice_to_array) => {
                             let out = Self(slice_to_array.try_into().expect("stable known length"));
-                            *data = data[Self::len_encoded()..].to_vec();
+                            *position += Self::len_encoded();
                             Ok(out)
                         },
-                        None => Err(ParserError::DataTooShort),
+                        None => Err(ParserError::DataTooShort{position: *position, minimal_length: Self::len_encoded()}),
                     }
                 }
             }
@@ -194,7 +201,8 @@ pub(crate) trait UnsignedInteger:
     StableLength + AsBalance + HasCompact + std::fmt::Display
 {
     fn parse_unsigned_integer(
-        data: &mut Vec<u8>,
+        data: &[u8],
+        position: &mut usize,
         specialty_set: SpecialtySet,
     ) -> Result<ParsedData, ParserError>;
     fn default_card_name() -> &'static str;
@@ -205,10 +213,10 @@ macro_rules! impl_unsigned_integer {
     ($($ty: ty, $enum_variant: ident), *) => {
         $(
             impl UnsignedInteger for $ty {
-                fn parse_unsigned_integer(data: &mut Vec<u8>, specialty_set: SpecialtySet) -> Result<ParsedData, ParserError> {
+                fn parse_unsigned_integer(data: &[u8], position: &mut usize, specialty_set: SpecialtySet) -> Result<ParsedData, ParserError> {
                     let value = {
-                        if specialty_set.is_compact {get_compact::<Self>(data)?}
-                        else {<Self>::cut_and_decode(data)?}
+                        if specialty_set.compact_at.is_some() {get_compact::<Self>(data, position)?}
+                        else {<Self>::cut_and_decode(data, position)?}
                     };
                     Ok(ParsedData::$enum_variant{value, specialty: specialty_set.primitive()})
                 }
@@ -229,8 +237,11 @@ impl_unsigned_integer!(u128, PrimitiveU128);
 /// Trait for stable length types that must be checked for propagated compact
 /// flag.
 pub(crate) trait CheckCompact: StableLength {
-    fn parse_check_compact(data: &mut Vec<u8>, is_compact: bool)
-        -> Result<ParsedData, ParserError>;
+    fn parse_check_compact(
+        data: &[u8],
+        position: &mut usize,
+        compact_at: Option<u32>,
+    ) -> Result<ParsedData, ParserError>;
 }
 
 /// Implement [`CheckCompact`] for `PerThing` that can be compact.
@@ -238,10 +249,10 @@ macro_rules! impl_allow_compact {
     ($($perthing: ident), *) => {
         $(
             impl CheckCompact for $perthing where $perthing: HasCompact {
-                fn parse_check_compact(data: &mut Vec<u8>, is_compact: bool) -> Result<ParsedData, ParserError> {
+                fn parse_check_compact(data: &[u8], position: &mut usize, compact_at: Option<u32>) -> Result<ParsedData, ParserError> {
                     let value = {
-                        if is_compact {get_compact::<Self>(data)?}
-                        else {<Self>::cut_and_decode(data)?}
+                        if compact_at.is_some() {get_compact::<Self>(data, position)?}
+                        else {<Self>::cut_and_decode(data, position)?}
                     };
                     Ok(ParsedData::$perthing(value))
                 }
@@ -257,10 +268,10 @@ macro_rules! impl_block_compact {
     ($($ty: ty, $enum_variant: ident), *) => {
         $(
             impl CheckCompact for $ty {
-                fn parse_check_compact(data: &mut Vec<u8>, is_compact: bool) -> Result<ParsedData, ParserError> {
+                fn parse_check_compact(data: &[u8], position: &mut usize, compact_at: Option<u32>) -> Result<ParsedData, ParserError> {
                     let value = {
-                        if is_compact {return Err(ParserError::UnexpectedCompactInsides)}
-                        else {<Self>::cut_and_decode(data)?}
+                        if let Some(id) = compact_at {return Err(ParserError::UnexpectedCompactInsides{id})}
+                        else {<Self>::cut_and_decode(data, position)?}
                     };
                     Ok(ParsedData::$enum_variant(value))
                 }
@@ -391,12 +402,13 @@ pub(crate) fn wrap_sequence(set: &[ParsedData]) -> Option<Sequence> {
 
 /// Parse part of the data as [`H256`], apply available [`SpecialtyH256`].
 ///
-/// Used data gets cut off in the process.
+/// Position marker gets changed accordingly.
 pub(crate) fn special_case_h256(
-    data: &mut Vec<u8>,
+    data: &[u8],
+    position: &mut usize,
     specialty_hash: SpecialtyH256,
 ) -> Result<ParsedData, ParserError> {
-    let hash = H256::cut_and_decode(data)?;
+    let hash = H256::cut_and_decode(data, position)?;
     match specialty_hash {
         SpecialtyH256::GenesisHash => Ok(ParsedData::GenesisHash(hash)),
         SpecialtyH256::BlockHash => Ok(ParsedData::BlockHash(hash)),
@@ -404,21 +416,45 @@ pub(crate) fn special_case_h256(
     }
 }
 
+/// Encoded length of the immortal [`Era`].
+const IMMORTAL_ERA_ENCODED_LEN: usize = 1;
+
+/// Encoded length of the mortal [`Era`].
+const MORTAL_ERA_ENCODED_LEN: usize = 2;
+
 /// Parse part of the data as [`Era`].
 ///
-/// Used data gets cut off in the process.
-pub(crate) fn special_case_era(data: &mut Vec<u8>) -> Result<ParsedData, ParserError> {
-    let (era_data, remaining_vector) = match data.first() {
-        Some(0) => (data[0..1].to_vec(), data[1..].to_vec()),
-        Some(_) => match data.get(0..2) {
-            Some(a) => (a.to_vec(), data[2..].to_vec()),
-            None => return Err(ParserError::DataTooShort),
+/// Position marker gets changed accordingly.
+pub(crate) fn special_case_era(
+    data: &[u8],
+    position: &mut usize,
+) -> Result<ParsedData, ParserError> {
+    match data.get(*position..*position + IMMORTAL_ERA_ENCODED_LEN) {
+        Some(immortal_era_data) => match Era::decode(&mut &immortal_era_data[..]) {
+            Ok(era) => {
+                *position += IMMORTAL_ERA_ENCODED_LEN;
+                Ok(ParsedData::Era(era))
+            }
+            Err(_) => match data.get(*position..*position + MORTAL_ERA_ENCODED_LEN) {
+                Some(mortal_era_data) => match Era::decode(&mut &mortal_era_data[..]) {
+                    Ok(era) => {
+                        *position += MORTAL_ERA_ENCODED_LEN;
+                        Ok(ParsedData::Era(era))
+                    }
+                    Err(_) => Err(ParserError::TypeFailure {
+                        position: *position,
+                        ty: "Era",
+                    }),
+                },
+                None => Err(ParserError::DataTooShort {
+                    position: *position,
+                    minimal_length: MORTAL_ERA_ENCODED_LEN,
+                }),
+            },
         },
-        None => return Err(ParserError::DataTooShort),
-    };
-    *data = remaining_vector;
-    match Era::decode(&mut &era_data[..]) {
-        Ok(a) => Ok(ParsedData::Era(a)),
-        Err(_) => Err(ParserError::TypeFailure("Era")),
+        None => Err(ParserError::DataTooShort {
+            position: *position,
+            minimal_length: IMMORTAL_ERA_ENCODED_LEN,
+        }),
     }
 }

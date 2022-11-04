@@ -2,7 +2,7 @@
 description = "parser for Substrate chain data"
 license = "GPL-3.0-or-later"
 name = "substrate_parser"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Alexander Slesarev <slesarew@gmail.com>", "Vera Abramova <abramova.vera@gmail.com>"]
 edition = "2021"
 repository = "https://github.com/Alzymologist/substrate-parser"

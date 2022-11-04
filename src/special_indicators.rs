@@ -156,6 +156,9 @@ pub const CHECK_NONCE: &str = "CheckNonce";
 /// Apparently established `identifier` across different chains.
 pub const CHARGE_TRANSACTION_PAYMENT: &str = "ChargeTransactionPayment";
 
+/// Encoded length of an enum variant index.
+pub const ENUM_INDEX_ENCODED_LEN: usize = 1;
+
 /// Specialty attributed to unsigned integer.
 ///
 /// `SpecialtyPrimitive` is stored in unsigned integer `ParsedData` and
@@ -410,7 +413,8 @@ impl<'a> SpecialtyTypeChecked<'a> {
     /// [`PalletSpecificItem`].
     pub fn from_type(
         ty: &'a Type<PortableForm>,
-        data: &mut Vec<u8>,
+        data: &[u8],
+        position: &mut usize,
         registry: &'a PortableRegistry,
     ) -> Self {
         match SpecialtyTypeHinted::from_path(ty.path()) {
@@ -454,7 +458,7 @@ impl<'a> SpecialtyTypeChecked<'a> {
                 if let TypeDef::Variant(x) = ty.type_def() {
                     // found specific variant corresponding to pallet,
                     // get pallet name from here
-                    match pick_variant(x.variants(), data) {
+                    match pick_variant(x.variants(), data, *position) {
                         Ok(pallet_variant) => {
                             let pallet_name = pallet_variant.name().to_owned();
                             let pallet_fields = pallet_variant.fields();
@@ -470,7 +474,7 @@ impl<'a> SpecialtyTypeChecked<'a> {
                                                 variants_ty.type_def()
                                             {
                                                 let pallet_info = Info::from_ty(variants_ty);
-                                                *data = data[1..].to_vec();
+                                                *position += ENUM_INDEX_ENCODED_LEN;
                                                 Self::PalletSpecific {
                                                     pallet_name,
                                                     pallet_info,

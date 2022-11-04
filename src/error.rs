@@ -30,11 +30,11 @@ pub enum SignableError {
     #[error("Parsing error. {0}")]
     Parsing(ParserError),
 
-    #[error("Some call data remained unused after decoding.")]
-    SomeDataNotUsedCall,
+    #[error("Some call data (input positions [{from}..{to}]) remained unused after decoding.")]
+    SomeDataNotUsedCall { from: usize, to: usize },
 
-    #[error("Some extensions data remained unused after decoding.")]
-    SomeDataNotUsedExtensions,
+    #[error("Some extensions data (input positions [{from}..]) remained unused after decoding.")]
+    SomeDataNotUsedExtensions { from: usize },
 
     #[error("Wrong chain. Apparent genesis hash in extensions {} does not match the expected one {}.", hex::encode(as_decoded.0), hex::encode(expected.0))]
     WrongGenesisHash { as_decoded: H256, expected: H256 },
@@ -46,20 +46,17 @@ pub enum SignableError {
     },
 }
 
-/// Errors in data parsing.
+/// Errors in storage entry parsing.
 #[derive(Debug, Eq, PartialEq, thiserror::Error)]
-pub enum ParserError {
-    #[error("Remaining data too short for expected content.")]
-    DataTooShort,
-
-    #[error("Resolving type id {0} results in cycling.")]
-    CyclicMetadata(u32),
-
+pub enum StorageError {
     #[error("Hash part of the storage key does not match the key data.")]
-    KeyPartHashMesmatch,
+    KeyPartHashMismatch,
 
     #[error("During the storage key parsing a part of the key remained unused.")]
     KeyPartsUnused,
+
+    #[error("Provided storage key is shorter than the expected prefix.")]
+    KeyShorterThanPrefix,
 
     #[error("Hashers length is not 1, but the key type is not a tuple.")]
     MultipleHashesNotATuple,
@@ -67,35 +64,60 @@ pub enum ParserError {
     #[error("Hashers length does not match the number of fields in a tuple key type.")]
     MultipleHashesNumberMismatch,
 
-    #[error("Expected compact, not found one.")]
-    NoCompact,
+    #[error("Error parsing the storage key. {0}")]
+    ParsingKey(ParserError),
 
-    #[error("Declared type is not suitable BitStore type for BitVec.")]
-    NotBitStoreType,
-
-    #[error("Declared type is not suitable BitOrder type for BitVec.")]
-    NotBitOrderType,
+    #[error("Error parsing the storage value. {0}")]
+    ParsingValue(ParserError),
 
     #[error("Plain storage key contains data other than the prefix.")]
     PlainKeyExceedsPrefix,
+}
 
-    #[error("Expected to use all data provided in decoding. Some data remained unused.")]
-    SomeDataNotUsedBlob,
+/// Errors in data parsing.
+#[derive(Debug, Eq, PartialEq, thiserror::Error)]
+pub enum ParserError {
+    #[error("Data is too short for expected content. Expected at least {minimal_length} element(s) after position {position}.")]
+    DataTooShort {
+        position: usize,
+        minimal_length: usize,
+    },
 
-    #[error("Unable to decode data piece as {0}.")]
-    TypeFailure(&'static str),
+    #[error("Resolving type id {id} in metadata type registry results in cycling.")]
+    CyclicMetadata { id: u32 },
 
-    #[error("Encountered unexpected Option<_> variant.")]
-    UnexpectedOptionVariant,
+    #[error("Expected compact starting at position {position}, not found one.")]
+    NoCompact { position: usize },
 
-    #[error("Encountered unexpected enum variant.")]
-    UnexpectedEnumVariant,
+    #[error("BitVec type {id} in metadata type registry has unexpected BitOrder type.")]
+    NotBitOrderType { id: u32 },
 
-    #[error("Unexpected type inside compact.")]
-    UnexpectedCompactInsides,
+    #[error("BitVec type {id} in metadata type registry has unexpected BitStore type.")]
+    NotBitStoreType { id: u32 },
 
-    #[error("Unable to resolve type id {0} in metadata type registry.")]
-    V14TypeNotResolved(u32),
+    #[error("Position {position} is out of range for data length {total_length}.")]
+    OutOfRange {
+        position: usize,
+        total_length: usize,
+    },
+
+    #[error("Some data (input positions [{from}..]) remained unused after decoding.")]
+    SomeDataNotUsedBlob { from: usize },
+
+    #[error("Unable to decode data starting at position {position} as {ty}.")]
+    TypeFailure { position: usize, ty: &'static str },
+
+    #[error("Compact type {id} in metadata type registry has unexpected type inside compact.")]
+    UnexpectedCompactInsides { id: u32 },
+
+    #[error("Encountered unexpected enum variant at position {position}.")]
+    UnexpectedEnumVariant { position: usize },
+
+    #[error("Encountered unexpected Option<_> variant at position {position}.")]
+    UnexpectedOptionVariant { position: usize },
+
+    #[error("Unable to resolve type id {id} in metadata type registry.")]
+    V14TypeNotResolved { id: u32 },
 }
 
 /// Errors caused by [`RuntimeMetadataV14`](frame_metadata::v14::RuntimeMetadataV14)
