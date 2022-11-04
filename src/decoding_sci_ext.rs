@@ -57,6 +57,7 @@ pub fn decode_extensions(
             .map_err(SignableError::Parsing)?,
         )
     }
+    // `position > data.len()` is ruled out elsewhere
     if position != data.len() {
         return Err(SignableError::SomeDataNotUsedExtensions { from: position });
     }
