@@ -1,16 +1,28 @@
 //! Interpret storage data.
 //!
-//! Chain storage could be queried by rpc `state_getStorage`.
+//! Chain storage could be queried by rpc `state_getStorage` using a whole key
+//! or a key prefix.
 //!
-//! Query key has prefix built from `prefix` of
+//! Storage key has prefix built from `prefix` of
 //! [`PalletStorageMetadata`](frame_metadata::v14::PalletStorageMetadata) and
 //! `name` of
 //! [`StorageEntryMetadata`](frame_metadata::v14::StorageEntryMetadata), both
 //! processed as bytes in [`twox_128`](sp_core::twox_128) and concatenated
 //! together.
 //!
-//! Part of the query key **after** the prefix and the associated value are
-//! described in corresponding [`StorageEntryType`] and are processed here.
+//! There are `Plain` and `Map` variants of [`StorageEntryType`].
+//!
+//! The storage key for `Plain` variant contains only the prefix.
+//!
+//! The storage key for `Map` has additional data after the prefix that in some
+//! cases could be parsed too. For `Map` there are multiple keys with the same
+//! prefix.
+//!
+//! Storage value contains corresponding encoded data with type described in
+//! [`StorageEntryType`].
+//!
+//! [`Storage`] contains parsed storage entry data (key, value, and general
+//! documentation associated with every key with the same prefix).
 use frame_metadata::v14::{StorageEntryMetadata, StorageEntryType, StorageHasher};
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, PortableRegistry, TypeDef};
 use sp_core::{blake2_128, twox_64};
@@ -30,7 +42,8 @@ pub struct Storage {
     /// Storage value decoded.
     pub value: ExtendedData,
 
-    /// documentation common for all storage entries with the same prefix.
+    /// [`StorageEntryMetadata`](frame_metadata::v14::StorageEntryMetadata)
+    /// documentation, common for all storage entries with the same prefix.
     pub docs: String,
 }
 
@@ -69,7 +82,7 @@ pub enum KeyPart {
     /// Hash has no concatenated raw part, no data decoded.
     Hash(HashData),
 
-    /// Hash decoded.
+    /// Data following hash decoded.
     Parsed(ExtendedData),
 }
 
@@ -157,6 +170,10 @@ pub fn decode_as_storage_entry(
     Ok(Storage { key, value, docs })
 }
 
+/// Hash processing for hashes with known length and **no** concatenated
+/// decodeable part.
+///
+/// Position moves according to the hash length. No parsing occurs here.
 macro_rules! cut_hash {
     ($func:ident, $hash_len:ident, $enum_variant:ident) => {
         fn $func(
@@ -188,6 +205,12 @@ cut_hash!(cut_blake2_256, BLAKE2_256_LEN, Blake2_256);
 cut_hash!(cut_twox_128, TWOX128_LEN, Twox128);
 cut_hash!(cut_twox_256, TWOX256_LEN, Twox256);
 
+/// Hash processing for hashes with known length and **added** concatenated
+/// decodeable part.
+///
+/// Position moves according to the hash length. Data parsing starts at first
+/// byte after the hash. `&[u8]` slice corresponding to the parsed data is
+/// hashed and matched with the hash found in the key.
 macro_rules! check_hash {
     ($func:ident, $hash_len:ident, $fn_into:ident) => {
         fn $func(

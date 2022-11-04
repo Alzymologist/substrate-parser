@@ -583,8 +583,8 @@ pub fn parse_transaction(
 
 /// Decode part of `&[u8]` slice as a known type using `V14` metadata.
 ///
-/// Input `start_position` marks the first element in data that goes into the
-/// decoding.
+/// Input `position` marks the first element in data that goes into the
+/// decoding. As decoding proceeds, `position` gets changed.
 ///
 /// Some data may remain undecoded here.
 ///
@@ -594,12 +594,12 @@ pub fn decode_as_type_at_position(
     ty_symbol: &UntrackedSymbol<std::any::TypeId>,
     data: &[u8],
     registry: &PortableRegistry,
-    start_position: &mut usize,
+    position: &mut usize,
 ) -> Result<ExtendedData, ParserError> {
     decode_with_type(
         &Ty::Symbol(ty_symbol),
         data,
-        start_position,
+        position,
         registry,
         Propagated::new(),
     )
