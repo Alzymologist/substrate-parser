@@ -185,7 +185,7 @@ pub fn decode_as_call(
 
 /// General decoder function. Parse part of data as [`Ty`].
 ///
-/// Processes input data byte-by-byte, starting at given position, cutting and
+/// Processes input data byte-by-byte, starting at given position, selecting and
 /// decoding data chunks. Position changes as decoding proceeds.
 ///
 /// This function is sometimes used recursively. Specifically, it could be
