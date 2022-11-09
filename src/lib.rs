@@ -129,7 +129,7 @@
 //!
 //! let parsed = parse_transaction(
 //!     &mut signable_data.clone(),
-//!     MetaInput::Raw(&metadata_westend9111),
+//!     MetaInput::Raw(metadata_westend9111),
 //!     westend_genesis_hash,
 //! ).unwrap();
 //!
@@ -573,7 +573,7 @@ pub fn parse_transaction(
     let extensions = decode_extensions(&marked_data, &checked_metadata, genesis_hash)?;
 
     // try parsing call data
-    let call_result = decode_as_call(&marked_data, checked_metadata.meta_v14);
+    let call_result = decode_as_call(&marked_data, &checked_metadata.meta_v14);
 
     Ok(TransactionParsed {
         call_result,
