@@ -10,7 +10,14 @@ use sp_core::{
     ecdsa, ed25519, sr25519, H160, H256, H512,
 };
 use sp_runtime::generic::Era;
-use std::fmt::Write;
+
+use crate::std::{
+    borrow::ToOwned,
+    boxed::Box,
+    fmt::Write,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use crate::printing_balance::{AsBalance, Currency};
 use crate::special_indicators::{PalletSpecificItem, SpecialtyPrimitive};

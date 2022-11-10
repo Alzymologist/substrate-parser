@@ -4,7 +4,13 @@ use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, IntoPortable, Path, Registry, TypeDef,
 };
 use sp_core::H256;
-use std::str::FromStr;
+
+use crate::std::{
+    any::TypeId,
+    str::FromStr,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use crate::cards::{
     ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
@@ -29,7 +35,7 @@ fn specs() -> ShortSpecs {
     }
 }
 
-fn system_digest_ty(meta_v14: &RuntimeMetadataV14) -> UntrackedSymbol<std::any::TypeId> {
+fn system_digest_ty(meta_v14: &RuntimeMetadataV14) -> UntrackedSymbol<TypeId> {
     let mut ty = None;
     for pallet in meta_v14.pallets.iter() {
         if let Some(ref storage) = pallet.storage {

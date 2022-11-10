@@ -427,6 +427,7 @@
 //!
 //! Cards could be printed using `show` or `show_with_docs` methods into
 //! readable Strings.
+#![no_std]
 #![deny(unused_crate_dependencies)]
 
 use scale_info::{interner::UntrackedSymbol, PortableRegistry};
@@ -454,6 +455,22 @@ pub mod storage_data;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(any(feature = "std", test))]
+#[macro_use]
+extern crate std;
+
+#[cfg(all(not(feature = "std"), not(test)))]
+#[macro_use]
+extern crate alloc as std;
+
+use crate::std::{string::String, vec::Vec};
+
+#[cfg(feature = "std")]
+use std::any::TypeId;
+
+#[cfg(not(feature = "std"))]
+use core::any::TypeId;
 
 /// Chain data necessary to display decoded data correctly.
 ///
@@ -591,7 +608,7 @@ pub fn parse_transaction(
 /// [`decode_all_as_type`] is suggested instead if all input is expected to be
 /// used.
 pub fn decode_as_type_at_position(
-    ty_symbol: &UntrackedSymbol<std::any::TypeId>,
+    ty_symbol: &UntrackedSymbol<TypeId>,
     data: &[u8],
     registry: &PortableRegistry,
     position: &mut usize,
@@ -609,7 +626,7 @@ pub fn decode_as_type_at_position(
 ///
 /// All data is expected to be used for the decoding.
 pub fn decode_all_as_type(
-    ty_symbol: &UntrackedSymbol<std::any::TypeId>,
+    ty_symbol: &UntrackedSymbol<TypeId>,
     data: &[u8],
     registry: &PortableRegistry,
 ) -> Result<ExtendedData, ParserError> {

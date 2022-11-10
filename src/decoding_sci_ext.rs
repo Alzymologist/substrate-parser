@@ -2,6 +2,12 @@
 use sp_core::H256;
 use sp_runtime::generic::Era;
 
+use crate::std::{
+    borrow::ToOwned,
+    string::{String, ToString},
+    vec::Vec,
+};
+
 use crate::cards::{ExtendedData, ParsedData};
 use crate::decoding_sci::{decode_with_type, Ty};
 use crate::error::{ExtensionsError, SignableError};
@@ -141,7 +147,7 @@ impl CollectedExt {
             era: None,
             genesis_hash: None,
             block_hash: None,
-            spec_version_printed: None,
+            spec_version_printed: None::<String>,
         }
     }
 

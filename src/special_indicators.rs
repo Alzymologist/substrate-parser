@@ -13,6 +13,14 @@ use scale_info::{
     Variant,
 };
 
+use crate::std::{borrow::ToOwned, string::String, vec::Vec};
+
+#[cfg(feature = "std")]
+use std::any::TypeId;
+
+#[cfg(not(feature = "std"))]
+use core::any::TypeId;
+
 use crate::cards::Info;
 use crate::decoding_sci::pick_variant;
 
@@ -384,7 +392,7 @@ pub enum SpecialtyTypeChecked<'a> {
     H160,
     H256,
     H512,
-    Option(&'a UntrackedSymbol<std::any::TypeId>),
+    Option(&'a UntrackedSymbol<TypeId>),
     PalletSpecific {
         pallet_name: String,
         pallet_info: Info,

@@ -10,6 +10,14 @@ use scale_info::{
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{crypto::AccountId32, H160, H512};
 
+use crate::std::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
+
+#[cfg(feature = "std")]
+use std::any::TypeId;
+
+#[cfg(not(feature = "std"))]
+use core::any::TypeId;
+
 use crate::cards::{
     Call, Documented, Event, ExtendedData, FieldData, Info, PalletSpecificData, ParsedData,
     SequenceData, SequenceRawData, VariantData,
@@ -129,7 +137,7 @@ pub fn decode_as_call(
 
     position += ENUM_INDEX_ENCODED_LEN;
 
-    let mut found_calls_in_pallet_type_id: Option<UntrackedSymbol<std::any::TypeId>> = None;
+    let mut found_calls_in_pallet_type_id: Option<UntrackedSymbol<TypeId>> = None;
 
     let mut found_pallet_name: Option<String> = None;
     for x in meta_v14.pallets.iter() {
@@ -557,7 +565,7 @@ fn decode_fields(
 ///
 /// Current parser position gets changed.
 fn decode_elements_set(
-    element: &UntrackedSymbol<std::any::TypeId>,
+    element: &UntrackedSymbol<TypeId>,
     number_of_elements: u32,
     data: &[u8],
     position: &mut usize,
@@ -790,7 +798,7 @@ struct HuskedType<'a> {
 /// Compact and single-field structs are resolved into corresponding inner
 /// types. All available [`Info`] is collected.
 fn husk_type<'a>(
-    entry_symbol: &'a UntrackedSymbol<std::any::TypeId>,
+    entry_symbol: &'a UntrackedSymbol<TypeId>,
     registry: &'a PortableRegistry,
     mut checker: Checker,
 ) -> Result<HuskedType<'a>, ParserError> {
@@ -849,7 +857,7 @@ pub enum Ty<'a> {
     Resolved { ty: &'a Type<PortableForm>, id: u32 },
 
     /// Type is not yet resolved.
-    Symbol(&'a UntrackedSymbol<std::any::TypeId>),
+    Symbol(&'a UntrackedSymbol<TypeId>),
 }
 
 /// Resolve type id in `V14` metadata types `Registry`.
