@@ -2,7 +2,6 @@
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use frame_metadata::v14::StorageEntryMetadata;
 use num_bigint::{BigInt, BigUint};
-use plot_icon::generate_png_scaled_default;
 use scale_info::{form::PortableForm, Field, Path, Type, Variant};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{
@@ -10,6 +9,9 @@ use sp_core::{
     ecdsa, ed25519, sr25519, H160, H256, H512,
 };
 use sp_runtime::generic::Era;
+
+#[cfg(feature = "std")]
+use plot_icon::generate_png_scaled_default;
 
 use crate::std::{
     borrow::ToOwned,
@@ -485,11 +487,11 @@ impl ParsedData {
             ParsedData::H256(value) => single_card!(H256, value, indent, info_flat),
             ParsedData::H512(value) => single_card!(H512, value, indent, info_flat),
             ParsedData::Id(value) => {
-                let base58 = value
-                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
-                let identicon = generate_png_scaled_default(&<[u8; 32]>::from(value.to_owned()));
                 vec![ExtendedCard {
-                    parser_card: ParserCard::Id(IdData { base58, identicon }),
+                    parser_card: ParserCard::Id(IdData::from_account_id32(
+                        value,
+                        short_specs.base58prefix,
+                    )),
                     indent,
                     info_flat,
                 }]
@@ -579,31 +581,31 @@ impl ParsedData {
                 single_card!(PrimitiveU256, value, indent, info_flat)
             }
             ParsedData::PublicEd25519(value) => {
-                let base58 = value
-                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
-                let identicon = generate_png_scaled_default(&value.0);
                 vec![ExtendedCard {
-                    parser_card: ParserCard::PublicEd25519(IdData { base58, identicon }),
+                    parser_card: ParserCard::PublicEd25519(IdData::from_public_ed25519(
+                        value,
+                        short_specs.base58prefix,
+                    )),
                     indent,
                     info_flat,
                 }]
             }
             ParsedData::PublicSr25519(value) => {
-                let base58 = value
-                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
-                let identicon = generate_png_scaled_default(&value.0);
                 vec![ExtendedCard {
-                    parser_card: ParserCard::PublicSr25519(IdData { base58, identicon }),
+                    parser_card: ParserCard::PublicSr25519(IdData::from_public_sr25519(
+                        value,
+                        short_specs.base58prefix,
+                    )),
                     indent,
                     info_flat,
                 }]
             }
             ParsedData::PublicEcdsa(value) => {
-                let base58 = value
-                    .to_ss58check_with_version(Ss58AddressFormat::custom(short_specs.base58prefix));
-                let identicon = generate_png_scaled_default(&value.0);
                 vec![ExtendedCard {
-                    parser_card: ParserCard::PublicEcdsa(IdData { base58, identicon }),
+                    parser_card: ParserCard::PublicEcdsa(IdData::from_public_ecdsa(
+                        value,
+                        short_specs.base58prefix,
+                    )),
                     indent,
                     info_flat,
                 }]
@@ -868,7 +870,55 @@ pub struct IdData {
     pub base58: String,
 
     /// Identicon `png` data
+    #[cfg(feature = "std")]
     pub identicon: Vec<u8>,
+}
+
+impl IdData {
+    #[cfg(feature = "std")]
+    pub fn from_account_id32(value: &AccountId32, base58prefix: u16) -> Self {
+        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
+        let identicon = generate_png_scaled_default(&<[u8; 32]>::from(value.to_owned()));
+        Self { base58, identicon }
+    }
+    #[cfg(not(feature = "std"))]
+    pub fn from_account_id32(value: &AccountId32, base58prefix: u16) -> Self {
+        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
+        Self { base58 }
+    }
+    #[cfg(feature = "std")]
+    pub fn from_public_ed25519(value: &ed25519::Public, base58prefix: u16) -> Self {
+        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
+        let identicon = generate_png_scaled_default(&value.0);
+        Self { base58, identicon }
+    }
+    #[cfg(not(feature = "std"))]
+    pub fn from_public_ed25519(value: &ed25519::Public, base58prefix: u16) -> Self {
+        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
+        Self { base58 }
+    }
+    #[cfg(feature = "std")]
+    pub fn from_public_sr25519(value: &sr25519::Public, base58prefix: u16) -> Self {
+        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
+        let identicon = generate_png_scaled_default(&value.0);
+        Self { base58, identicon }
+    }
+    #[cfg(not(feature = "std"))]
+    pub fn from_public_sr25519(value: &sr25519::Public, base58prefix: u16) -> Self {
+        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
+        Self { base58 }
+    }
+    #[cfg(feature = "std")]
+    pub fn from_public_ecdsa(value: &ecdsa::Public, base58prefix: u16) -> Self {
+        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
+        let identicon = generate_png_scaled_default(&value.0);
+        Self { base58, identicon }
+    }
+    #[cfg(not(feature = "std"))]
+    pub fn from_public_ecdsa(value: &ecdsa::Public, base58prefix: u16) -> Self {
+        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
+        Self { base58 }
+    }
 }
 
 /// Flat cards content.
