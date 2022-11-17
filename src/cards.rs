@@ -1,19 +1,16 @@
 //! Types for parsed data (nested) and parser cards (flat and formatted).
+#[cfg(not(feature = "std"))]
+use crate::additional_types::Era;
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use frame_metadata::v14::StorageEntryMetadata;
 use num_bigint::{BigInt, BigUint};
 use scale_info::{form::PortableForm, Field, Path, Type, Variant};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
-use sp_core::{
-    crypto::{AccountId32},
-    ecdsa, ed25519, sr25519, H160, H256, H512,
-};
 #[cfg(feature = "std")]
 use sp_core::crypto::{Ss58AddressFormat, Ss58Codec};
+use sp_core::{crypto::AccountId32, ecdsa, ed25519, sr25519, H160, H256, H512};
 #[cfg(feature = "std")]
 use sp_runtime::generic::Era;
-#[cfg(not(feature = "std"))]
-use crate::additional_types::Era;
 
 #[cfg(feature = "std")]
 use plot_icon::generate_png_scaled_default;

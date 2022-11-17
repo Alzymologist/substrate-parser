@@ -12,11 +12,10 @@ use sp_core::{crypto::AccountId32, H160, H512};
 
 use crate::std::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
 
-#[cfg(feature = "std")]
-use std::any::TypeId;
-
 #[cfg(not(feature = "std"))]
-use core::any::TypeId;
+use core::{any::TypeId, mem::size_of};
+#[cfg(feature = "std")]
+use std::{any::TypeId, mem::size_of};
 
 use crate::cards::{
     Call, Documented, Event, ExtendedData, FieldData, Info, PalletSpecificData, ParsedData,
@@ -698,29 +697,7 @@ fn decode_type_def_bit_sequence(
     position: &mut usize,
     registry: &PortableRegistry,
 ) -> Result<ParsedData, ParserError> {
-    let found_compact = find_compact::<u32>(data, *position)?;
-    let bit_length_found = found_compact.compact;
-    let byte_length = match bit_length_found % 8 {
-        0 => bit_length_found / 8,
-        _ => (bit_length_found / 8) + 1,
-    } as usize;
-
     let bitvec_start = *position;
-    let bitvec_end = found_compact.start_next_unit + byte_length;
-
-    let into_decode = match data.get(bitvec_start..bitvec_end) {
-        Some(a) => {
-            let into_decode = a.to_vec();
-            *position = bitvec_end;
-            into_decode
-        }
-        None => {
-            return Err(ParserError::DataTooShort {
-                position: bitvec_start,
-                minimal_length: bitvec_end - bitvec_start,
-            })
-        }
-    };
 
     // BitOrder
     let bitorder_type = resolve_ty(registry, bit_ty.bit_order_type().id())?;
@@ -740,15 +717,17 @@ fn decode_type_def_bit_sequence(
     let bitstore_type = resolve_ty(registry, bit_ty.bit_store_type().id())?;
 
     match bitstore_type.type_def() {
-        TypeDef::Primitive(TypeDefPrimitive::U8) => match bitorder {
-            FoundBitOrder::Lsb0 => {
-                <BitVec<u8, Lsb0>>::decode(&mut &into_decode[..]).map(ParsedData::BitVecU8Lsb0)
+        TypeDef::Primitive(TypeDefPrimitive::U8) => {
+            let into_decode = into_bitvec_decode::<u8>(data, position)?;
+            match bitorder {
+                FoundBitOrder::Lsb0 => <BitVec<u8, Lsb0>>::decode(&mut &into_decode[..])
+                    .map(ParsedData::BitVecU8Lsb0),
+                FoundBitOrder::Msb0 => <BitVec<u8, Msb0>>::decode(&mut &into_decode[..])
+                    .map(ParsedData::BitVecU8Msb0),
             }
-            FoundBitOrder::Msb0 => {
-                <BitVec<u8, Msb0>>::decode(&mut &into_decode[..]).map(ParsedData::BitVecU8Msb0)
-            }
-        },
+        }
         TypeDef::Primitive(TypeDefPrimitive::U16) => {
+            let into_decode = into_bitvec_decode::<u16>(data, position)?;
             match bitorder {
                 FoundBitOrder::Lsb0 => <BitVec<u16, Lsb0>>::decode(&mut &into_decode[..])
                     .map(ParsedData::BitVecU16Lsb0),
@@ -757,6 +736,7 @@ fn decode_type_def_bit_sequence(
             }
         }
         TypeDef::Primitive(TypeDefPrimitive::U32) => {
+            let into_decode = into_bitvec_decode::<u32>(data, position)?;
             match bitorder {
                 FoundBitOrder::Lsb0 => <BitVec<u32, Lsb0>>::decode(&mut &into_decode[..])
                     .map(ParsedData::BitVecU32Lsb0),
@@ -766,6 +746,7 @@ fn decode_type_def_bit_sequence(
         }
         #[cfg(target_pointer_width = "64")]
         TypeDef::Primitive(TypeDefPrimitive::U64) => {
+            let into_decode = into_bitvec_decode::<u64>(data, position)?;
             match bitorder {
                 FoundBitOrder::Lsb0 => <BitVec<u64, Lsb0>>::decode(&mut &into_decode[..])
                     .map(ParsedData::BitVecU64Lsb0),
@@ -779,6 +760,45 @@ fn decode_type_def_bit_sequence(
         position: bitvec_start,
         ty: "BitVec",
     })
+}
+
+/// Select the slice to decode as a `Bitvec`.
+///
+/// Current parser position gets changed.
+fn into_bitvec_decode<'a, T>(
+    data: &'a [u8],
+    position: &'a mut usize,
+) -> Result<&'a [u8], ParserError> {
+    let found_compact = find_compact::<u32>(data, *position)?;
+
+    let bit_length_found = found_compact.compact;
+    let byte_length = match bit_length_found % 8 {
+        0 => bit_length_found / 8,
+        _ => (bit_length_found / 8) + 1,
+    } as usize;
+
+    let bytes_per_element = size_of::<T>();
+
+    let number_of_elements = match byte_length % bytes_per_element {
+        0 => byte_length / bytes_per_element,
+        _ => (byte_length / bytes_per_element) + 1usize,
+    };
+
+    let slice_length = number_of_elements * bytes_per_element;
+
+    let bitvec_start = *position;
+    let bitvec_end = found_compact.start_next_unit + slice_length;
+
+    match data.get(bitvec_start..bitvec_end) {
+        Some(into_bitvec_decode) => {
+            *position = bitvec_end;
+            Ok(into_bitvec_decode)
+        }
+        None => Err(ParserError::DataTooShort {
+            position: bitvec_start,
+            minimal_length: bitvec_end - bitvec_start,
+        }),
+    }
 }
 
 /// Type of set element, resolved as completely as possible.
