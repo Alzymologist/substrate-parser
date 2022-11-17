@@ -273,11 +273,15 @@ pub enum ParsedData {
     BitVecU32Lsb0(BitVec<u32, Lsb0>),
     #[cfg(target_pointer_width = "64")]
     BitVecU64Lsb0(BitVec<u64, Lsb0>),
+    #[cfg(target_pointer_width = "32")]
+    BitVecU64Lsb0(BitVec<u32, Lsb0>),
     BitVecU8Msb0(BitVec<u8, Msb0>),
     BitVecU16Msb0(BitVec<u16, Msb0>),
     BitVecU32Msb0(BitVec<u32, Msb0>),
     #[cfg(target_pointer_width = "64")]
     BitVecU64Msb0(BitVec<u64, Msb0>),
+    #[cfg(target_pointer_width = "32")]
+    BitVecU64Msb0(BitVec<u32, Msb0>),
     BlockHash(H256),
     Call(Call),
     Composite(Vec<FieldData>),
@@ -439,7 +443,6 @@ impl ParsedData {
             ParsedData::BitVecU32Lsb0(value) => {
                 single_card!(BitVecU32Lsb0, value, indent, info_flat)
             }
-            #[cfg(target_pointer_width = "64")]
             ParsedData::BitVecU64Lsb0(value) => {
                 single_card!(BitVecU64Lsb0, value, indent, info_flat)
             }
@@ -450,7 +453,6 @@ impl ParsedData {
             ParsedData::BitVecU32Msb0(value) => {
                 single_card!(BitVecU32Msb0, value, indent, info_flat)
             }
-            #[cfg(target_pointer_width = "64")]
             ParsedData::BitVecU64Msb0(value) => {
                 single_card!(BitVecU64Msb0, value, indent, info_flat)
             }
@@ -942,11 +944,15 @@ pub enum ParserCard {
     BitVecU32Lsb0(BitVec<u32, Lsb0>),
     #[cfg(target_pointer_width = "64")]
     BitVecU64Lsb0(BitVec<u64, Lsb0>),
+    #[cfg(target_pointer_width = "32")]
+    BitVecU64Lsb0(BitVec<u32, Lsb0>),
     BitVecU8Msb0(BitVec<u8, Msb0>),
     BitVecU16Msb0(BitVec<u16, Msb0>),
     BitVecU32Msb0(BitVec<u32, Msb0>),
     #[cfg(target_pointer_width = "64")]
     BitVecU64Msb0(BitVec<u64, Msb0>),
+    #[cfg(target_pointer_width = "32")]
+    BitVecU64Msb0(BitVec<u32, Msb0>),
     BlockHash(H256),
     CallName(String),
     CompositeAnnounced(usize),
@@ -1063,7 +1069,6 @@ impl ExtendedCard {
             ParserCard::BitVecU32Lsb0(a) => {
                 readable(self.indent, "BitVec<u32, Lsb0>", &a.to_string())
             }
-            #[cfg(target_pointer_width = "64")]
             ParserCard::BitVecU64Lsb0(a) => {
                 readable(self.indent, "BitVec<u64, Lsb0>", &a.to_string())
             }
@@ -1076,7 +1081,6 @@ impl ExtendedCard {
             ParserCard::BitVecU32Msb0(a) => {
                 readable(self.indent, "BitVec<u32, Msb0>", &a.to_string())
             }
-            #[cfg(target_pointer_width = "64")]
             ParserCard::BitVecU64Msb0(a) => {
                 readable(self.indent, "BitVec<u64, Msb0>", &a.to_string())
             }
