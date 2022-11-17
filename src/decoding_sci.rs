@@ -764,6 +764,7 @@ fn decode_type_def_bit_sequence(
                     .map(ParsedData::BitVecU32Msb0),
             }
         }
+        #[cfg(target_pointer_width = "64")]
         TypeDef::Primitive(TypeDefPrimitive::U64) => {
             match bitorder {
                 FoundBitOrder::Lsb0 => <BitVec<u64, Lsb0>>::decode(&mut &into_decode[..])

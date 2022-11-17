@@ -1,6 +1,10 @@
 //! Decode signable transaction extensions using `RuntimeMetadataV14`.
 use sp_core::H256;
+
+#[cfg(feature = "std")]
 use sp_runtime::generic::Era;
+#[cfg(not(feature = "std"))]
+use crate::additional_types::Era;
 
 use crate::std::{
     borrow::ToOwned,

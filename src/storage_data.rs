@@ -7,8 +7,8 @@
 //! [`PalletStorageMetadata`](frame_metadata::v14::PalletStorageMetadata) and
 //! `name` of
 //! [`StorageEntryMetadata`](frame_metadata::v14::StorageEntryMetadata), both
-//! processed as bytes in [`twox_128`](sp_core::twox_128) and concatenated
-//! together.
+//! processed as bytes in [`twox_128`](sp_core_hashing::twox_128) and
+//! concatenated together.
 //!
 //! There are `Plain` and `Map` variants of [`StorageEntryType`].
 //!
@@ -25,7 +25,7 @@
 //! documentation associated with every key with the same prefix).
 use frame_metadata::v14::{StorageEntryMetadata, StorageEntryType, StorageHasher};
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, PortableRegistry, TypeDef};
-use sp_core::{blake2_128, twox_64};
+use sp_core_hashing::{blake2_128, twox_64};
 
 use crate::std::{string::String, vec::Vec};
 

@@ -95,6 +95,8 @@
 //!
 //! # Examples
 //!```
+//! #[cfg(feature = "std")]
+//! {
 //! use frame_metadata::RuntimeMetadataV14;
 //! use parity_scale_codec::Decode;
 //! use scale_info::{IntoPortable, Path, Registry};
@@ -420,7 +422,8 @@
 //! ];
 //!
 //!  assert_eq!(parsed.extensions, expected_extensions_data);
-//!```
+//! }
+//! ```
 //!
 //! Parsed data could be transformed into set of flat and formatted
 //! [`ExtendedCard`] cards using `card` method.
@@ -433,6 +436,8 @@
 use scale_info::{interner::UntrackedSymbol, PortableRegistry};
 use sp_core::H256;
 
+#[cfg(not(feature = "std"))]
+pub mod additional_types;
 pub mod cards;
 use cards::{Call, ExtendedCard, ExtendedData};
 pub mod compacts;
@@ -453,6 +458,7 @@ pub mod special_indicators;
 mod special_types;
 pub mod storage_data;
 
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests;
 

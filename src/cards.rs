@@ -5,10 +5,15 @@ use num_bigint::{BigInt, BigUint};
 use scale_info::{form::PortableForm, Field, Path, Type, Variant};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{
-    crypto::{AccountId32, Ss58AddressFormat, Ss58Codec},
+    crypto::{AccountId32},
     ecdsa, ed25519, sr25519, H160, H256, H512,
 };
+#[cfg(feature = "std")]
+use sp_core::crypto::{Ss58AddressFormat, Ss58Codec};
+#[cfg(feature = "std")]
 use sp_runtime::generic::Era;
+#[cfg(not(feature = "std"))]
+use crate::additional_types::Era;
 
 #[cfg(feature = "std")]
 use plot_icon::generate_png_scaled_default;
@@ -269,10 +274,12 @@ pub enum ParsedData {
     BitVecU8Lsb0(BitVec<u8, Lsb0>),
     BitVecU16Lsb0(BitVec<u16, Lsb0>),
     BitVecU32Lsb0(BitVec<u32, Lsb0>),
+    #[cfg(target_pointer_width = "64")]
     BitVecU64Lsb0(BitVec<u64, Lsb0>),
     BitVecU8Msb0(BitVec<u8, Msb0>),
     BitVecU16Msb0(BitVec<u16, Msb0>),
     BitVecU32Msb0(BitVec<u32, Msb0>),
+    #[cfg(target_pointer_width = "64")]
     BitVecU64Msb0(BitVec<u64, Msb0>),
     BlockHash(H256),
     Call(Call),
@@ -435,6 +442,7 @@ impl ParsedData {
             ParsedData::BitVecU32Lsb0(value) => {
                 single_card!(BitVecU32Lsb0, value, indent, info_flat)
             }
+            #[cfg(target_pointer_width = "64")]
             ParsedData::BitVecU64Lsb0(value) => {
                 single_card!(BitVecU64Lsb0, value, indent, info_flat)
             }
@@ -445,6 +453,7 @@ impl ParsedData {
             ParsedData::BitVecU32Msb0(value) => {
                 single_card!(BitVecU32Msb0, value, indent, info_flat)
             }
+            #[cfg(target_pointer_width = "64")]
             ParsedData::BitVecU64Msb0(value) => {
                 single_card!(BitVecU64Msb0, value, indent, info_flat)
             }
@@ -867,11 +876,16 @@ impl std::fmt::Display for InfoFlat {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IdData {
     /// Base58 address
+    #[cfg(feature = "std")]
     pub base58: String,
 
     /// Identicon `png` data
     #[cfg(feature = "std")]
     pub identicon: Vec<u8>,
+
+    /// Hexadecimal key
+    #[cfg(not(feature = "std"))]
+    pub hex: String,
 }
 
 impl IdData {
@@ -882,9 +896,9 @@ impl IdData {
         Self { base58, identicon }
     }
     #[cfg(not(feature = "std"))]
-    pub fn from_account_id32(value: &AccountId32, base58prefix: u16) -> Self {
-        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
-        Self { base58 }
+    pub fn from_account_id32(value: &AccountId32, _base58prefix: u16) -> Self {
+        let hex = hex::encode(value);
+        Self { hex }
     }
     #[cfg(feature = "std")]
     pub fn from_public_ed25519(value: &ed25519::Public, base58prefix: u16) -> Self {
@@ -893,9 +907,9 @@ impl IdData {
         Self { base58, identicon }
     }
     #[cfg(not(feature = "std"))]
-    pub fn from_public_ed25519(value: &ed25519::Public, base58prefix: u16) -> Self {
-        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
-        Self { base58 }
+    pub fn from_public_ed25519(value: &ed25519::Public, _base58prefix: u16) -> Self {
+        let hex = hex::encode(value.0);
+        Self { hex }
     }
     #[cfg(feature = "std")]
     pub fn from_public_sr25519(value: &sr25519::Public, base58prefix: u16) -> Self {
@@ -904,9 +918,9 @@ impl IdData {
         Self { base58, identicon }
     }
     #[cfg(not(feature = "std"))]
-    pub fn from_public_sr25519(value: &sr25519::Public, base58prefix: u16) -> Self {
-        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
-        Self { base58 }
+    pub fn from_public_sr25519(value: &sr25519::Public, _base58prefix: u16) -> Self {
+        let hex = hex::encode(value.0);
+        Self { hex }
     }
     #[cfg(feature = "std")]
     pub fn from_public_ecdsa(value: &ecdsa::Public, base58prefix: u16) -> Self {
@@ -915,9 +929,9 @@ impl IdData {
         Self { base58, identicon }
     }
     #[cfg(not(feature = "std"))]
-    pub fn from_public_ecdsa(value: &ecdsa::Public, base58prefix: u16) -> Self {
-        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
-        Self { base58 }
+    pub fn from_public_ecdsa(value: &ecdsa::Public, _base58prefix: u16) -> Self {
+        let hex = hex::encode(value.0);
+        Self { hex }
     }
 }
 
@@ -929,10 +943,12 @@ pub enum ParserCard {
     BitVecU8Lsb0(BitVec<u8, Lsb0>),
     BitVecU16Lsb0(BitVec<u16, Lsb0>),
     BitVecU32Lsb0(BitVec<u32, Lsb0>),
+    #[cfg(target_pointer_width = "64")]
     BitVecU64Lsb0(BitVec<u64, Lsb0>),
     BitVecU8Msb0(BitVec<u8, Msb0>),
     BitVecU16Msb0(BitVec<u16, Msb0>),
     BitVecU32Msb0(BitVec<u32, Msb0>),
+    #[cfg(target_pointer_width = "64")]
     BitVecU64Msb0(BitVec<u64, Msb0>),
     BlockHash(H256),
     CallName(String),
@@ -1050,6 +1066,7 @@ impl ExtendedCard {
             ParserCard::BitVecU32Lsb0(a) => {
                 readable(self.indent, "BitVec<u32, Lsb0>", &a.to_string())
             }
+            #[cfg(target_pointer_width = "64")]
             ParserCard::BitVecU64Lsb0(a) => {
                 readable(self.indent, "BitVec<u64, Lsb0>", &a.to_string())
             }
@@ -1062,6 +1079,7 @@ impl ExtendedCard {
             ParserCard::BitVecU32Msb0(a) => {
                 readable(self.indent, "BitVec<u32, Msb0>", &a.to_string())
             }
+            #[cfg(target_pointer_width = "64")]
             ParserCard::BitVecU64Msb0(a) => {
                 readable(self.indent, "BitVec<u64, Msb0>", &a.to_string())
             }
@@ -1086,7 +1104,10 @@ impl ExtendedCard {
             ParserCard::H160(a) => readable(self.indent, "H160", &hex::encode(a.0)),
             ParserCard::H256(a) => readable(self.indent, "H256", &hex::encode(a.0)),
             ParserCard::H512(a) => readable(self.indent, "H512", &hex::encode(a.0)),
+            #[cfg(feature = "std")]
             ParserCard::Id(a) => readable(self.indent, "Id", &a.base58),
+            #[cfg(not(feature = "std"))]
+            ParserCard::Id(a) => readable(self.indent, "Id", &a.hex),
             ParserCard::NameSpecVersion { name, version } => {
                 readable(self.indent, "Network", &format!("{}{}", name, version))
             }
@@ -1120,9 +1141,18 @@ impl ExtendedCard {
             ParserCard::PrimitiveU64(a) => readable(self.indent, "u64", &a.to_string()),
             ParserCard::PrimitiveU128(a) => readable(self.indent, "u128", &a.to_string()),
             ParserCard::PrimitiveU256(a) => readable(self.indent, "BigUint", &a.to_string()),
+            #[cfg(feature = "std")]
             ParserCard::PublicEd25519(a) => readable(self.indent, "PublicKey Ed25519", &a.base58),
+            #[cfg(not(feature = "std"))]
+            ParserCard::PublicEd25519(a) => readable(self.indent, "PublicKey Ed25519", &a.hex),
+            #[cfg(feature = "std")]
             ParserCard::PublicSr25519(a) => readable(self.indent, "PublicKey Sr25519", &a.base58),
+            #[cfg(not(feature = "std"))]
+            ParserCard::PublicSr25519(a) => readable(self.indent, "PublicKey Sr25519", &a.hex),
+            #[cfg(feature = "std")]
             ParserCard::PublicEcdsa(a) => readable(self.indent, "PublicKey Ecdsa", &a.base58),
+            #[cfg(not(feature = "std"))]
+            ParserCard::PublicEcdsa(a) => readable(self.indent, "PublicKey Ecdsa", &a.hex),
             ParserCard::SequenceAnnounced {
                 len,
                 element_info_flat: _,

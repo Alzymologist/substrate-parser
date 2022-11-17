@@ -2,8 +2,12 @@
 use num_bigint::{BigInt, BigUint};
 use parity_scale_codec::{Decode, HasCompact};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
-use sp_core::{crypto::AccountId32, ByteArray, H160, H256, H512};
+use sp_core::{crypto::{AccountId32, ByteArray}, H160, H256, H512};
+
+#[cfg(feature = "std")]
 use sp_runtime::generic::Era;
+#[cfg(not(feature = "std"))]
+use crate::additional_types::Era;
 
 #[cfg(any(feature = "std", test))]
 use std::{convert::TryInto, mem::size_of};
