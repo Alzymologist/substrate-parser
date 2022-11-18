@@ -1,6 +1,6 @@
 //! Decoders for special types: primitives, `PerThing` items, well-known arrays.
 use num_bigint::{BigInt, BigUint};
-use parity_scale_codec::{Decode, HasCompact};
+use parity_scale_codec::{DecodeAll, HasCompact};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{
     crypto::{AccountId32, ByteArray},
@@ -52,7 +52,7 @@ macro_rules! impl_stable_length_mem_size_decode {
                 fn cut_and_decode(data: &[u8], position: &mut usize) -> Result<Self, ParserError> {
                     match data.get(*position..*position+Self::len_encoded()) {
                         Some(slice_to_decode) => {
-                            let out = <Self>::decode(&mut &slice_to_decode[..])
+                            let out = <Self>::decode_all(&mut &slice_to_decode[..])
                                 .map_err(|_| ParserError::TypeFailure{position: *position, ty: stringify!($ty)})?;
                             *position += Self::len_encoded();
                             Ok(out)
@@ -443,13 +443,13 @@ pub(crate) fn special_case_era(
     position: &mut usize,
 ) -> Result<ParsedData, ParserError> {
     match data.get(*position..*position + IMMORTAL_ERA_ENCODED_LEN) {
-        Some(immortal_era_data) => match Era::decode(&mut &immortal_era_data[..]) {
+        Some(immortal_era_data) => match Era::decode_all(&mut &immortal_era_data[..]) {
             Ok(era) => {
                 *position += IMMORTAL_ERA_ENCODED_LEN;
                 Ok(ParsedData::Era(era))
             }
             Err(_) => match data.get(*position..*position + MORTAL_ERA_ENCODED_LEN) {
-                Some(mortal_era_data) => match Era::decode(&mut &mortal_era_data[..]) {
+                Some(mortal_era_data) => match Era::decode_all(&mut &mortal_era_data[..]) {
                     Ok(era) => {
                         *position += MORTAL_ERA_ENCODED_LEN;
                         Ok(ParsedData::Era(era))

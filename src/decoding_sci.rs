@@ -4,7 +4,7 @@ use bitvec::prelude::BitOrder;
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use frame_metadata::v14::RuntimeMetadataV14;
 use num_bigint::{BigInt, BigUint};
-use parity_scale_codec::{Decode, OptionBool};
+use parity_scale_codec::{Decode, DecodeAll, OptionBool};
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, PortableRegistry, Type, TypeDef,
     TypeDefBitSequence, TypeDefPrimitive, Variant,
@@ -722,13 +722,13 @@ fn decode_type_def_bit_sequence(
         TypeDef::Primitive(TypeDefPrimitive::U8) => {
             let into_decode = into_bitvec_decode::<u8>(data, position)?;
             match bitorder {
-                FoundBitOrder::Lsb0 => <BitVec<u8, Lsb0>>::decode(&mut &into_decode[..])
+                FoundBitOrder::Lsb0 => <BitVec<u8, Lsb0>>::decode_all(&mut &into_decode[..])
                     .map(ParsedData::BitVecU8Lsb0)
                     .map_err(|_| ParserError::TypeFailure {
                         position: bitvec_start,
                         ty: "BitVec<u8, Lsb0>",
                     }),
-                FoundBitOrder::Msb0 => <BitVec<u8, Msb0>>::decode(&mut &into_decode[..])
+                FoundBitOrder::Msb0 => <BitVec<u8, Msb0>>::decode_all(&mut &into_decode[..])
                     .map(ParsedData::BitVecU8Msb0)
                     .map_err(|_| ParserError::TypeFailure {
                         position: bitvec_start,
@@ -739,13 +739,13 @@ fn decode_type_def_bit_sequence(
         TypeDef::Primitive(TypeDefPrimitive::U16) => {
             let into_decode = into_bitvec_decode::<u16>(data, position)?;
             match bitorder {
-                FoundBitOrder::Lsb0 => <BitVec<u16, Lsb0>>::decode(&mut &into_decode[..])
+                FoundBitOrder::Lsb0 => <BitVec<u16, Lsb0>>::decode_all(&mut &into_decode[..])
                     .map(ParsedData::BitVecU16Lsb0)
                     .map_err(|_| ParserError::TypeFailure {
                         position: bitvec_start,
                         ty: "BitVec<u16, Lsb0>",
                     }),
-                FoundBitOrder::Msb0 => <BitVec<u16, Msb0>>::decode(&mut &into_decode[..])
+                FoundBitOrder::Msb0 => <BitVec<u16, Msb0>>::decode_all(&mut &into_decode[..])
                     .map(ParsedData::BitVecU16Msb0)
                     .map_err(|_| ParserError::TypeFailure {
                         position: bitvec_start,
@@ -756,13 +756,13 @@ fn decode_type_def_bit_sequence(
         TypeDef::Primitive(TypeDefPrimitive::U32) => {
             let into_decode = into_bitvec_decode::<u32>(data, position)?;
             match bitorder {
-                FoundBitOrder::Lsb0 => <BitVec<u32, Lsb0>>::decode(&mut &into_decode[..])
+                FoundBitOrder::Lsb0 => <BitVec<u32, Lsb0>>::decode_all(&mut &into_decode[..])
                     .map(ParsedData::BitVecU32Lsb0)
                     .map_err(|_| ParserError::TypeFailure {
                         position: bitvec_start,
                         ty: "BitVec<u32, Lsb0>",
                     }),
-                FoundBitOrder::Msb0 => <BitVec<u32, Msb0>>::decode(&mut &into_decode[..])
+                FoundBitOrder::Msb0 => <BitVec<u32, Msb0>>::decode_all(&mut &into_decode[..])
                     .map(ParsedData::BitVecU32Msb0)
                     .map_err(|_| ParserError::TypeFailure {
                         position: bitvec_start,
@@ -774,13 +774,13 @@ fn decode_type_def_bit_sequence(
         TypeDef::Primitive(TypeDefPrimitive::U64) => {
             let into_decode = into_bitvec_decode::<u64>(data, position)?;
             match bitorder {
-                FoundBitOrder::Lsb0 => <BitVec<u64, Lsb0>>::decode(&mut &into_decode[..])
+                FoundBitOrder::Lsb0 => <BitVec<u64, Lsb0>>::decode_all(&mut &into_decode[..])
                     .map(ParsedData::BitVecU64Lsb0)
                     .map_err(|_| ParserError::TypeFailure {
                         position: bitvec_start,
                         ty: "BitVec<u64, Lsb0>",
                     }),
-                FoundBitOrder::Msb0 => <BitVec<u64, Msb0>>::decode(&mut &into_decode[..])
+                FoundBitOrder::Msb0 => <BitVec<u64, Msb0>>::decode_all(&mut &into_decode[..])
                     .map(ParsedData::BitVecU64Msb0)
                     .map_err(|_| ParserError::TypeFailure {
                         position: bitvec_start,
@@ -1110,7 +1110,7 @@ mod tests {
     #[test]
     fn bitvec_correct_cut_1() {
         let bv = BitVec::<u8, Lsb0>::from_vec(vec![3, 14, 15]);
-        let encoded_data = [bv.encode(), [0;30].to_vec()].concat();
+        let encoded_data = [bv.encode(), [0; 30].to_vec()].concat();
         let mut position = 0;
         let into_decode = into_bitvec_decode::<u8>(&encoded_data, &mut position).unwrap();
         assert_eq!(bv.encode(), into_decode);
@@ -1119,7 +1119,7 @@ mod tests {
     #[test]
     fn bitvec_correct_cut_2() {
         let bv = BitVec::<u64, Msb0>::from_vec(vec![128, 1234567890123456, 0, 4234567890123456]);
-        let encoded_data = [bv.encode(), [0;30].to_vec()].concat();
+        let encoded_data = [bv.encode(), [0; 30].to_vec()].concat();
         let mut position = 0;
         let into_decode = into_bitvec_decode::<u64>(&encoded_data, &mut position).unwrap();
         assert_eq!(bv.encode(), into_decode);
