@@ -1,4 +1,6 @@
 //! Decode data using [`RuntimeMetadataV14`].
+#[cfg(any(target_pointer_width = "32", test))]
+use bitvec::prelude::BitOrder;
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use frame_metadata::v14::RuntimeMetadataV14;
 use num_bigint::{BigInt, BigUint};
@@ -789,219 +791,221 @@ fn decode_type_def_bit_sequence(
         #[cfg(target_pointer_width = "32")]
         TypeDef::Primitive(TypeDefPrimitive::U64) => match bitorder {
             FoundBitOrder::Lsb0 => {
-                patch_bitvec_u64_lsb0(data, position).map(ParsedData::BitVecU64Lsb0)
+                Lsb0::patch_bitvec_u64(data, position).map(ParsedData::BitVecU64Lsb0)
             }
             FoundBitOrder::Msb0 => {
-                patch_bitvec_u64_msb0(data, position).map(ParsedData::BitVecU64Msb0)
+                Msb0::patch_bitvec_u64(data, position).map(ParsedData::BitVecU64Msb0)
             }
         },
         _ => Err(ParserError::NotBitStoreType { id }),
     }
 }
 
-/// Select the slice to decode as a `Bitvec`.
+/// Positions and related values for decoding `BitVec`.
+struct BitVecPositions {
+    /// Encoded `BitVec` start position, includes bit length compact.
+    bitvec_start: usize,
+
+    /// Data start position, after bit length compact, for patch only.
+    #[cfg(any(target_pointer_width = "32", test))]
+    data_start: usize,
+
+    /// Encoded `BitVec` end position.
+    bitvec_end: usize,
+
+    /// Number of bits in `BitVec`, for patch only.
+    #[cfg(any(target_pointer_width = "32", test))]
+    bit_length: usize,
+
+    /// Number of `BitStore`-sized elements in `BitVec`, for patch only.
+    #[cfg(any(target_pointer_width = "32", test))]
+    number_of_elements: usize,
+
+    /// Minimal encoded data length.
+    minimal_length: usize,
+}
+
+impl BitVecPositions {
+    /// New `BitVecPositions` for given input data and position.
+    ///
+    /// `T` is corresponding `BitStore`.
+    fn new<T>(data: &[u8], position: usize) -> Result<Self, ParserError> {
+        let found_compact = find_compact::<u32>(data, position)?;
+
+        let bitvec_start = position;
+        let data_start = found_compact.start_next_unit;
+
+        let bit_length = found_compact.compact as usize;
+
+        const BITS_IN_BYTE: usize = 8;
+        let byte_length = match bit_length % BITS_IN_BYTE {
+            0 => bit_length / BITS_IN_BYTE,
+            _ => (bit_length / BITS_IN_BYTE) + 1usize,
+        };
+
+        let bytes_per_element = size_of::<T>();
+        let number_of_elements = match byte_length % bytes_per_element {
+            0 => byte_length / bytes_per_element,
+            _ => (byte_length / bytes_per_element) + 1usize,
+        };
+
+        let slice_length = number_of_elements * bytes_per_element;
+
+        let bitvec_end = data_start + slice_length;
+
+        let minimal_length = bitvec_end - bitvec_start;
+
+        Ok(Self {
+            bitvec_start,
+            #[cfg(any(target_pointer_width = "32", test))]
+            data_start,
+            bitvec_end,
+            #[cfg(any(target_pointer_width = "32", test))]
+            bit_length,
+            #[cfg(any(target_pointer_width = "32", test))]
+            number_of_elements,
+            minimal_length,
+        })
+    }
+}
+
+/// Select the slice to decode as a `BitVec`.
 ///
 /// Current parser position gets changed.
 fn into_bitvec_decode<'a, T>(
     data: &'a [u8],
     position: &'a mut usize,
 ) -> Result<&'a [u8], ParserError> {
-    let found_compact = find_compact::<u32>(data, *position)?;
+    let bitvec_positions = BitVecPositions::new::<T>(data, *position)?;
 
-    let bit_length_found = found_compact.compact;
-    let byte_length = match bit_length_found % 8 {
-        0 => bit_length_found / 8,
-        _ => (bit_length_found / 8) + 1,
-    } as usize;
-
-    // bytes in each individual element of `Bitvec`, determined by `BitStore`
-    let bytes_per_element = size_of::<T>();
-
-    // number of elements in `BitVec`, with size determined by `BitStore`
-    let number_of_elements = match byte_length % bytes_per_element {
-        0 => byte_length / bytes_per_element,
-        _ => (byte_length / bytes_per_element) + 1usize,
-    };
-
-    // length of data slice to be decoded as `BitVec`
-    let slice_length = number_of_elements * bytes_per_element;
-
-    let bitvec_start = *position;
-    let bitvec_end = found_compact.start_next_unit + slice_length;
-
-    match data.get(bitvec_start..bitvec_end) {
+    match data.get(bitvec_positions.bitvec_start..bitvec_positions.bitvec_end) {
         Some(into_bitvec_decode) => {
-            *position = bitvec_end;
+            *position = bitvec_positions.bitvec_end;
             Ok(into_bitvec_decode)
         }
         None => Err(ParserError::DataTooShort {
-            position: bitvec_start,
-            minimal_length: bitvec_end - bitvec_start,
+            position: bitvec_positions.bitvec_start,
+            minimal_length: bitvec_positions.minimal_length,
         }),
     }
 }
 
+/// Provide patch for `BitVec` with `u64` `BitStore` in 32bit targets.
 #[cfg(any(target_pointer_width = "32", test))]
-fn patch_bitvec_u64_lsb0(
-    data: &[u8],
-    position: &mut usize,
-) -> Result<BitVec<u32, Lsb0>, ParserError> {
-    let found_compact = find_compact::<u32>(data, *position)?;
+trait Patched: BitOrder + Sized {
+    fn patch_bitvec_u64(
+        data: &[u8],
+        position: &mut usize,
+    ) -> Result<BitVec<u32, Self>, ParserError>;
+}
 
-    let bit_length_found = found_compact.compact;
-    let byte_length = match bit_length_found % 8 {
-        0 => bit_length_found / 8,
-        _ => (bit_length_found / 8) + 1,
-    } as usize;
+/// Bytes in each individual element of `BitVec`, for u64.
+#[cfg(any(target_pointer_width = "32", test))]
+const BYTES_PER_ELEMENT_U64: usize = 8;
 
-    // bytes in each individual element of `Bitvec`, determined by `BitStore`;
-    // fixed value for u64 here;
-    const BYTES_PER_ELEMENT: usize = 8;
+/// Bytes in each individual element of `BitVec`, for u32.
+#[cfg(any(target_pointer_width = "32", test))]
+const BYTES_PER_ELEMENT_U32: usize = 4;
 
-    // number of elements in `BitVec`, with size determined by `BitStore`
-    let number_of_elements = match byte_length % BYTES_PER_ELEMENT {
-        0 => byte_length / BYTES_PER_ELEMENT,
-        _ => (byte_length / BYTES_PER_ELEMENT) + 1usize,
-    };
+/// Implement `Patched` for available `BitOrder` types.
+#[cfg(any(target_pointer_width = "32", test))]
+macro_rules! impl_patched {
+    ($($bitorder: ty, $reform_vec_fn: ident), *) => {
+        $(
+            impl Patched for $bitorder {
+                fn patch_bitvec_u64(data: &[u8], position: &mut usize) -> Result<BitVec<u32, Self>, ParserError> {
+                    let bitvec_positions = BitVecPositions::new::<u64>(data, *position)?;
 
-    // length of data slice to be decoded as `BitVec`
-    let slice_length = number_of_elements * BYTES_PER_ELEMENT;
+                    let mut data_chunked: Vec<[u8; BYTES_PER_ELEMENT_U64]> = Vec::new();
 
-    // start of `BitVec` (includes compact)
-    let bitvec_start = *position;
+                    for i in 0..bitvec_positions.number_of_elements {
+                        match data.get(
+                            bitvec_positions.data_start + i * BYTES_PER_ELEMENT_U64..bitvec_positions.data_start + (i + 1) * BYTES_PER_ELEMENT_U64,
+                        ) {
+                            Some(data_part) => data_chunked.push(
+                                data_part
+                                    .try_into()
+                                    .expect("constant size slice, always fits"),
+                            ),
+                            None => {
+                                return Err(ParserError::DataTooShort {
+                                    position: bitvec_positions.bitvec_start,
+                                    minimal_length: bitvec_positions.minimal_length,
+                                })
+                            }
+                        }
+                    }
 
-    // start of `BitVec` encoded elements
-    let data_part_start = found_compact.start_next_unit;
+                    // collected all element chunks, safe to move the position to `BitVec` end,
+                    // no more `position` moves made here
+                    *position = bitvec_positions.bitvec_end;
 
-    // end of `BitVec` encoded elements
-    let data_part_end = found_compact.start_next_unit + slice_length;
+                    let data_reformed = $reform_vec_fn(data_chunked);
 
-    // minimal length after `bitvec_start` position, for error display if data
-    // is insufficient
-    let minimal_length = data_part_end - bitvec_start;
+                    let mut bv_reformed = BitVec::<u32, $bitorder>::from_vec(data_reformed);
 
-    let mut data_chunked: Vec<[u8; BYTES_PER_ELEMENT]> = Vec::new();
+                    bv_reformed.split_off(bitvec_positions.bit_length);
 
-    for i in 0..number_of_elements {
-        match data.get(
-            data_part_start + i * BYTES_PER_ELEMENT..data_part_start + (i + 1) * BYTES_PER_ELEMENT,
-        ) {
-            Some(data_part) => data_chunked.push(
-                data_part
-                    .try_into()
-                    .expect("constant size slice, always fit"),
-            ),
-            None => {
-                return Err(ParserError::DataTooShort {
-                    position: bitvec_start,
-                    minimal_length,
-                })
+                    Ok(bv_reformed)
+                }
             }
-        }
+        )*
     }
+}
 
-    // collected all element chunks, safe to move the position to `BitVec` end,
-    // no more `position` moves made here
-    *position = data_part_end;
-
+/// Re-arrange SCALE-encoded data for 64bit `Lsb0` bitvecs.
+#[cfg(any(target_pointer_width = "32", test))]
+fn reform_vec_lsb0(data_chunked: Vec<[u8; BYTES_PER_ELEMENT_U64]>) -> Vec<u32> {
     let mut data_reformed: Vec<u32> = Vec::new();
     for (i, element) in data_chunked.iter().enumerate() {
-        let new_element1 = u32::from_le_bytes(element[..4].try_into().unwrap());
-        let new_element2 = u32::from_le_bytes(element[4..8].try_into().unwrap());
+        let new_element1 = u32::from_le_bytes(
+            element[..BYTES_PER_ELEMENT_U32]
+                .try_into()
+                .expect("constant size slice, always fits"),
+        );
+        let new_element2 = u32::from_le_bytes(
+            element[BYTES_PER_ELEMENT_U32..]
+                .try_into()
+                .expect("constant size slice, always fits"),
+        );
         data_reformed.push(new_element1);
         if (new_element1 != 0) || (i != data_chunked.len() - 1) {
             data_reformed.push(new_element2)
         }
     }
-
-    let mut bv_reformed = BitVec::<u32, Lsb0>::from_vec(data_reformed);
-
-    bv_reformed.split_off(bit_length_found as usize);
-
-    Ok(bv_reformed)
+    data_reformed
 }
 
+/// Re-arrange SCALE-encoded data for 64bit `Msb0` bitvecs.
 #[cfg(any(target_pointer_width = "32", test))]
-fn patch_bitvec_u64_msb0(
-    data: &[u8],
-    position: &mut usize,
-) -> Result<BitVec<u32, Msb0>, ParserError> {
-    let found_compact = find_compact::<u32>(data, *position)?;
-
-    let bit_length_found = found_compact.compact;
-    let byte_length = match bit_length_found % 8 {
-        0 => bit_length_found / 8,
-        _ => (bit_length_found / 8) + 1,
-    } as usize;
-
-    // bytes in each individual element of `Bitvec`, determined by `BitStore`;
-    // fixed value for u64 here;
-    const BYTES_PER_ELEMENT: usize = 8;
-
-    // number of elements in `BitVec`, with size determined by `BitStore`
-    let number_of_elements = match byte_length % BYTES_PER_ELEMENT {
-        0 => byte_length / BYTES_PER_ELEMENT,
-        _ => (byte_length / BYTES_PER_ELEMENT) + 1usize,
-    };
-
-    // length of data slice to be decoded as `BitVec`
-    let slice_length = number_of_elements * BYTES_PER_ELEMENT;
-
-    // start of `BitVec` (includes compact)
-    let bitvec_start = *position;
-
-    // start of `BitVec` encoded elements
-    let data_part_start = found_compact.start_next_unit;
-
-    // end of `BitVec` encoded elements
-    let data_part_end = found_compact.start_next_unit + slice_length;
-
-    // minimal length after `bitvec_start` position, for error display if data
-    // is insufficient
-    let minimal_length = data_part_end - bitvec_start;
-
-    let mut data_chunked: Vec<[u8; BYTES_PER_ELEMENT]> = Vec::new();
-
-    for i in 0..number_of_elements {
-        match data.get(
-            data_part_start + i * BYTES_PER_ELEMENT..data_part_start + (i + 1) * BYTES_PER_ELEMENT,
-        ) {
-            Some(data_part) => data_chunked.push(
-                data_part
-                    .try_into()
-                    .expect("constant size slice, always fit"),
-            ),
-            None => {
-                return Err(ParserError::DataTooShort {
-                    position: bitvec_start,
-                    minimal_length,
-                })
-            }
-        }
-    }
-
-    // collected all element chunks, safe to move the position to `BitVec` end,
-    // no more `position` moves made here
-    *position = data_part_end;
-
+fn reform_vec_msb0(data_chunked: Vec<[u8; BYTES_PER_ELEMENT_U64]>) -> Vec<u32> {
     let mut data_reformed: Vec<u32> = Vec::new();
     for (i, x) in data_chunked.iter().enumerate() {
         let number = u64::from_le_bytes(*x);
         let element = number.to_be_bytes();
-        let new_element1 = u32::from_be_bytes(element[..4].try_into().unwrap());
-        let new_element2 = u32::from_be_bytes(element[4..8].try_into().unwrap());
+        let new_element1 = u32::from_be_bytes(
+            element[..BYTES_PER_ELEMENT_U32]
+                .try_into()
+                .expect("constant size slice, always fits"),
+        );
+        let new_element2 = u32::from_be_bytes(
+            element[BYTES_PER_ELEMENT_U32..]
+                .try_into()
+                .expect("constant size slice, always fits"),
+        );
         if (new_element1 != 0) || (i != data_chunked.len() - 1) {
             data_reformed.push(new_element1)
         }
         data_reformed.push(new_element2);
     }
-
-    let mut bv_reformed = BitVec::<u32, Msb0>::from_vec(data_reformed);
-
-    bv_reformed.split_off(bit_length_found as usize);
-
-    Ok(bv_reformed)
+    data_reformed
 }
+
+#[cfg(any(target_pointer_width = "32", test))]
+impl_patched!(Lsb0, reform_vec_lsb0);
+
+#[cfg(any(target_pointer_width = "32", test))]
+impl_patched!(Msb0, reform_vec_msb0);
 
 /// Type of set element, resolved as completely as possible.
 ///
@@ -1104,12 +1108,30 @@ mod tests {
     use crate::std::string::ToString;
 
     #[test]
+    fn bitvec_correct_cut_1() {
+        let bv = BitVec::<u8, Lsb0>::from_vec(vec![3, 14, 15]);
+        let encoded_data = [bv.encode(), [0;30].to_vec()].concat();
+        let mut position = 0;
+        let into_decode = into_bitvec_decode::<u8>(&encoded_data, &mut position).unwrap();
+        assert_eq!(bv.encode(), into_decode);
+    }
+
+    #[test]
+    fn bitvec_correct_cut_2() {
+        let bv = BitVec::<u64, Msb0>::from_vec(vec![128, 1234567890123456, 0, 4234567890123456]);
+        let encoded_data = [bv.encode(), [0;30].to_vec()].concat();
+        let mut position = 0;
+        let into_decode = into_bitvec_decode::<u64>(&encoded_data, &mut position).unwrap();
+        assert_eq!(bv.encode(), into_decode);
+    }
+
+    #[test]
     fn bitvec_patch_1() {
         let bv1 = BitVec::<u64, Lsb0>::from_vec(vec![128, 1234567890123456, 0, 4234567890123456]);
         let bv1_encoded = bv1.encode();
 
         let mut position = 0usize;
-        let bv2 = patch_bitvec_u64_lsb0(&bv1_encoded, &mut position).unwrap();
+        let bv2 = Lsb0::patch_bitvec_u64(&bv1_encoded, &mut position).unwrap();
         assert_eq!(position, bv1_encoded.len());
         assert_eq!(bv1.to_string(), bv2.to_string());
     }
@@ -1122,7 +1144,7 @@ mod tests {
         let bv1_encoded = bv1.encode();
 
         let mut position = 0usize;
-        let bv2 = patch_bitvec_u64_lsb0(&bv1_encoded, &mut position).unwrap();
+        let bv2 = Lsb0::patch_bitvec_u64(&bv1_encoded, &mut position).unwrap();
         assert_eq!(position, bv1_encoded.len());
         assert_eq!(bv1.to_string(), bv2.to_string());
     }
@@ -1133,7 +1155,7 @@ mod tests {
         let bv1_encoded = bv1.encode();
 
         let mut position = 0usize;
-        let bv2 = patch_bitvec_u64_msb0(&bv1_encoded, &mut position).unwrap();
+        let bv2 = Msb0::patch_bitvec_u64(&bv1_encoded, &mut position).unwrap();
         assert_eq!(position, bv1_encoded.len());
         assert_eq!(bv1.to_string(), bv2.to_string());
     }
@@ -1146,7 +1168,7 @@ mod tests {
         let bv1_encoded = bv1.encode();
 
         let mut position = 0usize;
-        let bv2 = patch_bitvec_u64_msb0(&bv1_encoded, &mut position).unwrap();
+        let bv2 = Msb0::patch_bitvec_u64(&bv1_encoded, &mut position).unwrap();
         assert_eq!(position, bv1_encoded.len());
         assert_eq!(bv1.to_string(), bv2.to_string());
     }
