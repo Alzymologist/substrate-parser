@@ -1,5 +1,5 @@
 //! Decode signable transaction extensions using `RuntimeMetadataV14`.
-use sp_core::H256;
+use primitive_types::H256;
 
 #[cfg(not(feature = "std"))]
 use crate::additional_types::Era;

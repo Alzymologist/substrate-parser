@@ -1,9 +1,9 @@
 use frame_metadata::v14::{RuntimeMetadataV14, StorageEntryMetadata};
 use parity_scale_codec::Decode;
+use primitive_types::H256;
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, IntoPortable, Path, Registry, TypeDef,
 };
-use sp_core::H256;
 
 use crate::std::{
     any::TypeId,

@@ -1,14 +1,24 @@
 //! Types for parsed data (nested) and parser cards (flat and formatted).
-#[cfg(not(feature = "std"))]
-use crate::additional_types::Era;
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use frame_metadata::v14::StorageEntryMetadata;
 use num_bigint::{BigInt, BigUint};
+use primitive_types::{H160, H256, H512};
 use scale_info::{form::PortableForm, Field, Path, Type, Variant};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
+
+#[cfg(not(feature = "std"))]
+use crate::additional_types::{
+    AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
+    SignatureSr25519,
+};
 #[cfg(feature = "std")]
-use sp_core::crypto::{Ss58AddressFormat, Ss58Codec};
-use sp_core::{crypto::AccountId32, ecdsa, ed25519, sr25519, H160, H256, H512};
+use sp_core::{
+    crypto::{AccountId32, Ss58AddressFormat, Ss58Codec},
+    ecdsa, ed25519, sr25519,
+};
+
+#[cfg(not(feature = "std"))]
+use crate::additional_types::Era;
 #[cfg(feature = "std")]
 use sp_runtime::generic::Era;
 
@@ -327,14 +337,32 @@ pub enum ParsedData {
         specialty: SpecialtyPrimitive,
     },
     PrimitiveU256(BigUint),
+    #[cfg(feature = "std")]
     PublicEd25519(ed25519::Public),
+    #[cfg(not(feature = "std"))]
+    PublicEd25519(PublicEd25519),
+    #[cfg(feature = "std")]
     PublicSr25519(sr25519::Public),
+    #[cfg(not(feature = "std"))]
+    PublicSr25519(PublicSr25519),
+    #[cfg(feature = "std")]
     PublicEcdsa(ecdsa::Public),
+    #[cfg(not(feature = "std"))]
+    PublicEcdsa(PublicEcdsa),
     Sequence(SequenceData),
     SequenceRaw(SequenceRawData),
+    #[cfg(feature = "std")]
     SignatureEd25519(ed25519::Signature),
+    #[cfg(not(feature = "std"))]
+    SignatureEd25519(SignatureEd25519),
+    #[cfg(feature = "std")]
     SignatureSr25519(sr25519::Signature),
+    #[cfg(not(feature = "std"))]
+    SignatureSr25519(SignatureSr25519),
+    #[cfg(feature = "std")]
     SignatureEcdsa(ecdsa::Signature),
+    #[cfg(not(feature = "std"))]
+    SignatureEcdsa(SignatureEcdsa),
     Text(String),
     Tuple(Vec<ExtendedData>),
     Variant(VariantData),
@@ -896,8 +924,7 @@ impl IdData {
     }
     #[cfg(not(feature = "std"))]
     pub fn from_account_id32(value: &AccountId32, _base58prefix: u16) -> Self {
-        let hex = hex::encode(value);
-        Self { hex }
+        Self { hex: value.hex() }
     }
     #[cfg(feature = "std")]
     pub fn from_public_ed25519(value: &ed25519::Public, base58prefix: u16) -> Self {
@@ -906,9 +933,8 @@ impl IdData {
         Self { base58, identicon }
     }
     #[cfg(not(feature = "std"))]
-    pub fn from_public_ed25519(value: &ed25519::Public, _base58prefix: u16) -> Self {
-        let hex = hex::encode(value.0);
-        Self { hex }
+    pub fn from_public_ed25519(value: &PublicEd25519, _base58prefix: u16) -> Self {
+        Self { hex: value.hex() }
     }
     #[cfg(feature = "std")]
     pub fn from_public_sr25519(value: &sr25519::Public, base58prefix: u16) -> Self {
@@ -917,9 +943,8 @@ impl IdData {
         Self { base58, identicon }
     }
     #[cfg(not(feature = "std"))]
-    pub fn from_public_sr25519(value: &sr25519::Public, _base58prefix: u16) -> Self {
-        let hex = hex::encode(value.0);
-        Self { hex }
+    pub fn from_public_sr25519(value: &PublicSr25519, _base58prefix: u16) -> Self {
+        Self { hex: value.hex() }
     }
     #[cfg(feature = "std")]
     pub fn from_public_ecdsa(value: &ecdsa::Public, base58prefix: u16) -> Self {
@@ -928,9 +953,8 @@ impl IdData {
         Self { base58, identicon }
     }
     #[cfg(not(feature = "std"))]
-    pub fn from_public_ecdsa(value: &ecdsa::Public, _base58prefix: u16) -> Self {
-        let hex = hex::encode(value.0);
-        Self { hex }
+    pub fn from_public_ecdsa(value: &PublicEcdsa, _base58prefix: u16) -> Self {
+        Self { hex: value.hex() }
     }
 }
 
@@ -1004,9 +1028,18 @@ pub enum ParserCard {
         text: Option<String>,
         element_info_flat: Vec<InfoFlat>,
     },
+    #[cfg(feature = "std")]
     SignatureEd25519(ed25519::Signature),
+    #[cfg(not(feature = "std"))]
+    SignatureEd25519(SignatureEd25519),
+    #[cfg(feature = "std")]
     SignatureSr25519(sr25519::Signature),
+    #[cfg(not(feature = "std"))]
+    SignatureSr25519(SignatureSr25519),
+    #[cfg(feature = "std")]
     SignatureEcdsa(ecdsa::Signature),
+    #[cfg(not(feature = "std"))]
+    SignatureEcdsa(SignatureEcdsa),
     Text(String),
     Tip(Currency),
     TupleAnnounced(usize),
@@ -1166,15 +1199,24 @@ impl ExtendedCard {
                 Some(valid_text) => readable(self.indent, "Text", valid_text),
                 None => readable(self.indent, "Sequence u8", hex),
             },
+            #[cfg(feature = "std")]
             ParserCard::SignatureEd25519(a) => {
                 readable(self.indent, "Signature Ed25519", &hex::encode(a.0))
             }
+            #[cfg(not(feature = "std"))]
+            ParserCard::SignatureEd25519(a) => readable(self.indent, "Signature Ed25519", &a.hex()),
+            #[cfg(feature = "std")]
             ParserCard::SignatureSr25519(a) => {
                 readable(self.indent, "Signature Sr25519", &hex::encode(a.0))
             }
+            #[cfg(not(feature = "std"))]
+            ParserCard::SignatureSr25519(a) => readable(self.indent, "Signature Sr25519", &a.hex()),
+            #[cfg(feature = "std")]
             ParserCard::SignatureEcdsa(a) => {
                 readable(self.indent, "Signature Ecdsa", &hex::encode(a.0))
             }
+            #[cfg(not(feature = "std"))]
+            ParserCard::SignatureEcdsa(a) => readable(self.indent, "Signature Ecdsa", &a.hex()),
             ParserCard::Text(a) => readable(self.indent, "Text", a),
             ParserCard::Tip(a) => {
                 readable(self.indent, "Tip", &format!("{} {}", a.number, a.units))

@@ -3,6 +3,9 @@
 //! Exactly follow current substrate code from `no_std` incompatible crates.
 use parity_scale_codec::{Decode, Error, Input};
 
+pub use crate::special_types::{SIGNATURE_LEN_ECDSA, SIGNATURE_LEN_ED25519, SIGNATURE_LEN_SR25519};
+use crate::std::string::String;
+
 /// Era period, same as in `sp_runtime::generic`.
 pub type Period = u64;
 
@@ -34,6 +37,61 @@ impl Decode for Era {
             }
         }
     }
+}
+
+/// Definitions for some special arrays from `sp_core`.
+macro_rules! define_array {
+    ($(#[$attr:meta] $name: ident ($len: expr)), *) => {
+        $(
+            #[$attr]
+            ///
+            /// Intended for `no_std`, for decoding and display of decoded data only.
+            #[derive(Clone, Debug, Eq, PartialEq)]
+            pub struct $name(pub [u8; $len]);
+            impl $name {
+                pub const fn len_bytes() -> usize {
+		    $len
+		}
+		pub fn hex(&self) -> String {
+		    hex::encode(self.0)
+		}
+            }
+        )*
+    }
+}
+
+pub const ACCOUNT_ID_32_LEN: usize = 32;
+pub const PUBLIC_LEN_ED25519: usize = 32;
+pub const PUBLIC_LEN_SR25519: usize = 32;
+pub const PUBLIC_LEN_ECDSA: usize = 33;
+
+define_array! {
+    /// Placeholder for `sp_core::crypto::AccountId32`.
+    AccountId32(ACCOUNT_ID_32_LEN)
+}
+define_array! {
+    /// Placeholder for `sp_core::ed25519::Public`.
+    PublicEd25519(PUBLIC_LEN_ED25519)
+}
+define_array! {
+    /// Placeholder for `sp_core::sr25519::Public`.
+    PublicSr25519(PUBLIC_LEN_SR25519)
+}
+define_array! {
+    /// Placeholder for `sp_core::ecdsa::Public`.
+    PublicEcdsa(PUBLIC_LEN_ECDSA)
+}
+define_array! {
+    /// Placeholder for `sp_core::ed25519::Signature`.
+    SignatureEd25519(SIGNATURE_LEN_ED25519)
+}
+define_array! {
+    /// Placeholder for `sp_core::sr25519::Signature`.
+    SignatureSr25519(SIGNATURE_LEN_SR25519)
+}
+define_array! {
+    /// Placeholder for `sp_core::ecdsa::Signature`.
+    SignatureEcdsa(SIGNATURE_LEN_ECDSA)
 }
 
 #[cfg(test)]

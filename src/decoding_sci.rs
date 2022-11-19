@@ -5,12 +5,25 @@ use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use frame_metadata::v14::RuntimeMetadataV14;
 use num_bigint::{BigInt, BigUint};
 use parity_scale_codec::{Decode, DecodeAll, OptionBool};
+use primitive_types::{H160, H512};
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, PortableRegistry, Type, TypeDef,
     TypeDefBitSequence, TypeDefPrimitive, Variant,
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
-use sp_core::{crypto::AccountId32, H160, H512};
+
+#[cfg(not(feature = "std"))]
+use crate::additional_types::{
+    AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
+    SignatureSr25519,
+};
+#[cfg(feature = "std")]
+use sp_core::{
+    crypto::AccountId32,
+    ecdsa::{Public as PublicEcdsa, Signature as SignatureEcdsa},
+    ed25519::{Public as PublicEd25519, Signature as SignatureEd25519},
+    sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
+};
 
 use crate::std::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
 
@@ -469,51 +482,27 @@ pub fn decode_with_type(
             info: propagated.info,
         }),
         SpecialtyTypeChecked::PublicEd25519 => Ok(ExtendedData {
-            data: sp_core::ed25519::Public::parse_check_compact(
-                data,
-                position,
-                propagated.compact_at(),
-            )?,
+            data: PublicEd25519::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::PublicSr25519 => Ok(ExtendedData {
-            data: sp_core::sr25519::Public::parse_check_compact(
-                data,
-                position,
-                propagated.compact_at(),
-            )?,
+            data: PublicSr25519::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::PublicEcdsa => Ok(ExtendedData {
-            data: sp_core::ecdsa::Public::parse_check_compact(
-                data,
-                position,
-                propagated.compact_at(),
-            )?,
+            data: PublicEcdsa::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::SignatureEd25519 => Ok(ExtendedData {
-            data: sp_core::ed25519::Signature::parse_check_compact(
-                data,
-                position,
-                propagated.compact_at(),
-            )?,
+            data: SignatureEd25519::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::SignatureSr25519 => Ok(ExtendedData {
-            data: sp_core::sr25519::Signature::parse_check_compact(
-                data,
-                position,
-                propagated.compact_at(),
-            )?,
+            data: SignatureSr25519::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
         SpecialtyTypeChecked::SignatureEcdsa => Ok(ExtendedData {
-            data: sp_core::ecdsa::Signature::parse_check_compact(
-                data,
-                position,
-                propagated.compact_at(),
-            )?,
+            data: SignatureEcdsa::parse_check_compact(data, position, propagated.compact_at())?,
             info: propagated.info,
         }),
     }

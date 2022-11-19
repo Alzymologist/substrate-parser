@@ -1,5 +1,5 @@
 //! Errors.
-use sp_core::H256;
+use primitive_types::H256;
 
 use crate::std::string::String;
 

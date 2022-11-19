@@ -99,8 +99,9 @@
 //! {
 //! use frame_metadata::RuntimeMetadataV14;
 //! use parity_scale_codec::Decode;
+//! use primitive_types::H256;
 //! use scale_info::{IntoPortable, Path, Registry};
-//! use sp_core::{H256, crypto::AccountId32};
+//! use sp_core::crypto::AccountId32;
 //! use sp_runtime::generic::Era;
 //! use std::str::FromStr;
 //! use substrate_parser::{
@@ -433,8 +434,8 @@
 #![no_std]
 #![deny(unused_crate_dependencies)]
 
+use primitive_types::H256;
 use scale_info::{interner::UntrackedSymbol, PortableRegistry};
-use sp_core::H256;
 
 #[cfg(not(feature = "std"))]
 pub mod additional_types;
