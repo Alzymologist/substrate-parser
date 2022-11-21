@@ -93,6 +93,25 @@
 //! a one of balance-displaying [pallets](crate::cards::PALLETS_BALANCE_VALID)
 //! or in extensions.
 //!
+//! # Features
+//!
+//! Crate supports `no_std` in `default-features = false` mode.
+//!
+//! With feature `std` (available by default) parsed data is translated directly
+//! into corresponding Substrate types, such as `Era` from `sp_runtime` and
+//! special arrays such as `AccountId32`, public keys, and signatures from
+//! `sp_core`.
+//!
+//! In `no_std` mode types named and built similarly to the original Substrate
+//! types are introduced in `additional_types` module, to avoid apparent current
+//! incompatibility of `sp_runtime` and `sp_core/full_crypto` with `no_std`
+//! build targets. Types from `additional_types` module are intended mainly for
+//! proper parsed data display.
+//!
+//! Feature `embed-display` is suggested for `no_std` usage, as it supports also
+//! base58 representation of `AccountId32` and public keys, identical to the one
+//! in `sp_core`.
+//!
 //! # Examples
 //!```
 //! #[cfg(feature = "std")]
