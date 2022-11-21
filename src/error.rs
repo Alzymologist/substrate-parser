@@ -36,7 +36,7 @@ pub enum SignableError {
     #[error("Some extensions data remained unused after decoding.")]
     SomeDataNotUsedExtensions,
 
-    #[error("Wrong chain. Apparent genesis hash in extensions (hex::encode(as_decoded.0)) does not match the expected one (hex::encode(expected.0)).")]
+    #[error("Wrong chain. Apparent genesis hash in extensions {} does not match the expected one {}.", hex::encode(as_decoded.0), hex::encode(expected.0))]
     WrongGenesisHash { as_decoded: H256, expected: H256 },
 
     #[error("Wrong metadata spec version. When decoding extensions data with metadata version {in_metadata}, the apparent spec version in extensions is {as_decoded}.")]
