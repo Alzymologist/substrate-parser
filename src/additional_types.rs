@@ -1,10 +1,14 @@
 //! Types and functions for `no_std` only.
 //!
 //! Exactly follow current substrate code from `no_std` incompatible crates.
+#[cfg(feature = "embed-display")]
+use base58::ToBase58;
 use parity_scale_codec::{Decode, Error, Input};
 
 pub use crate::special_types::{SIGNATURE_LEN_ECDSA, SIGNATURE_LEN_ED25519, SIGNATURE_LEN_SR25519};
-use crate::std::string::String;
+
+#[cfg(feature = "embed-display")]
+use crate::std::{string::String, vec::Vec};
 
 /// Era period, same as in `sp_runtime::generic`.
 pub type Period = u64;
@@ -52,17 +56,21 @@ macro_rules! define_array {
                 pub const fn len_bytes() -> usize {
 		    $len
 		}
-		pub fn hex(&self) -> String {
-		    hex::encode(self.0)
-		}
             }
         )*
     }
 }
 
+/// Known size for `sp_core::crypto::AccountId32`.
 pub const ACCOUNT_ID_32_LEN: usize = 32;
+
+/// Known size for `sp_core::ed25519::Public`.
 pub const PUBLIC_LEN_ED25519: usize = 32;
+
+/// Known size for `sp_core::sr25519::Public`.
 pub const PUBLIC_LEN_SR25519: usize = 32;
+
+/// Known size for `sp_core::ecdsa::Public`.
 pub const PUBLIC_LEN_ECDSA: usize = 33;
 
 define_array! {
@@ -93,6 +101,63 @@ define_array! {
     /// Placeholder for `sp_core::ecdsa::Signature`.
     SignatureEcdsa(SIGNATURE_LEN_ECDSA)
 }
+
+/// Prefix used in base58 conversion. From `sp_core`.
+#[cfg(feature = "embed-display")]
+const PREFIX: &[u8] = b"SS58PRE";
+
+/// Hash calculation used in base58 conversion. From `sp_core`.
+#[cfg(feature = "embed-display")]
+fn ss58hash(data: &[u8]) -> Vec<u8> {
+    use blake2::{Blake2b512, Digest};
+
+    let mut ctx = Blake2b512::new();
+    ctx.update(PREFIX);
+    ctx.update(data);
+    ctx.finalize().to_vec()
+}
+
+/// Same as `to_ss58check_with_version()` method for `Ss58Codec`.
+///
+/// Comments also from `sp_core`.
+#[cfg(feature = "embed-display")]
+fn as_base58_with_known_prefix(input: &[u8], base58prefix: u16) -> String {
+    // We mask out the upper two bits of the ident - SS58 Prefix currently only supports 14-bits
+    let ident: u16 = base58prefix & 0b0011_1111_1111_1111;
+    let mut v = match ident {
+        0..=63 => vec![ident as u8],
+        64..=16_383 => {
+            // upper six bits of the lower byte(!)
+            let first = ((ident & 0b0000_0000_1111_1100) as u8) >> 2;
+            // lower two bits of the lower byte in the high pos,
+            // lower bits of the upper byte in the low pos
+            let second = ((ident >> 8) as u8) | ((ident & 0b0000_0000_0000_0011) as u8) << 6;
+            vec![first | 0b01000000, second]
+        }
+        _ => unreachable!("masked out the upper two bits; qed"),
+    };
+    v.extend(input);
+    let r = ss58hash(&v);
+    v.extend(&r[0..2]);
+    v.to_base58()
+}
+
+/// Base58 representation for some special arrays from `sp_core`.
+#[cfg(feature = "embed-display")]
+macro_rules! add_base {
+    ($($name: ident), *) => {
+        $(
+            impl $name {
+		pub fn as_base58(&self, base58prefix: u16) -> String {
+		    as_base58_with_known_prefix(&self.0, base58prefix)
+		}
+            }
+        )*
+    }
+}
+
+#[cfg(feature = "embed-display")]
+add_base!(AccountId32, PublicEd25519, PublicSr25519, PublicEcdsa);
 
 #[cfg(test)]
 mod tests {

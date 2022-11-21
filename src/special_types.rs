@@ -183,13 +183,13 @@ impl_stable_length_array_closed!(PublicEd25519, Self::LEN, from_raw);
 impl_stable_length_array_closed!(PublicSr25519, Self::LEN, from_raw);
 impl_stable_length_array_closed!(PublicEcdsa, Self::LEN, from_raw);
 
-/// Known size for [sp_core::ed25519::Signature].
+/// Known size for `sp_core::ed25519::Signature`.
 pub const SIGNATURE_LEN_ED25519: usize = 64;
 
-/// Known size for [sp_core::sr25519::Signature]
+/// Known size for `sp_core::sr25519::Signature`.
 pub const SIGNATURE_LEN_SR25519: usize = 64;
 
-/// Known size for [sp_core::ecdsa::Signature]
+/// Known size for `sp_core::ecdsa::Signature`.
 pub const SIGNATURE_LEN_ECDSA: usize = 65;
 
 impl_stable_length_array_closed!(SignatureEd25519, SIGNATURE_LEN_ED25519, from_raw);

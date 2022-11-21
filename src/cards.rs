@@ -14,7 +14,9 @@ use crate::additional_types::{
 #[cfg(feature = "std")]
 use sp_core::{
     crypto::{AccountId32, Ss58AddressFormat, Ss58Codec},
-    ecdsa, ed25519, sr25519,
+    ecdsa::{Public as PublicEcdsa, Signature as SignatureEcdsa},
+    ed25519::{Public as PublicEd25519, Signature as SignatureEd25519},
+    sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
 };
 
 #[cfg(not(feature = "std"))]
@@ -337,31 +339,13 @@ pub enum ParsedData {
         specialty: SpecialtyPrimitive,
     },
     PrimitiveU256(BigUint),
-    #[cfg(feature = "std")]
-    PublicEd25519(ed25519::Public),
-    #[cfg(not(feature = "std"))]
     PublicEd25519(PublicEd25519),
-    #[cfg(feature = "std")]
-    PublicSr25519(sr25519::Public),
-    #[cfg(not(feature = "std"))]
     PublicSr25519(PublicSr25519),
-    #[cfg(feature = "std")]
-    PublicEcdsa(ecdsa::Public),
-    #[cfg(not(feature = "std"))]
     PublicEcdsa(PublicEcdsa),
     Sequence(SequenceData),
     SequenceRaw(SequenceRawData),
-    #[cfg(feature = "std")]
-    SignatureEd25519(ed25519::Signature),
-    #[cfg(not(feature = "std"))]
     SignatureEd25519(SignatureEd25519),
-    #[cfg(feature = "std")]
-    SignatureSr25519(sr25519::Signature),
-    #[cfg(not(feature = "std"))]
     SignatureSr25519(SignatureSr25519),
-    #[cfg(feature = "std")]
-    SignatureEcdsa(ecdsa::Signature),
-    #[cfg(not(feature = "std"))]
     SignatureEcdsa(SignatureEcdsa),
     Text(String),
     Tuple(Vec<ExtendedData>),
@@ -903,7 +887,7 @@ impl std::fmt::Display for InfoFlat {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IdData {
     /// Base58 address
-    #[cfg(feature = "std")]
+    #[cfg(any(feature = "std", feature = "embed-display"))]
     pub base58: String,
 
     /// Identicon `png` data
@@ -911,52 +895,38 @@ pub struct IdData {
     pub identicon: Vec<u8>,
 
     /// Hexadecimal key
-    #[cfg(not(feature = "std"))]
+    #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
     pub hex: String,
 }
 
-impl IdData {
-    #[cfg(feature = "std")]
-    pub fn from_account_id32(value: &AccountId32, base58prefix: u16) -> Self {
-        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
-        let identicon = generate_png_scaled_default(&<[u8; 32]>::from(value.to_owned()));
-        Self { base58, identicon }
-    }
-    #[cfg(not(feature = "std"))]
-    pub fn from_account_id32(value: &AccountId32, _base58prefix: u16) -> Self {
-        Self { hex: value.hex() }
-    }
-    #[cfg(feature = "std")]
-    pub fn from_public_ed25519(value: &ed25519::Public, base58prefix: u16) -> Self {
-        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
-        let identicon = generate_png_scaled_default(&value.0);
-        Self { base58, identicon }
-    }
-    #[cfg(not(feature = "std"))]
-    pub fn from_public_ed25519(value: &PublicEd25519, _base58prefix: u16) -> Self {
-        Self { hex: value.hex() }
-    }
-    #[cfg(feature = "std")]
-    pub fn from_public_sr25519(value: &sr25519::Public, base58prefix: u16) -> Self {
-        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
-        let identicon = generate_png_scaled_default(&value.0);
-        Self { base58, identicon }
-    }
-    #[cfg(not(feature = "std"))]
-    pub fn from_public_sr25519(value: &PublicSr25519, _base58prefix: u16) -> Self {
-        Self { hex: value.hex() }
-    }
-    #[cfg(feature = "std")]
-    pub fn from_public_ecdsa(value: &ecdsa::Public, base58prefix: u16) -> Self {
-        let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
-        let identicon = generate_png_scaled_default(&value.0);
-        Self { base58, identicon }
-    }
-    #[cfg(not(feature = "std"))]
-    pub fn from_public_ecdsa(value: &PublicEcdsa, _base58prefix: u16) -> Self {
-        Self { hex: value.hex() }
+macro_rules! make_id_data {
+    ($($func: ident, $ty: ty), *) => {
+        $(
+            impl IdData {
+                #[cfg(feature = "std")]
+                pub fn $func(value: &$ty, base58prefix: u16) -> Self {
+                    let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
+                    let identicon = generate_png_scaled_default(value.as_ref());
+                    Self { base58, identicon }
+                }
+                #[cfg(feature = "embed-display")]
+                pub fn $func(value: &$ty, base58prefix: u16) -> Self {
+                    let base58 = value.as_base58(base58prefix);
+                    Self { base58 }
+                }
+                #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
+                pub fn $func(value: &$ty, _base58prefix: u16) -> Self {
+                    Self { hex: hex::encode(value.0) }
+                }
+            }
+        )*
     }
 }
+
+make_id_data!(from_account_id32, AccountId32);
+make_id_data!(from_public_ed25519, PublicEd25519);
+make_id_data!(from_public_sr25519, PublicSr25519);
+make_id_data!(from_public_ecdsa, PublicEcdsa);
 
 /// Flat cards content.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1028,17 +998,8 @@ pub enum ParserCard {
         text: Option<String>,
         element_info_flat: Vec<InfoFlat>,
     },
-    #[cfg(feature = "std")]
-    SignatureEd25519(ed25519::Signature),
-    #[cfg(not(feature = "std"))]
     SignatureEd25519(SignatureEd25519),
-    #[cfg(feature = "std")]
-    SignatureSr25519(sr25519::Signature),
-    #[cfg(not(feature = "std"))]
     SignatureSr25519(SignatureSr25519),
-    #[cfg(feature = "std")]
-    SignatureEcdsa(ecdsa::Signature),
-    #[cfg(not(feature = "std"))]
     SignatureEcdsa(SignatureEcdsa),
     Text(String),
     Tip(Currency),
@@ -1138,9 +1099,9 @@ impl ExtendedCard {
             ParserCard::H160(a) => readable(self.indent, "H160", &hex::encode(a.0)),
             ParserCard::H256(a) => readable(self.indent, "H256", &hex::encode(a.0)),
             ParserCard::H512(a) => readable(self.indent, "H512", &hex::encode(a.0)),
-            #[cfg(feature = "std")]
+            #[cfg(any(feature = "std", feature = "embed-display"))]
             ParserCard::Id(a) => readable(self.indent, "Id", &a.base58),
-            #[cfg(not(feature = "std"))]
+            #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
             ParserCard::Id(a) => readable(self.indent, "Id", &a.hex),
             ParserCard::NameSpecVersion { name, version } => {
                 readable(self.indent, "Network", &format!("{}{}", name, version))
@@ -1175,17 +1136,17 @@ impl ExtendedCard {
             ParserCard::PrimitiveU64(a) => readable(self.indent, "u64", &a.to_string()),
             ParserCard::PrimitiveU128(a) => readable(self.indent, "u128", &a.to_string()),
             ParserCard::PrimitiveU256(a) => readable(self.indent, "BigUint", &a.to_string()),
-            #[cfg(feature = "std")]
+            #[cfg(any(feature = "std", feature = "embed-display"))]
             ParserCard::PublicEd25519(a) => readable(self.indent, "PublicKey Ed25519", &a.base58),
-            #[cfg(not(feature = "std"))]
+            #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
             ParserCard::PublicEd25519(a) => readable(self.indent, "PublicKey Ed25519", &a.hex),
-            #[cfg(feature = "std")]
+            #[cfg(any(feature = "std", feature = "embed-display"))]
             ParserCard::PublicSr25519(a) => readable(self.indent, "PublicKey Sr25519", &a.base58),
-            #[cfg(not(feature = "std"))]
+            #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
             ParserCard::PublicSr25519(a) => readable(self.indent, "PublicKey Sr25519", &a.hex),
-            #[cfg(feature = "std")]
+            #[cfg(any(feature = "std", feature = "embed-display"))]
             ParserCard::PublicEcdsa(a) => readable(self.indent, "PublicKey Ecdsa", &a.base58),
-            #[cfg(not(feature = "std"))]
+            #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
             ParserCard::PublicEcdsa(a) => readable(self.indent, "PublicKey Ecdsa", &a.hex),
             ParserCard::SequenceAnnounced {
                 len,
@@ -1199,24 +1160,15 @@ impl ExtendedCard {
                 Some(valid_text) => readable(self.indent, "Text", valid_text),
                 None => readable(self.indent, "Sequence u8", hex),
             },
-            #[cfg(feature = "std")]
             ParserCard::SignatureEd25519(a) => {
                 readable(self.indent, "Signature Ed25519", &hex::encode(a.0))
             }
-            #[cfg(not(feature = "std"))]
-            ParserCard::SignatureEd25519(a) => readable(self.indent, "Signature Ed25519", &a.hex()),
-            #[cfg(feature = "std")]
             ParserCard::SignatureSr25519(a) => {
                 readable(self.indent, "Signature Sr25519", &hex::encode(a.0))
             }
-            #[cfg(not(feature = "std"))]
-            ParserCard::SignatureSr25519(a) => readable(self.indent, "Signature Sr25519", &a.hex()),
-            #[cfg(feature = "std")]
             ParserCard::SignatureEcdsa(a) => {
                 readable(self.indent, "Signature Ecdsa", &hex::encode(a.0))
             }
-            #[cfg(not(feature = "std"))]
-            ParserCard::SignatureEcdsa(a) => readable(self.indent, "Signature Ecdsa", &a.hex()),
             ParserCard::Text(a) => readable(self.indent, "Text", a),
             ParserCard::Tip(a) => {
                 readable(self.indent, "Tip", &format!("{} {}", a.number, a.units))

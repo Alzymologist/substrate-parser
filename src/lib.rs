@@ -96,7 +96,7 @@
 //! # Examples
 //!```
 //! #[cfg(feature = "std")]
-//! {
+//! # {
 //! use frame_metadata::RuntimeMetadataV14;
 //! use parity_scale_codec::Decode;
 //! use primitive_types::H256;
@@ -423,7 +423,7 @@
 //! ];
 //!
 //!  assert_eq!(parsed.extensions, expected_extensions_data);
-//! }
+//! # }
 //! ```
 //!
 //! Parsed data could be transformed into set of flat and formatted
@@ -459,7 +459,7 @@ pub mod special_indicators;
 mod special_types;
 pub mod storage_data;
 
-#[cfg(feature = "std")]
+#[cfg(any(feature = "std", feature = "embed-display"))]
 #[cfg(test)]
 mod tests;
 

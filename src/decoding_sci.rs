@@ -1087,7 +1087,7 @@ pub(crate) fn resolve_ty(
     }
 }
 
-#[cfg(all(feature = "std", target_pointer_width = "64"))]
+#[cfg(target_pointer_width = "64")]
 #[cfg(test)]
 mod tests {
     use bitvec::bitvec;
