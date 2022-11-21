@@ -104,7 +104,7 @@
 //!
 //! In `no_std` mode types named and built similarly to the original Substrate
 //! types are introduced in `additional_types` module, to avoid apparent current
-//! incompatibility of `sp_runtime` and `sp_core/full_crypto` with `no_std`
+//! incompatibility of `sp_runtime` and `sp_core/full_crypto` with some `no_std`
 //! build targets. Types from `additional_types` module are intended mainly for
 //! proper parsed data display.
 //!
