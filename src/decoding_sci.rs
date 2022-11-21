@@ -1,5 +1,5 @@
 //! Decode data using [`RuntimeMetadataV14`].
-use bitvec::prelude::{BitVec, Lsb0, Msb0};
+use bitvec::prelude::{BitStore, BitVec, Lsb0, Msb0};
 use frame_metadata::v14::RuntimeMetadataV14;
 use num_bigint::{BigInt, BigUint};
 use parity_scale_codec::{Decode, DecodeAll, OptionBool};
@@ -799,7 +799,7 @@ impl BitVecPositions {
     /// New `BitVecPositions` for given input data and position.
     ///
     /// `T` is corresponding `BitStore`.
-    fn new<T>(data: &[u8], position: usize) -> Result<Self, ParserError> {
+    fn new<T: BitStore>(data: &[u8], position: usize) -> Result<Self, ParserError> {
         let found_compact = find_compact::<u32>(data, position)?;
 
         let bitvec_start = position;
@@ -836,7 +836,7 @@ impl BitVecPositions {
 /// Select the slice to decode as a `BitVec`.
 ///
 /// Current parser position gets changed.
-fn into_bitvec_decode<'a, T>(
+fn into_bitvec_decode<'a, T: BitStore>(
     data: &'a [u8],
     position: &'a mut usize,
 ) -> Result<&'a [u8], ParserError> {
