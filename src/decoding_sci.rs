@@ -2,13 +2,14 @@
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use frame_metadata::v14::RuntimeMetadataV14;
 use num_bigint::{BigInt, BigUint};
-use parity_scale_codec::{Decode, OptionBool};
+use parity_scale_codec::{Decode, DecodeAll, OptionBool};
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, PortableRegistry, Type, TypeDef,
     TypeDefBitSequence, TypeDefPrimitive, Variant,
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 use sp_core::{crypto::AccountId32, H160, H512};
+use std::mem::size_of;
 
 use crate::cards::{
     Call, Documented, Event, ExtendedData, FieldData, Info, PalletSpecificData, ParsedData,
@@ -690,29 +691,7 @@ fn decode_type_def_bit_sequence(
     position: &mut usize,
     registry: &PortableRegistry,
 ) -> Result<ParsedData, ParserError> {
-    let found_compact = find_compact::<u32>(data, *position)?;
-    let bit_length_found = found_compact.compact;
-    let byte_length = match bit_length_found % 8 {
-        0 => bit_length_found / 8,
-        _ => (bit_length_found / 8) + 1,
-    } as usize;
-
     let bitvec_start = *position;
-    let bitvec_end = found_compact.start_next_unit + byte_length;
-
-    let into_decode = match data.get(bitvec_start..bitvec_end) {
-        Some(a) => {
-            let into_decode = a.to_vec();
-            *position = bitvec_end;
-            into_decode
-        }
-        None => {
-            return Err(ParserError::DataTooShort {
-                position: bitvec_start,
-                minimal_length: bitvec_end - bitvec_start,
-            })
-        }
-    };
 
     // BitOrder
     let bitorder_type = resolve_ty(registry, bit_ty.bit_order_type().id())?;
@@ -732,44 +711,147 @@ fn decode_type_def_bit_sequence(
     let bitstore_type = resolve_ty(registry, bit_ty.bit_store_type().id())?;
 
     match bitstore_type.type_def() {
-        TypeDef::Primitive(TypeDefPrimitive::U8) => match bitorder {
-            FoundBitOrder::Lsb0 => {
-                <BitVec<u8, Lsb0>>::decode(&mut &into_decode[..]).map(ParsedData::BitVecU8Lsb0)
-            }
-            FoundBitOrder::Msb0 => {
-                <BitVec<u8, Msb0>>::decode(&mut &into_decode[..]).map(ParsedData::BitVecU8Msb0)
-            }
-        },
-        TypeDef::Primitive(TypeDefPrimitive::U16) => {
+        TypeDef::Primitive(TypeDefPrimitive::U8) => {
+            let into_decode = into_bitvec_decode::<u8>(data, position)?;
             match bitorder {
-                FoundBitOrder::Lsb0 => <BitVec<u16, Lsb0>>::decode(&mut &into_decode[..])
-                    .map(ParsedData::BitVecU16Lsb0),
-                FoundBitOrder::Msb0 => <BitVec<u16, Msb0>>::decode(&mut &into_decode[..])
-                    .map(ParsedData::BitVecU16Msb0),
+                FoundBitOrder::Lsb0 => <BitVec<u8, Lsb0>>::decode_all(&mut &into_decode[..])
+                    .map(ParsedData::BitVecU8Lsb0)
+                    .map_err(|_| ParserError::TypeFailure {
+                        position: bitvec_start,
+                        ty: "BitVec<u8, Lsb0>",
+                    }),
+                FoundBitOrder::Msb0 => <BitVec<u8, Msb0>>::decode_all(&mut &into_decode[..])
+                    .map(ParsedData::BitVecU8Msb0)
+                    .map_err(|_| ParserError::TypeFailure {
+                        position: bitvec_start,
+                        ty: "BitVec<u8, Msb0>",
+                    }),
+            }
+        }
+        TypeDef::Primitive(TypeDefPrimitive::U16) => {
+            let into_decode = into_bitvec_decode::<u16>(data, position)?;
+            match bitorder {
+                FoundBitOrder::Lsb0 => <BitVec<u16, Lsb0>>::decode_all(&mut &into_decode[..])
+                    .map(ParsedData::BitVecU16Lsb0)
+                    .map_err(|_| ParserError::TypeFailure {
+                        position: bitvec_start,
+                        ty: "BitVec<u16, Lsb0>",
+                    }),
+                FoundBitOrder::Msb0 => <BitVec<u16, Msb0>>::decode_all(&mut &into_decode[..])
+                    .map(ParsedData::BitVecU16Msb0)
+                    .map_err(|_| ParserError::TypeFailure {
+                        position: bitvec_start,
+                        ty: "BitVec<u16, Msb0>",
+                    }),
             }
         }
         TypeDef::Primitive(TypeDefPrimitive::U32) => {
+            let into_decode = into_bitvec_decode::<u32>(data, position)?;
             match bitorder {
-                FoundBitOrder::Lsb0 => <BitVec<u32, Lsb0>>::decode(&mut &into_decode[..])
-                    .map(ParsedData::BitVecU32Lsb0),
-                FoundBitOrder::Msb0 => <BitVec<u32, Msb0>>::decode(&mut &into_decode[..])
-                    .map(ParsedData::BitVecU32Msb0),
+                FoundBitOrder::Lsb0 => <BitVec<u32, Lsb0>>::decode_all(&mut &into_decode[..])
+                    .map(ParsedData::BitVecU32Lsb0)
+                    .map_err(|_| ParserError::TypeFailure {
+                        position: bitvec_start,
+                        ty: "BitVec<u32, Lsb0>",
+                    }),
+                FoundBitOrder::Msb0 => <BitVec<u32, Msb0>>::decode_all(&mut &into_decode[..])
+                    .map(ParsedData::BitVecU32Msb0)
+                    .map_err(|_| ParserError::TypeFailure {
+                        position: bitvec_start,
+                        ty: "BitVec<u32, Msb0>",
+                    }),
             }
         }
         TypeDef::Primitive(TypeDefPrimitive::U64) => {
+            let into_decode = into_bitvec_decode::<u64>(data, position)?;
             match bitorder {
-                FoundBitOrder::Lsb0 => <BitVec<u64, Lsb0>>::decode(&mut &into_decode[..])
-                    .map(ParsedData::BitVecU64Lsb0),
-                FoundBitOrder::Msb0 => <BitVec<u64, Msb0>>::decode(&mut &into_decode[..])
-                    .map(ParsedData::BitVecU64Msb0),
+                FoundBitOrder::Lsb0 => <BitVec<u64, Lsb0>>::decode_all(&mut &into_decode[..])
+                    .map(ParsedData::BitVecU64Lsb0)
+                    .map_err(|_| ParserError::TypeFailure {
+                        position: bitvec_start,
+                        ty: "BitVec<u64, Lsb0>",
+                    }),
+                FoundBitOrder::Msb0 => <BitVec<u64, Msb0>>::decode_all(&mut &into_decode[..])
+                    .map(ParsedData::BitVecU64Msb0)
+                    .map_err(|_| ParserError::TypeFailure {
+                        position: bitvec_start,
+                        ty: "BitVec<u64, Msb0>",
+                    }),
             }
         }
-        _ => return Err(ParserError::NotBitStoreType { id }),
+        _ => Err(ParserError::NotBitStoreType { id }),
     }
-    .map_err(|_| ParserError::TypeFailure {
-        position: bitvec_start,
-        ty: "BitVec",
-    })
+}
+
+/// Positions and related values for decoding `BitVec`.
+struct BitVecPositions {
+    /// Encoded `BitVec` start position, includes bit length compact.
+    bitvec_start: usize,
+
+    /// Encoded `BitVec` end position.
+    bitvec_end: usize,
+
+    /// Minimal encoded data length.
+    minimal_length: usize,
+}
+
+impl BitVecPositions {
+    /// New `BitVecPositions` for given input data and position.
+    ///
+    /// `T` is corresponding `BitStore`.
+    fn new<T>(data: &[u8], position: usize) -> Result<Self, ParserError> {
+        let found_compact = find_compact::<u32>(data, position)?;
+
+        let bitvec_start = position;
+        let data_start = found_compact.start_next_unit;
+
+        let bit_length = found_compact.compact as usize;
+
+        const BITS_IN_BYTE: usize = 8;
+        let byte_length = match bit_length % BITS_IN_BYTE {
+            0 => bit_length / BITS_IN_BYTE,
+            _ => (bit_length / BITS_IN_BYTE) + 1usize,
+        };
+
+        let bytes_per_element = size_of::<T>();
+        let number_of_elements = match byte_length % bytes_per_element {
+            0 => byte_length / bytes_per_element,
+            _ => (byte_length / bytes_per_element) + 1usize,
+        };
+
+        let slice_length = number_of_elements * bytes_per_element;
+
+        let bitvec_end = data_start + slice_length;
+
+        let minimal_length = bitvec_end - bitvec_start;
+
+        Ok(Self {
+            bitvec_start,
+            bitvec_end,
+            minimal_length,
+        })
+    }
+}
+
+/// Select the slice to decode as a `BitVec`.
+///
+/// Current parser position gets changed.
+fn into_bitvec_decode<'a, T>(
+    data: &'a [u8],
+    position: &'a mut usize,
+) -> Result<&'a [u8], ParserError> {
+    let bitvec_positions = BitVecPositions::new::<T>(data, *position)?;
+
+    match data.get(bitvec_positions.bitvec_start..bitvec_positions.bitvec_end) {
+        Some(into_bitvec_decode) => {
+            *position = bitvec_positions.bitvec_end;
+            Ok(into_bitvec_decode)
+        }
+        None => Err(ParserError::DataTooShort {
+            position: bitvec_positions.bitvec_start,
+            minimal_length: bitvec_positions.minimal_length,
+        }),
+    }
 }
 
 /// Type of set element, resolved as completely as possible.
