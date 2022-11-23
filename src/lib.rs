@@ -12,15 +12,16 @@
 //!
 //! Chain data is [SCALE-encoded](https://docs.substrate.io/reference/scale-codec/).
 //! Data blobs entering decoder are expected to be decoded completely: all
-//! provided `Vec<u8>` must be used in decoding with no data remaining.
+//! provided `&[u8]` data must be used in decoding with no data remaining
+//! unparsed.
 //!
-//! For decoding the entry type (such as the type of particular storage item) or
-//! the data internal structure used to find the entry type in metadata (as is
-//! the case for signable transactions) must be known.
+//! For decoding either the entry type (such as the type of particular storage
+//! item) or the data internal structure used to find the entry type in metadata
+//! (as is the case for signable transactions) must be known.
 //!
 //! Entry type gets resolved into constituting types with metadata in-built
-//! types registry and appropriate `&[u8]` chunks get cut from input blob and
-//! decoded. The process follows what the `decode` from the
+//! types registry and appropriate `&[u8]` chunks are selected from input blob
+//! and decoded. The process follows what the `decode` from the
 //! [SCALE codec](parity_scale_codec) does, except the types that go into the
 //! decoder are found dynamically during the decoding itself.
 //!
@@ -92,12 +93,34 @@
 //! a one of balance-displaying [pallets](crate::cards::PALLETS_BALANCE_VALID)
 //! or in extensions.
 //!
+//! # Features
+//!
+//! Crate supports `no_std` in `default-features = false` mode.
+//!
+//! With feature `std` (available by default) parsed data is translated directly
+//! into corresponding Substrate types, such as `Era` from `sp_runtime` and
+//! special arrays such as `AccountId32`, public keys, and signatures from
+//! `sp_core`.
+//!
+//! In `no_std` mode types named and built similarly to the original Substrate
+//! types are introduced in `additional_types` module, to avoid apparent current
+//! incompatibility of `sp_runtime` and `sp_core/full_crypto` with some `no_std`
+//! build targets. Types from `additional_types` module are intended mainly for
+//! proper parsed data display.
+//!
+//! Feature `embed-display` is suggested for `no_std` usage, as it supports also
+//! base58 representation of `AccountId32` and public keys, identical to the one
+//! in `sp_core`.
+//!
 //! # Examples
 //!```
+//! #[cfg(feature = "std")]
+//! # {
 //! use frame_metadata::RuntimeMetadataV14;
 //! use parity_scale_codec::Decode;
+//! use primitive_types::H256;
 //! use scale_info::{IntoPortable, Path, Registry};
-//! use sp_core::{H256, crypto::AccountId32};
+//! use sp_core::crypto::AccountId32;
 //! use sp_runtime::generic::Era;
 //! use std::str::FromStr;
 //! use substrate_parser::{
@@ -128,7 +151,7 @@
 //!
 //! let parsed = parse_transaction(
 //!     &mut signable_data.clone(),
-//!     MetaInput::Raw(&metadata_westend9111),
+//!     MetaInput::Raw(metadata_westend9111),
 //!     westend_genesis_hash,
 //! ).unwrap();
 //!
@@ -419,24 +442,29 @@
 //! ];
 //!
 //!  assert_eq!(parsed.extensions, expected_extensions_data);
-//!```
+//! # }
+//! ```
 //!
-//! Parsed data could be transformed into flat formatted cards with `card`
-//! method.
+//! Parsed data could be transformed into set of flat and formatted
+//! [`ExtendedCard`] cards using `card` method.
 //!
-//! Cards could be printed by `show` or `show_with_docs` into readable Strings.
+//! Cards could be printed using `show` or `show_with_docs` methods into
+//! readable Strings.
+#![no_std]
 #![deny(unused_crate_dependencies)]
 
-use frame_metadata::v14::RuntimeMetadataV14;
-use scale_info::interner::UntrackedSymbol;
-use sp_core::H256;
+use primitive_types::H256;
+use scale_info::{interner::UntrackedSymbol, PortableRegistry};
 
+#[cfg(not(feature = "std"))]
+pub mod additional_types;
 pub mod cards;
 use cards::{Call, ExtendedCard, ExtendedData};
 pub mod compacts;
 use compacts::get_compact;
 mod decoding_sci;
-pub use decoding_sci::{decode_as_call, decode_with_type, Ty};
+pub use decoding_sci::decode_as_call;
+use decoding_sci::{decode_with_type, Ty};
 mod decoding_sci_ext;
 pub use decoding_sci_ext::decode_extensions;
 pub mod error;
@@ -448,9 +476,27 @@ mod propagated;
 use propagated::Propagated;
 pub mod special_indicators;
 mod special_types;
+pub mod storage_data;
 
+#[cfg(any(feature = "std", feature = "embed-display"))]
 #[cfg(test)]
 mod tests;
+
+#[cfg(any(feature = "std", test))]
+#[macro_use]
+extern crate std;
+
+#[cfg(all(not(feature = "std"), not(test)))]
+#[macro_use]
+extern crate alloc as std;
+
+use crate::std::{string::String, vec::Vec};
+
+#[cfg(feature = "std")]
+use std::any::TypeId;
+
+#[cfg(not(feature = "std"))]
+use core::any::TypeId;
 
 /// Chain data necessary to display decoded data correctly.
 ///
@@ -465,12 +511,55 @@ pub struct ShortSpecs {
     pub unit: String,
 }
 
-/// Cut a signable transaction data into call part and extensions part.
-pub fn cut_call_extensions(data: &mut Vec<u8>) -> Result<(Vec<u8>, Vec<u8>), SignableError> {
-    let call_length = get_compact::<u32>(data).map_err(|_| SignableError::CutSignable)? as usize;
-    match data.get(..call_length) {
-        Some(a) => Ok((a.to_vec(), data[call_length..].to_vec())),
-        None => Err(SignableError::CutSignable),
+/// Marked signable transaction data, with associated start positions for call
+/// and extensions data.
+pub struct MarkedData<'a> {
+    data: &'a [u8],
+    call_start: usize,
+    extensions_start: usize,
+}
+
+impl<'a> MarkedData<'a> {
+    /// Make `MarkedData` from a signable transaction data slice.
+    pub fn mark(data: &'a [u8]) -> Result<Self, SignableError> {
+        let mut call_start: usize = 0;
+        let call_length = get_compact::<u32>(data, &mut call_start)
+            .map_err(|_| SignableError::CutSignable)? as usize;
+        let extensions_start = call_start + call_length;
+        match data.get(call_start..extensions_start) {
+            Some(_) => Ok(Self {
+                data,
+                call_start,
+                extensions_start,
+            }),
+            None => Err(SignableError::CutSignable),
+        }
+    }
+
+    /// Whole signable transaction data.
+    pub fn data(&self) -> &[u8] {
+        self.data
+    }
+
+    /// Signable transaction data with extensions data cut off.
+    ///
+    /// Positions in resulting slice exactly match the positions in original
+    /// input.
+    ///
+    /// Extensions are cut to ensure the call decoding never gets outside the
+    /// call data.
+    pub(crate) fn data_no_extensions(&self) -> &[u8] {
+        &self.data[..self.extensions_start()]
+    }
+
+    /// Start positions for call data.
+    pub fn call_start(&self) -> usize {
+        self.call_start
+    }
+
+    /// Start positions for extensions data.
+    pub fn extensions_start(&self) -> usize {
+        self.extensions_start
     }
 }
 
@@ -512,22 +601,22 @@ impl TransactionParsed {
 
 /// Parse a signable transaction.
 pub fn parse_transaction(
-    data: &mut Vec<u8>,
+    data: &[u8],
     meta_input: MetaInput,
     genesis_hash: H256,
 ) -> Result<TransactionParsed, SignableError> {
     let checked_metadata = meta_input.checked().map_err(SignableError::MetaVersion)?;
 
-    // if unable to separate call date and extensions, then there is
+    // unable to separate call date and extensions,
     // some fundamental flaw is in transaction itself
-    let (mut call_data, mut extensions_data) = cut_call_extensions(data)?;
+    let marked_data = MarkedData::mark(data)?;
 
     // try parsing extensions, check that spec version and genesis hash are
     // correct
-    let extensions = decode_extensions(&mut extensions_data, &checked_metadata, genesis_hash)?;
+    let extensions = decode_extensions(&marked_data, &checked_metadata, genesis_hash)?;
 
     // try parsing call data
-    let call_result = decode_as_call(&mut call_data, checked_metadata.meta_v14);
+    let call_result = decode_as_call(&marked_data, &checked_metadata.meta_v14);
 
     Ok(TransactionParsed {
         call_result,
@@ -535,17 +624,42 @@ pub fn parse_transaction(
     })
 }
 
-/// Decode data with a known type using `V14` metadata.
+/// Decode part of `&[u8]` slice as a known type using `V14` metadata.
+///
+/// Input `position` marks the first element in data that goes into the
+/// decoding. As decoding proceeds, `position` gets changed.
+///
+/// Some data may remain undecoded here.
+///
+/// [`decode_all_as_type`] is suggested instead if all input is expected to be
+/// used.
+pub fn decode_as_type_at_position(
+    ty_symbol: &UntrackedSymbol<TypeId>,
+    data: &[u8],
+    registry: &PortableRegistry,
+    position: &mut usize,
+) -> Result<ExtendedData, ParserError> {
+    decode_with_type(
+        &Ty::Symbol(ty_symbol),
+        data,
+        position,
+        registry,
+        Propagated::new(),
+    )
+}
+
+/// Decode whole `&[u8]` slice as a known type using `V14` metadata.
 ///
 /// All data is expected to be used for the decoding.
-pub fn decode_blob_as_type(
-    ty_symbol: &UntrackedSymbol<std::any::TypeId>,
-    data: &mut Vec<u8>,
-    meta_v14: &RuntimeMetadataV14,
+pub fn decode_all_as_type(
+    ty_symbol: &UntrackedSymbol<TypeId>,
+    data: &[u8],
+    registry: &PortableRegistry,
 ) -> Result<ExtendedData, ParserError> {
-    let out = decode_with_type(&Ty::Symbol(ty_symbol), data, meta_v14, Propagated::new())?;
-    if !data.is_empty() {
-        Err(ParserError::SomeDataNotUsedBlob)
+    let mut position: usize = 0;
+    let out = decode_as_type_at_position(ty_symbol, data, registry, &mut position)?;
+    if position != data.len() {
+        Err(ParserError::SomeDataNotUsedBlob { from: position })
     } else {
         Ok(out)
     }

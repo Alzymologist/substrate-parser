@@ -2,6 +2,14 @@
 use frame_metadata::v14::SignedExtensionMetadata;
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, Field};
 
+use crate::std::vec::Vec;
+
+#[cfg(feature = "std")]
+use std::any::TypeId;
+
+#[cfg(not(feature = "std"))]
+use core::any::TypeId;
+
 use crate::cards::Info;
 use crate::error::ParserError;
 use crate::special_indicators::{Hint, SpecialtyH256, SpecialtyPrimitive};
@@ -13,18 +21,21 @@ use crate::special_indicators::{Hint, SpecialtyH256, SpecialtyPrimitive};
 /// further processing.
 #[derive(Clone, Copy, Debug)]
 pub struct SpecialtySet {
-    /// Compact flag.
+    /// Compact info.
     ///
-    /// True if the parser has encountered type with a type definition
-    /// `TypeDef::Compact(_)` for this `SpecialtySet` instance. Once true, never
-    /// gets removed from an instance.
+    /// `Some(id)` if the parser has encountered type with definition
+    /// `TypeDef::Compact(_)` for this `SpecialtySet` instance.
     ///
-    /// Must cause parser error if `true`, but the type inside compact has no
+    /// `id` corresponds to type id in metadata types `Registry`.
+    ///
+    /// Once `Some(_)`, never changes back to `None`.
+    ///
+    /// Must cause parser error if `Some(_)`, but the type inside compact has no
     /// [`HasCompact`](parity_scale_codec::HasCompact) implementation.
     ///
-    /// Currently is allowed to be `true` for unsigned integers and single-field
-    /// structs with unsigned integer as a field.
-    pub is_compact: bool,
+    /// Currently is allowed to be `Some(_)` for unsigned integers and
+    /// single-field structs with unsigned integer as a field.
+    pub compact_at: Option<u32>,
 
     /// `Hint` the parser has encountered for this `SpecialtySet` instance.
     ///
@@ -39,15 +50,16 @@ impl SpecialtySet {
     /// Initiate new `SpecialtySet`.
     pub fn new() -> Self {
         Self {
-            is_compact: false,
+            compact_at: None,
             hint: Hint::None,
         }
     }
 
-    /// Check that `is_compact` field is not `true`.
+    /// Check that `compact_at` field is not `Some(_)`, i.e. there was no
+    /// compact type encountered.
     pub fn reject_compact(&self) -> Result<(), ParserError> {
-        if self.is_compact {
-            Err(ParserError::UnexpectedCompactInsides)
+        if let Some(id) = self.compact_at {
+            Err(ParserError::UnexpectedCompactInsides { id })
         } else {
             Ok(())
         }
@@ -98,8 +110,8 @@ impl Checker {
         }
     }
 
-    /// Check that `is_compact` field in associated [`SpecialtySet`] is not
-    /// `true`.
+    /// Check that `compact_at` field in associated [`SpecialtySet`] is not
+    /// `Some(_)`, i.e. there was no compact type encountered.
     pub fn reject_compact(&self) -> Result<(), ParserError> {
         self.specialty_set.reject_compact()
     }
@@ -129,7 +141,7 @@ impl Checker {
     /// for a [`Type`](scale_info::Type).
     pub fn update_for_ty_symbol(
         &self,
-        ty_symbol: &UntrackedSymbol<std::any::TypeId>,
+        ty_symbol: &UntrackedSymbol<TypeId>,
     ) -> Result<Self, ParserError> {
         let mut checker = self.clone();
         checker.check_id(ty_symbol.id())?;
@@ -151,7 +163,7 @@ impl Checker {
     /// If not, type `id` is added into `cycle_check`.
     pub fn check_id(&mut self, id: u32) -> Result<(), ParserError> {
         if self.cycle_check.contains(&id) {
-            Err(ParserError::CyclicMetadata(id))
+            Err(ParserError::CyclicMetadata { id })
         } else {
             self.cycle_check.push(id);
             Ok(())
@@ -165,17 +177,17 @@ impl Default for Checker {
     }
 }
 
-/// Propagating data and collected type information ([`Checker`] and all
-/// non-empty type info).
+/// Propagating data and collected type information (`Checker` and all non-empty
+/// type info).
 #[derive(Clone, Debug)]
 pub struct Propagated {
     /// Type data that is collected and checked during parsing.
-    pub checker: Checker,
+    pub(crate) checker: Checker,
 
     /// Set of [`Info`] collected while resolving the type.
     ///
     /// Only non-empty [`Info`] entries are added.
-    pub info: Vec<Info>,
+    pub(crate) info: Vec<Info>,
 }
 
 impl Propagated {
@@ -188,11 +200,11 @@ impl Propagated {
     }
 
     /// Initiate new `Propagated` for signed extensions instance.
-    pub fn from_ext_meta(signed_ext_meta: &SignedExtensionMetadata<PortableForm>) -> Self {
+    pub(crate) fn from_ext_meta(signed_ext_meta: &SignedExtensionMetadata<PortableForm>) -> Self {
         Self {
             checker: Checker {
                 specialty_set: SpecialtySet {
-                    is_compact: false,
+                    compact_at: None,
                     hint: Hint::from_ext_meta(signed_ext_meta),
                 },
                 cycle_check: Vec::new(),
@@ -202,7 +214,7 @@ impl Propagated {
     }
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`.
-    pub fn with_checker(checker: Checker) -> Self {
+    pub(crate) fn with_checker(checker: Checker) -> Self {
         Self {
             checker,
             info: Vec::new(),
@@ -211,7 +223,10 @@ impl Propagated {
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`
     /// for an individual [`Field`].
-    pub fn for_field(checker: &Checker, field: &Field<PortableForm>) -> Result<Self, ParserError> {
+    pub(crate) fn for_field(
+        checker: &Checker,
+        field: &Field<PortableForm>,
+    ) -> Result<Self, ParserError> {
         Ok(Self {
             checker: Checker::update_for_field(checker, field)?,
             info: Vec::new(),
@@ -220,9 +235,9 @@ impl Propagated {
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`
     /// for a [`Type`](scale_info::Type).
-    pub fn for_ty_symbol(
+    pub(crate) fn for_ty_symbol(
         checker: &Checker,
-        ty_symbol: &UntrackedSymbol<std::any::TypeId>,
+        ty_symbol: &UntrackedSymbol<TypeId>,
     ) -> Result<Self, ParserError> {
         Ok(Self {
             checker: Checker::update_for_ty_symbol(checker, ty_symbol)?,
@@ -230,31 +245,31 @@ impl Propagated {
         })
     }
 
-    /// Get associated `is_compact`
-    pub fn is_compact(&self) -> bool {
-        self.checker.specialty_set.is_compact
+    /// Get associated `compact_at`
+    pub(crate) fn compact_at(&self) -> Option<u32> {
+        self.checker.specialty_set.compact_at
     }
 
-    /// Check that `is_compact` field in associated [`SpecialtySet`] is not
-    /// `true`.
-    pub fn reject_compact(&self) -> Result<(), ParserError> {
+    /// Check that `compact_at` field in associated [`SpecialtySet`] is not
+    /// `Some(_)`, i.e. there was no compact type encountered.
+    pub(crate) fn reject_compact(&self) -> Result<(), ParserError> {
         self.checker.specialty_set.reject_compact()
     }
 
     /// Discard previously found [`Hint`].
-    pub fn forget_hint(&mut self) {
+    pub(crate) fn forget_hint(&mut self) {
         self.checker.forget_hint()
     }
 
     /// Add [`Info`] entry (if non-empty) to `info` set.
-    pub fn add_info(&mut self, info_update: &Info) {
+    pub(crate) fn add_info(&mut self, info_update: &Info) {
         if !info_update.is_empty() {
             self.info.push(info_update.clone())
         }
     }
 
     /// Add `&[Info]` to `info` set.
-    pub fn add_info_slice(&mut self, info_update_slice: &[Info]) {
+    pub(crate) fn add_info_slice(&mut self, info_update_slice: &[Info]) {
         self.info.extend_from_slice(info_update_slice)
     }
 }

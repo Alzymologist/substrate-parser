@@ -1,6 +1,16 @@
 //! Decode signable transaction extensions using `RuntimeMetadataV14`.
-use sp_core::H256;
+use primitive_types::H256;
+
+#[cfg(not(feature = "std"))]
+use crate::additional_types::Era;
+#[cfg(feature = "std")]
 use sp_runtime::generic::Era;
+
+use crate::std::{
+    borrow::ToOwned,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use crate::cards::{ExtendedData, ParsedData};
 use crate::decoding_sci::{decode_with_type, Ty};
@@ -9,10 +19,12 @@ use crate::metadata_check::CheckedMetadata;
 use crate::propagated::Propagated;
 use crate::special_indicators::SpecialtyPrimitive;
 use crate::special_types::UnsignedInteger;
+use crate::MarkedData;
 
-/// Parse signable transaction extensions with provided `V14` metadata.
+/// Parse extensions part of the signable transaction [`MarkedData`] using
+/// provided `V14` metadata.
 ///
-/// Data gets consumed. All input data is expected to be used in parsing.
+/// Extensions data is expected to be decoded completely, with no data left.
 ///
 /// Metadata spec version and chain genesis hash are used to check that correct
 /// metadata is used for parsing.
@@ -23,17 +35,21 @@ use crate::special_types::UnsignedInteger;
 /// Whole `signed_extensions` set is scanned first for types in `ty` field, and
 /// then the second time, for types in `additional_signed` field.
 pub fn decode_extensions(
-    data: &mut Vec<u8>,
+    marked_data: &MarkedData,
     checked_metadata: &CheckedMetadata,
     genesis_hash: H256,
 ) -> Result<Vec<ExtendedData>, SignableError> {
+    let mut position = marked_data.extensions_start();
+    let data = marked_data.data();
+
     let mut extensions: Vec<ExtendedData> = Vec::new();
     for signed_extensions_metadata in checked_metadata.meta_v14.extrinsic.signed_extensions.iter() {
         extensions.push(
             decode_with_type(
                 &Ty::Symbol(&signed_extensions_metadata.ty),
                 data,
-                checked_metadata.meta_v14,
+                &mut position,
+                &checked_metadata.meta_v14.types,
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
             .map_err(SignableError::Parsing)?,
@@ -44,14 +60,16 @@ pub fn decode_extensions(
             decode_with_type(
                 &Ty::Symbol(&signed_extensions_metadata.additional_signed),
                 data,
-                checked_metadata.meta_v14,
+                &mut position,
+                &checked_metadata.meta_v14.types,
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
             .map_err(SignableError::Parsing)?,
         )
     }
-    if !data.is_empty() {
-        return Err(SignableError::SomeDataNotUsedExtensions);
+    // `position > data.len()` is ruled out elsewhere
+    if position != data.len() {
+        return Err(SignableError::SomeDataNotUsedExtensions { from: position });
     }
     check_extensions(&extensions, &checked_metadata.version, genesis_hash)?;
     Ok(extensions)
