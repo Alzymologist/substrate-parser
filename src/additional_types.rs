@@ -1,6 +1,6 @@
 //! Types and functions for `no_std` only.
 //!
-//! Exactly follow current substrate code from `no_std` incompatible crates.
+//! Exactly follow current substrate code from `no_std` incompatible crates. Last confirmed on v7.0.0
 #[cfg(feature = "embed-display")]
 use base58::ToBase58;
 use parity_scale_codec::{Decode, Error, Input};
