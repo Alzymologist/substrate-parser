@@ -54,7 +54,7 @@ pub const ACCOUNT_ID32: &str = "AccountId32";
 
 /// [`Type`]-associated [`Path`] `ident` indicating that the data to follow
 /// *may* be a call.
-pub const CALL: &str = "Call";
+pub const CALL: &[&str] = &["Call", "RuntimeCall"];
 
 /// [`Type`]-associated [`Path`] `ident` for
 /// [`sp_runtime::generic::Era`](https://docs.rs/sp-runtime/latest/sp_runtime/generic/enum.Era.html).
@@ -62,7 +62,7 @@ pub const ERA: &str = "Era";
 
 /// [`Type`]-associated [`Path`] `ident` indicating that the data to follow
 /// *may* be an event.
-pub const EVENT: &str = "Event";
+pub const EVENT: &[&str] = &["Event", "RuntimeEvent"];
 
 /// [`Type`]-associated [`Path`] `ident` set for [primitive_types::H160].
 pub const H160: &[&str] = &["AccountId20", "H160"];
@@ -340,9 +340,9 @@ impl SpecialtyTypeHinted {
         match path.ident() {
             Some(a) => match a.as_str() {
                 ACCOUNT_ID32 => Self::AccountId32,
-                CALL => Self::PalletSpecific(PalletSpecificItem::Call),
+                a if CALL.contains(&a) => Self::PalletSpecific(PalletSpecificItem::Call),
                 ERA => Self::Era,
-                EVENT => Self::PalletSpecific(PalletSpecificItem::Event),
+                a if EVENT.contains(&a) => Self::PalletSpecific(PalletSpecificItem::Event),
                 a if H160.contains(&a) => Self::H160,
                 H256 => Self::H256,
                 H512 => Self::H512,
