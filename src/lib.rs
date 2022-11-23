@@ -93,12 +93,34 @@
 //! a one of balance-displaying [pallets](crate::cards::PALLETS_BALANCE_VALID)
 //! or in extensions.
 //!
+//! # Features
+//!
+//! Crate supports `no_std` in `default-features = false` mode.
+//!
+//! With feature `std` (available by default) parsed data is translated directly
+//! into corresponding Substrate types, such as `Era` from `sp_runtime` and
+//! special arrays such as `AccountId32`, public keys, and signatures from
+//! `sp_core`.
+//!
+//! In `no_std` mode types named and built similarly to the original Substrate
+//! types are introduced in `additional_types` module, to avoid apparent current
+//! incompatibility of `sp_runtime` and `sp_core/full_crypto` with some `no_std`
+//! build targets. Types from `additional_types` module are intended mainly for
+//! proper parsed data display.
+//!
+//! Feature `embed-display` is suggested for `no_std` usage, as it supports also
+//! base58 representation of `AccountId32` and public keys, identical to the one
+//! in `sp_core`.
+//!
 //! # Examples
 //!```
+//! #[cfg(feature = "std")]
+//! # {
 //! use frame_metadata::RuntimeMetadataV14;
 //! use parity_scale_codec::Decode;
+//! use primitive_types::H256;
 //! use scale_info::{IntoPortable, Path, Registry};
-//! use sp_core::{H256, crypto::AccountId32};
+//! use sp_core::crypto::AccountId32;
 //! use sp_runtime::generic::Era;
 //! use std::str::FromStr;
 //! use substrate_parser::{
@@ -420,18 +442,22 @@
 //! ];
 //!
 //!  assert_eq!(parsed.extensions, expected_extensions_data);
-//!```
+//! # }
+//! ```
 //!
 //! Parsed data could be transformed into set of flat and formatted
 //! [`ExtendedCard`] cards using `card` method.
 //!
 //! Cards could be printed using `show` or `show_with_docs` methods into
 //! readable Strings.
+#![no_std]
 #![deny(unused_crate_dependencies)]
 
+use primitive_types::H256;
 use scale_info::{interner::UntrackedSymbol, PortableRegistry};
-use sp_core::H256;
 
+#[cfg(not(feature = "std"))]
+pub mod additional_types;
 pub mod cards;
 use cards::{Call, ExtendedCard, ExtendedData};
 pub mod compacts;
@@ -452,8 +478,25 @@ pub mod special_indicators;
 mod special_types;
 pub mod storage_data;
 
+#[cfg(any(feature = "std", feature = "embed-display"))]
 #[cfg(test)]
 mod tests;
+
+#[cfg(any(feature = "std", test))]
+#[macro_use]
+extern crate std;
+
+#[cfg(all(not(feature = "std"), not(test)))]
+#[macro_use]
+extern crate alloc as std;
+
+use crate::std::{string::String, vec::Vec};
+
+#[cfg(feature = "std")]
+use std::any::TypeId;
+
+#[cfg(not(feature = "std"))]
+use core::any::TypeId;
 
 /// Chain data necessary to display decoded data correctly.
 ///
@@ -591,7 +634,7 @@ pub fn parse_transaction(
 /// [`decode_all_as_type`] is suggested instead if all input is expected to be
 /// used.
 pub fn decode_as_type_at_position(
-    ty_symbol: &UntrackedSymbol<std::any::TypeId>,
+    ty_symbol: &UntrackedSymbol<TypeId>,
     data: &[u8],
     registry: &PortableRegistry,
     position: &mut usize,
@@ -609,7 +652,7 @@ pub fn decode_as_type_at_position(
 ///
 /// All data is expected to be used for the decoding.
 pub fn decode_all_as_type(
-    ty_symbol: &UntrackedSymbol<std::any::TypeId>,
+    ty_symbol: &UntrackedSymbol<TypeId>,
     data: &[u8],
     registry: &PortableRegistry,
 ) -> Result<ExtendedData, ParserError> {

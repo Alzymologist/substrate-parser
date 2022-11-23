@@ -7,8 +7,8 @@
 //! [`PalletStorageMetadata`](frame_metadata::v14::PalletStorageMetadata) and
 //! `name` of
 //! [`StorageEntryMetadata`](frame_metadata::v14::StorageEntryMetadata), both
-//! processed as bytes in [`twox_128`](sp_core::twox_128) and concatenated
-//! together.
+//! processed as bytes in [`twox_128`](sp_core_hashing::twox_128) and
+//! concatenated together.
 //!
 //! There are `Plain` and `Map` variants of [`StorageEntryType`].
 //!
@@ -25,7 +25,15 @@
 //! documentation associated with every key with the same prefix).
 use frame_metadata::v14::{StorageEntryMetadata, StorageEntryType, StorageHasher};
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, PortableRegistry, TypeDef};
-use sp_core::{blake2_128, twox_64};
+use sp_core_hashing::{blake2_128, twox_64};
+
+use crate::std::{string::String, vec::Vec};
+
+#[cfg(feature = "std")]
+use std::any::TypeId;
+
+#[cfg(not(feature = "std"))]
+use core::any::TypeId;
 
 use crate::cards::{Documented, ExtendedData, Info};
 use crate::decode_all_as_type;
@@ -177,7 +185,7 @@ pub fn decode_as_storage_entry(
 macro_rules! cut_hash {
     ($func:ident, $hash_len:ident, $enum_variant:ident) => {
         fn $func(
-            key_ty: &UntrackedSymbol<std::any::TypeId>,
+            key_ty: &UntrackedSymbol<TypeId>,
             key_input: &[u8],
             position: &mut usize,
         ) -> Result<KeyPart, StorageError> {
@@ -214,7 +222,7 @@ cut_hash!(cut_twox_256, TWOX256_LEN, Twox256);
 macro_rules! check_hash {
     ($func:ident, $hash_len:ident, $fn_into:ident) => {
         fn $func(
-            ty: &UntrackedSymbol<std::any::TypeId>,
+            ty: &UntrackedSymbol<TypeId>,
             key_input: &[u8],
             position: &mut usize,
             registry: &PortableRegistry,
@@ -259,7 +267,7 @@ check_hash!(check_twox_64, TWOX64_LEN, twox_64);
 /// Key is expected to get processed completely, i.e. with no data remaining.
 pub fn process_key_mapped(
     hashers: &[StorageHasher],
-    key_ty: &UntrackedSymbol<std::any::TypeId>,
+    key_ty: &UntrackedSymbol<TypeId>,
     key_input: &[u8],
     mut position: usize,
     registry: &PortableRegistry,

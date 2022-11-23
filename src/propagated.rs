@@ -2,6 +2,14 @@
 use frame_metadata::v14::SignedExtensionMetadata;
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, Field};
 
+use crate::std::vec::Vec;
+
+#[cfg(feature = "std")]
+use std::any::TypeId;
+
+#[cfg(not(feature = "std"))]
+use core::any::TypeId;
+
 use crate::cards::Info;
 use crate::error::ParserError;
 use crate::special_indicators::{Hint, SpecialtyH256, SpecialtyPrimitive};
@@ -133,7 +141,7 @@ impl Checker {
     /// for a [`Type`](scale_info::Type).
     pub fn update_for_ty_symbol(
         &self,
-        ty_symbol: &UntrackedSymbol<std::any::TypeId>,
+        ty_symbol: &UntrackedSymbol<TypeId>,
     ) -> Result<Self, ParserError> {
         let mut checker = self.clone();
         checker.check_id(ty_symbol.id())?;
@@ -229,7 +237,7 @@ impl Propagated {
     /// for a [`Type`](scale_info::Type).
     pub(crate) fn for_ty_symbol(
         checker: &Checker,
-        ty_symbol: &UntrackedSymbol<std::any::TypeId>,
+        ty_symbol: &UntrackedSymbol<TypeId>,
     ) -> Result<Self, ParserError> {
         Ok(Self {
             checker: Checker::update_for_ty_symbol(checker, ty_symbol)?,

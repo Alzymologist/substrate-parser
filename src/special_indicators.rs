@@ -13,6 +13,14 @@ use scale_info::{
     Variant,
 };
 
+use crate::std::{borrow::ToOwned, string::String, vec::Vec};
+
+#[cfg(feature = "std")]
+use std::any::TypeId;
+
+#[cfg(not(feature = "std"))]
+use core::any::TypeId;
+
 use crate::cards::Info;
 use crate::decoding_sci::pick_variant;
 
@@ -40,27 +48,29 @@ pub const NONCE_ID_SET: &[&str] = &["nonce"];
 /// If the value is unsigned integer, it will be considered spec version.
 pub const SPEC_VERSION_ID_SET: &[&str] = &["spec_version"];
 
-/// [`Type`]-associated [`Path`] `ident` for [sp_core::crypto::AccountId32].
+/// [`Type`]-associated [`Path`] `ident` for
+/// [`sp_core::crypto::AccountId32`](https://docs.rs/sp-core/latest/sp_core/crypto/struct.AccountId32.html).
 pub const ACCOUNT_ID32: &str = "AccountId32";
 
 /// [`Type`]-associated [`Path`] `ident` indicating that the data to follow
 /// *may* be a call.
 pub const CALL: &str = "Call";
 
-/// [`Type`]-associated [`Path`] `ident` for [sp_runtime::generic::Era].
+/// [`Type`]-associated [`Path`] `ident` for
+/// [`sp_runtime::generic::Era`](https://docs.rs/sp-runtime/latest/sp_runtime/generic/enum.Era.html).
 pub const ERA: &str = "Era";
 
 /// [`Type`]-associated [`Path`] `ident` indicating that the data to follow
 /// *may* be an event.
 pub const EVENT: &str = "Event";
 
-/// [`Type`]-associated [`Path`] `ident` set for [sp_core::H160].
+/// [`Type`]-associated [`Path`] `ident` set for [primitive_types::H160].
 pub const H160: &[&str] = &["AccountId20", "H160"];
 
-/// [`Type`]-associated [`Path`] `ident` for [sp_core::H256].
+/// [`Type`]-associated [`Path`] `ident` for [primitive_types::H256].
 pub const H256: &str = "H256";
 
-/// [`Type`]-associated [`Path`] `ident` for [sp_core::H512].
+/// [`Type`]-associated [`Path`] `ident` for [primitive_types::H512].
 pub const H512: &str = "H512";
 
 /// [`Type`]-associated [`Path`] `ident` indicating that the data to follow
@@ -88,13 +98,13 @@ pub const PUBLIC: &str = "Public";
 /// [`Type`]-associated [`Path`] `ident` for possible signature.
 pub const SIGNATURE: &str = "Signature";
 
-/// [`Path`] `namespace` for [sp_core::ed25519].
+/// [`Path`] `namespace` for `sp_core::ed25519`.
 pub const SP_CORE_ED25519: &[&str] = &["sp_core", "ed25519"];
 
-/// [`Path`] `namespace` for [sp_core::sr25519].
+/// [`Path`] `namespace` for `sp_core::sr25519`.
 pub const SP_CORE_SR25519: &[&str] = &["sp_core", "sr25519"];
 
-/// [`Path`] `namespace` for [sp_core::ecdsa].
+/// [`Path`] `namespace` for `sp_core::ecdsa`.
 pub const SP_CORE_ECDSA: &[&str] = &["sp_core", "ecdsa"];
 
 /// [`Variant`] name `None` that must be found for type to be processed as
@@ -384,7 +394,7 @@ pub enum SpecialtyTypeChecked<'a> {
     H160,
     H256,
     H512,
-    Option(&'a UntrackedSymbol<std::any::TypeId>),
+    Option(&'a UntrackedSymbol<TypeId>),
     PalletSpecific {
         pallet_name: String,
         pallet_info: Info,

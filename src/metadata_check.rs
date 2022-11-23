@@ -10,6 +10,8 @@
 //! [`CheckedMetadata`] does not get re-checked in this crate.
 use frame_metadata::v14::RuntimeMetadataV14;
 
+use crate::std::string::{String, ToString};
+
 use crate::cards::ParsedData;
 use crate::decode_all_as_type;
 use crate::error::MetaVersionError;
@@ -33,7 +35,7 @@ impl CheckedMetadata {
                 system_block = true;
                 for constant in pallet.constants.iter() {
                     if constant.name == "Version" {
-                        runtime_version_data_and_ty = Some((constant.value.to_owned(), constant.ty))
+                        runtime_version_data_and_ty = Some((constant.value.to_vec(), constant.ty))
                     }
                 }
                 break;

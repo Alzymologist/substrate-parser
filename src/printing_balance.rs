@@ -58,6 +58,8 @@
 //! This module **only formats** the data for output as text, it is not expected
 //! that any operations will be performed on the values except displaying them.
 
+use crate::std::string::{String, ToString};
+
 /// Trait for correct displaying of balance-related values.
 pub trait AsBalance {
     /// Represent numerical value as a balance.

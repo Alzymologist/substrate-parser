@@ -1,10 +1,15 @@
 use frame_metadata::v14::{RuntimeMetadataV14, StorageEntryMetadata};
 use parity_scale_codec::Decode;
+use primitive_types::H256;
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, IntoPortable, Path, Registry, TypeDef,
 };
-use sp_core::H256;
-use std::str::FromStr;
+
+use crate::std::{
+    any::TypeId,
+    string::{String, ToString},
+    vec::Vec,
+};
 
 use crate::cards::{
     ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
@@ -29,7 +34,7 @@ fn specs() -> ShortSpecs {
     }
 }
 
-fn system_digest_ty(meta_v14: &RuntimeMetadataV14) -> UntrackedSymbol<std::any::TypeId> {
+fn system_digest_ty(meta_v14: &RuntimeMetadataV14) -> UntrackedSymbol<TypeId> {
     let mut ty = None;
     for pallet in meta_v14.pallets.iter() {
         if let Some(ref storage) = pallet.storage {
@@ -73,7 +78,12 @@ fn tr_1() {
     let reply = parse_transaction(
         &data,
         MetaInput::Raw(metadata("for_tests/westend9111")),
-        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
+        H256(
+            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
     )
     .unwrap()
     .card(&specs());
@@ -146,7 +156,12 @@ fn tr_2() {
     let reply = parse_transaction(
         &data,
         MetaInput::Raw(metadata("for_tests/westend9111")),
-        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
+        H256(
+            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
     )
     .unwrap()
     .card(&specs());
@@ -251,7 +266,12 @@ fn tr_3() {
     let reply = parse_transaction(
         &data,
         MetaInput::Raw(metadata("for_tests/westend9111")),
-        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
+        H256(
+            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
     )
     .unwrap()
     .card(&specs());
@@ -304,7 +324,12 @@ fn tr_4() {
     let reply = parse_transaction(
         &data,
         MetaInput::Raw(metadata("for_tests/westend9111")),
-        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
+        H256(
+            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
     )
     .unwrap()
     .card(&specs());
@@ -359,7 +384,12 @@ fn tr_5() {
     let reply = parse_transaction(
         &data,
         MetaInput::Raw(metadata("for_tests/acala2012")),
-        H256::from_str("fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c").unwrap(),
+        H256(
+            hex::decode("fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
     )
     .unwrap()
     .card(&specs_acala);
@@ -683,7 +713,12 @@ fn parser_error_1() {
     let error = parse_transaction(
         &data,
         MetaInput::Raw(metadata("for_tests/westend9111")),
-        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
+        H256(
+            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
     )
     .unwrap_err();
     let error_known = SignableError::WrongSpecVersion {
@@ -699,7 +734,12 @@ fn parser_error_2() {
     let parsed = parse_transaction(
         &data,
         MetaInput::Raw(metadata("for_tests/westend9111")),
-        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
+        H256(
+            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
@@ -713,7 +753,12 @@ fn parser_error3() {
     let signable_error = parse_transaction(
         &data,
         MetaInput::Raw(metadata("for_tests/westend9111")),
-        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
+        H256(
+            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
     )
     .unwrap_err();
     let signable_error_known = SignableError::SomeDataNotUsedExtensions { from: 118 };
@@ -726,7 +771,12 @@ fn parser_error_4() {
     let parsed = parse_transaction(
         &data,
         MetaInput::Raw(metadata("for_tests/westend9111")),
-        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
+        H256(
+            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
@@ -740,7 +790,12 @@ fn parser_error_5() {
     let parsed = parse_transaction(
         &data,
         MetaInput::Raw(metadata("for_tests/westend9111")),
-        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
+        H256(
+            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
@@ -755,7 +810,12 @@ fn parser_error_6() {
     let parsed = parse_transaction(
         &data,
         MetaInput::Raw(metadata("for_tests/westend9111")),
-        H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap(),
+        H256(
+            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
