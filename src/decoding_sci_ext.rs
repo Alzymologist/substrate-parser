@@ -151,7 +151,7 @@ impl CollectedExt {
             era: None,
             genesis_hash: None,
             block_hash: None,
-            spec_version_printed: None::<String>,
+            spec_version_printed: None,
         }
     }
 
