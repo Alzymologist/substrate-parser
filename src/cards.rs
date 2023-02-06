@@ -879,7 +879,7 @@ impl std::fmt::Display for InfoFlat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let docs_printed = self.docs.as_ref().map_or("None", |a| a);
         let path_printed = self.path_flat.as_ref().map_or("None", |a| a);
-        write!(f, "(docs: {}, path: {})", docs_printed, path_printed)
+        write!(f, "(docs: {docs_printed}, path: {path_printed})")
     }
 }
 
@@ -1081,7 +1081,7 @@ impl ExtendedCard {
             ParserCard::BlockHash(a) => readable(self.indent, "Block Hash", &hex::encode(a)),
             ParserCard::CallName(a) => readable(self.indent, "Call", a),
             ParserCard::CompositeAnnounced(a) => {
-                readable(self.indent, "Struct", &format!("{} field(s)", a))
+                readable(self.indent, "Struct", &format!("{a} field(s)"))
             }
             ParserCard::EnumAnnounced => format!("{}Enum", "  ".repeat(self.indent as usize)),
             ParserCard::EnumVariantName(a) => readable(self.indent, "Enum Variant Name", a),
@@ -1090,7 +1090,7 @@ impl ExtendedCard {
                 Era::Mortal(period, phase) => readable(
                     self.indent,
                     "Era",
-                    &format!("Mortal, phase: {}, period: {}", phase, period),
+                    &format!("Mortal, phase: {phase}, period: {period}"),
                 ),
             },
             ParserCard::EventName(a) => readable(self.indent, "Event", a),
@@ -1104,7 +1104,7 @@ impl ExtendedCard {
             #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
             ParserCard::Id(a) => readable(self.indent, "Id", &a.hex),
             ParserCard::NameSpecVersion { name, version } => {
-                readable(self.indent, "Network", &format!("{}{}", name, version))
+                readable(self.indent, "Network", &format!("{name}{version}"))
             }
             ParserCard::Nonce(a) => readable(self.indent, "Nonce", a),
             ParserCard::None => readable(self.indent, "Option", "None"),
@@ -1151,7 +1151,7 @@ impl ExtendedCard {
             ParserCard::SequenceAnnounced {
                 len,
                 element_info_flat: _,
-            } => readable(self.indent, "Sequence", &format!("{} element(s)", len)),
+            } => readable(self.indent, "Sequence", &format!("{len} element(s)")),
             ParserCard::SequenceU8 {
                 hex,
                 text,
@@ -1174,7 +1174,7 @@ impl ExtendedCard {
                 readable(self.indent, "Tip", &format!("{} {}", a.number, a.units))
             }
             ParserCard::TupleAnnounced(a) => {
-                readable(self.indent, "Tuple", &format!("{} element(s)", a))
+                readable(self.indent, "Tuple", &format!("{a} element(s)"))
             }
             ParserCard::TxVersion(a) => readable(self.indent, "Tx Version", a),
         }
@@ -1202,15 +1202,12 @@ impl ExtendedCard {
                     .collect::<Vec<String>>()
                     .join(",");
                 if element_info_printed.is_empty() {
-                    readable(self.indent, "Sequence", &format!("{} element(s)", len))
+                    readable(self.indent, "Sequence", &format!("{len} element(s)"))
                 } else {
                     readable(
                         self.indent,
                         "Sequence",
-                        &format!(
-                            "{} element(s), element info: [{}]",
-                            len, element_info_printed
-                        ),
+                        &format!("{len} element(s), element info: [{element_info_printed}]"),
                     )
                 }
             }
@@ -1234,18 +1231,18 @@ impl ExtendedCard {
                         Some(valid_text) => readable(
                             self.indent,
                             "Text",
-                            &format!("{}, element info: [{}]", valid_text, element_info_printed),
+                            &format!("{valid_text}, element info: [{element_info_printed}]"),
                         ),
                         None => readable(
                             self.indent,
                             "Sequence u8",
-                            &format!("{}, element info: [{}]", hex, element_info_printed),
+                            &format!("{hex}, element info: [{element_info_printed}]"),
                         ),
                     }
                 }
             }
             _ => self.show(),
         };
-        format!("{}{}", card_printed, info_printed)
+        format!("{card_printed}{info_printed}")
     }
 }
