@@ -190,8 +190,8 @@ fn convert_balance_string(balance: &str, decimals: u8, unit: &str) -> Currency {
                     if decimals <= MAG_HIGHEST_POS * 3 {
                         match decimals % 3 {
                             0 => (balance.to_string(), None, (decimals / 3) as i8),
-                            1 => (format!("{}00", balance), None, (decimals / 3) as i8 + 1),
-                            2 => (format!("{}0", balance), None, (decimals / 3) as i8 + 1),
+                            1 => (format!("{balance}00"), None, (decimals / 3) as i8 + 1),
+                            2 => (format!("{balance}0"), None, (decimals / 3) as i8 + 1),
                             _ => unreachable!(),
                         }
                     } else {
@@ -220,7 +220,7 @@ fn convert_balance_string(balance: &str, decimals: u8, unit: &str) -> Currency {
                                 Some(balance[1..].to_string()),
                                 (decimals / 3) as i8,
                             ),
-                            1 => (format!("{}0", balance), None, (decimals / 3) as i8 + 1),
+                            1 => (format!("{balance}0"), None, (decimals / 3) as i8 + 1),
                             2 => (balance.to_string(), None, (decimals / 3) as i8),
                             _ => unreachable!(),
                         }
@@ -360,7 +360,7 @@ fn convert_balance_string(balance: &str, decimals: u8, unit: &str) -> Currency {
 
     Currency {
         number,
-        units: format!("{}{}", unit_prefix, unit),
+        units: format!("{unit_prefix}{unit}"),
     }
 }
 

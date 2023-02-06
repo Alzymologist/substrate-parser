@@ -235,6 +235,36 @@ impl MetaVersionError {
     }
 }
 
+/// Error in parsing an unchecked extrinsic.
+#[derive(Debug, Eq, PartialEq)]
+pub enum UncheckedExtrinsicError {
+    FormatNoCompact,
+    NoAddressParam,
+    NoCallParam,
+    NoExtraParam,
+    NoSignatureParam,
+    Parser(ParserError),
+    VersionMismatch { version_byte: u8, version: u8 },
+    UnexpectedCallTy { call_ty_id: u32 },
+    UnexpectedType { extrinsic_ty_id: u32 },
+}
+
+impl UncheckedExtrinsicError {
+    fn error_text(&self) -> String {
+        match &self {
+            UncheckedExtrinsicError::FormatNoCompact => String::from("Unchecked extrinsic was expected to be a SCALE-encoded opaque `Vec<u8>`. Have not found a compact indicating vector length."),
+            UncheckedExtrinsicError::NoAddressParam => String::from("Unchecked extrinsic type in provided metadata has no specified address parameter."),
+            UncheckedExtrinsicError::NoCallParam => String::from("Unchecked extrinsic type in provided metadata has no specified call parameter."),
+            UncheckedExtrinsicError::NoExtraParam => String::from("Unchecked extrinsic type in provided metadata has no specified extra parameter."),
+            UncheckedExtrinsicError::NoSignatureParam => String::from("Unchecked extrinsic type in provided metadata has no specified signature parameter."),
+            UncheckedExtrinsicError::Parser(parser_error) => format!("Error parsing unchecked extrinsic data. {parser_error}"),
+            UncheckedExtrinsicError::VersionMismatch { version_byte, version } => format!("Version byte in unchecked extrinsic {version_byte} does not match with version {version} from provided metadata. Last 7 bits were expected to be identical."),
+            UncheckedExtrinsicError::UnexpectedCallTy { call_ty_id } => format!("Parameter type for call {call_ty_id} in metadata type registry is not a call type, and does not match known call type descriptors."),
+            UncheckedExtrinsicError::UnexpectedType { extrinsic_ty_id } => format!("Unchecked extrinsic type is assumed to resolve into a SCALE-encoded opaque `Vec<u8>`. Unexpected type description is found for type {extrinsic_ty_id} in metadata type registry."),
+        }
+    }
+}
+
 /// Implement [`Display`] for errors in both `std` and `no_std` cases.
 /// Implement `Error` for `std` case.
 macro_rules! impl_display_and_error {
@@ -261,5 +291,6 @@ impl_display_and_error!(
     MetaVersionError,
     ParserError,
     SignableError,
-    StorageError
+    StorageError,
+    UncheckedExtrinsicError
 );

@@ -1,15 +1,18 @@
+use crate::std::{
+    any::TypeId,
+    string::{String, ToString},
+    vec::Vec,
+};
 use frame_metadata::v14::{RuntimeMetadataV14, StorageEntryMetadata};
 use parity_scale_codec::Decode;
 use primitive_types::H256;
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, IntoPortable, Path, Registry, TypeDef,
 };
-
-use crate::std::{
-    any::TypeId,
-    string::{String, ToString},
-    vec::Vec,
-};
+#[cfg(feature = "std")]
+use sp_core::{crypto::AccountId32, sr25519::Signature as SignatureSr25519};
+#[cfg(feature = "std")]
+use sp_runtime::generic::Era;
 
 use crate::cards::{
     ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
@@ -17,6 +20,8 @@ use crate::cards::{
 use crate::error::{ParserError, SignableError};
 use crate::special_indicators::SpecialtyPrimitive;
 use crate::storage_data::{decode_as_storage_entry, KeyData, KeyPart};
+#[cfg(feature = "std")]
+use crate::unchecked_extrinsic::{decode_as_unchecked_extrinsic, UncheckedExtrinsic};
 use crate::{decode_all_as_type, parse_transaction, MetaInput, ShortSpecs};
 
 fn metadata(filename: &str) -> RuntimeMetadataV14 {
@@ -832,4 +837,305 @@ fn parser_error_6() {
         minimal_length: 1,
     });
     assert_eq!(call_error_known, call_error);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn unchecked_extrinsic_1() {
+    let data = hex::decode("39028400d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d0158e09098782f2e40602b37d94fe3e2d051c2e4927c34bc85525297310642db08280110b4a02b89676e966d07fdf7f362cdeb858d28d681564bd0f7d33dce5c8cc50204000403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480284d717").unwrap();
+    let metadata = metadata("for_tests/westend9111");
+    let parsed = decode_as_unchecked_extrinsic(&data, &metadata).unwrap();
+    match parsed {
+        UncheckedExtrinsic::Signed {
+            address,
+            signature,
+            extra,
+            call,
+        } => {
+            let expected_address = ExtendedData {
+                data: ParsedData::Variant(VariantData {
+                    variant_name: "Id".to_string(),
+                    variant_docs: "".to_string(),
+                    fields: vec![
+                        FieldData {
+                            field_name: None,
+                            type_name: Some("AccountId".to_string()),
+                            field_docs: "".to_string(),
+                            data: ExtendedData {
+                                data: ParsedData::Id(AccountId32::new(hex::decode("d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d").unwrap().try_into().unwrap())),
+                                info: vec![
+                                    Info {
+                                        docs: "".to_string(),
+                                        path: Path::from_segments(vec![
+                                            "sp_core",
+                                            "crypto",
+                                            "AccountId32",
+                                        ])
+                                        .unwrap()
+                                        .into_portable(&mut Registry::new()),
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }),
+                info: vec![
+                    Info {
+                        docs: "".to_string(),
+                        path: Path::from_segments(vec![
+                            "sp_runtime",
+                            "multiaddress",
+                            "MultiAddress",
+                        ])
+                        .unwrap()
+                        .into_portable(&mut Registry::new()),
+                    }
+                ]
+            };
+            assert_eq!(expected_address, address);
+
+            let expected_signature = ExtendedData {
+                data: ParsedData::Variant(VariantData {
+                    variant_name: "Sr25519".to_string(),
+                    variant_docs: "".to_string(),
+                    fields: vec![
+                        FieldData {
+                            field_name: None,
+                            type_name: Some("sr25519::Signature".to_string()),
+                            field_docs: "".to_string(),
+                            data: ExtendedData {
+                                data: ParsedData::SignatureSr25519(SignatureSr25519::from_raw(hex::decode("58e09098782f2e40602b37d94fe3e2d051c2e4927c34bc85525297310642db08280110b4a02b89676e966d07fdf7f362cdeb858d28d681564bd0f7d33dce5c8c").unwrap().try_into().unwrap())),
+                                info: vec![
+                                    Info {
+                                        docs: "".to_string(),
+                                        path: Path::from_segments(vec![
+                                            "sp_core",
+                                            "sr25519",
+                                            "Signature",
+                                        ])
+                                        .unwrap()
+                                        .into_portable(&mut Registry::new()),
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }),
+                info: vec![
+                    Info {
+                        docs: "".to_string(),
+                        path: Path::from_segments(vec![
+                            "sp_runtime",
+                            "MultiSignature",
+                        ])
+                        .unwrap()
+                        .into_portable(&mut Registry::new()),
+                    }
+                ]
+            };
+            assert_eq!(expected_signature, signature);
+
+            let expected_extra = ExtendedData {
+                data: ParsedData::Tuple(vec![
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "frame_system",
+                                "extensions",
+                                "check_spec_version",
+                                "CheckSpecVersion",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "frame_system",
+                                "extensions",
+                                "check_tx_version",
+                                "CheckTxVersion",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "frame_system",
+                                "extensions",
+                                "check_genesis",
+                                "CheckGenesis",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![FieldData {
+                            field_name: None,
+                            type_name: Some("Era".to_string()),
+                            field_docs: "".to_string(),
+                            data: ExtendedData {
+                                data: ParsedData::Era(Era::Mortal(64, 44)),
+                                info: vec![Info {
+                                    docs: "".to_string(),
+                                    path: Path::from_segments(vec![
+                                        "sp_runtime",
+                                        "generic",
+                                        "era",
+                                        "Era",
+                                    ])
+                                    .unwrap()
+                                    .into_portable(&mut Registry::new()),
+                                }],
+                            },
+                        }]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "frame_system",
+                                "extensions",
+                                "check_mortality",
+                                "CheckMortality",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![FieldData {
+                            field_name: None,
+                            type_name: Some("T::Index".to_string()),
+                            field_docs: "".to_string(),
+                            data: ExtendedData {
+                                data: ParsedData::PrimitiveU32 {
+                                    value: 1,
+                                    specialty: SpecialtyPrimitive::None,
+                                },
+                                info: vec![],
+                            },
+                        }]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "frame_system",
+                                "extensions",
+                                "check_nonce",
+                                "CheckNonce",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "frame_system",
+                                "extensions",
+                                "check_weight",
+                                "CheckWeight",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![FieldData {
+                            field_name: None,
+                            type_name: Some("BalanceOf<T>".to_string()),
+                            field_docs: "".to_string(),
+                            data: ExtendedData {
+                                data: ParsedData::PrimitiveU128 {
+                                    value: 0,
+                                    specialty: SpecialtyPrimitive::Balance,
+                                },
+                                info: vec![],
+                            },
+                        }]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "pallet_transaction_payment",
+                                "ChargeTransactionPayment",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                ]),
+                info: vec![],
+            };
+            assert_eq!(expected_extra, extra);
+
+            let expected_call_fields = vec![
+                FieldData {
+                    field_name: Some("dest".to_string()),
+                    type_name: Some("<T::Lookup as StaticLookup>::Source".to_string()),
+                    field_docs: "".to_string(), 
+                    data: ExtendedData {
+                            data: ParsedData::Variant(VariantData {
+                                variant_name: "Id".to_string(),
+                                variant_docs: "".to_string(),
+                                fields: vec![
+                                    FieldData {
+                                        field_name: None,
+                                        type_name: Some("AccountId".to_string()),
+                                        field_docs: "".to_string(),
+                                        data: ExtendedData {
+                                            data: ParsedData::Id(AccountId32::new(hex::decode("8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48").unwrap().try_into().unwrap())),
+                                            info: vec![
+                                                Info {
+                                                    docs: "".to_string(),
+                                                    path: Path::from_segments(vec![
+                                                        "sp_core",
+                                                        "crypto",
+                                                        "AccountId32",
+                                                    ])
+                                                    .unwrap()
+                                                    .into_portable(&mut Registry::new()),
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }),
+                            info: vec![
+                                Info {
+                                    docs: "".to_string(),
+                                    path: Path::from_segments(vec![
+                                        "sp_runtime",
+                                        "multiaddress",
+                                        "MultiAddress",
+                                    ])
+                                    .unwrap()
+                                    .into_portable(&mut Registry::new()),
+                                }
+                            ]
+                        }
+                    },
+                    FieldData {
+                        field_name: Some("value".to_string()),
+                        type_name: Some("T::Balance".to_string()),
+                        field_docs: "".to_string(),
+                        data: ExtendedData {
+                            data: ParsedData::PrimitiveU128 { value: 100000000, specialty: SpecialtyPrimitive::Balance },
+                            info: vec![]
+                        }
+                    }
+                ];
+            assert_eq!(expected_call_fields, call.0.fields);
+        }
+        UncheckedExtrinsic::Unsigned { .. } => panic!("Expected signed extrinsic!"),
+    }
 }

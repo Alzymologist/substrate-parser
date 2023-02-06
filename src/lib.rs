@@ -477,6 +477,7 @@ use propagated::Propagated;
 pub mod special_indicators;
 mod special_types;
 pub mod storage_data;
+pub mod unchecked_extrinsic;
 
 #[cfg(any(feature = "std", feature = "embed-display"))]
 #[cfg(test)]
