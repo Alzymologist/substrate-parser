@@ -271,6 +271,21 @@ impl Hint {
         }
     }
 
+    /// `Hint` from [`Path`].
+    ///
+    /// Can appear only when decoding tuples, as each tuple field has a [`Type`]
+    /// with possibly specified `Path`.
+    pub fn from_path(path: &Path<PortableForm>) -> Self {
+        match path.ident() {
+            Some(a) => match a.as_str() {
+                CHECK_NONCE => Self::CheckNonce,
+                CHARGE_TRANSACTION_PAYMENT => Self::ChargeTransactionPayment,
+                _ => Self::None,
+            },
+            None => Self::None,
+        }
+    }
+
     /// Apply [`Hint`] on unsigned integer decoding.
     pub fn primitive(&self) -> SpecialtyPrimitive {
         match &self {
