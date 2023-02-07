@@ -298,7 +298,7 @@ pub fn decode_with_type(
                     let id = inner_ty_symbol.id();
                     let ty = resolve_ty(registry, id)?;
                     let tuple_data_element = decode_with_type(
-                        &Ty::Resolved{ty, id},
+                        &Ty::Resolved { ty, id },
                         data,
                         position,
                         registry,

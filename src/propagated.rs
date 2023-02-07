@@ -140,11 +140,7 @@ impl Checker {
 
     /// Use known, propagated from above `Checker` to construct a new `Checker`
     /// for a [`Type`].
-    pub fn update_for_ty(
-        &self,
-        ty: &Type<PortableForm>,
-        id: u32,
-    ) -> Result<Self, ParserError> {
+    pub fn update_for_ty(&self, ty: &Type<PortableForm>, id: u32) -> Result<Self, ParserError> {
         let mut checker = self.clone();
         checker.check_id(id)?;
         checker.specialty_set.update_from_path(ty.path());
