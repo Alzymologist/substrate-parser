@@ -295,12 +295,14 @@ pub fn decode_with_type(
                 }
                 let mut tuple_data_set: Vec<ExtendedData> = Vec::new();
                 for inner_ty_symbol in inner_types_set.iter() {
+                    let id = inner_ty_symbol.id();
+                    let ty = resolve_ty(registry, id)?;
                     let tuple_data_element = decode_with_type(
-                        &Ty::Symbol(inner_ty_symbol),
+                        &Ty::Resolved { ty, id },
                         data,
                         position,
                         registry,
-                        Propagated::for_ty_symbol(&propagated.checker, inner_ty_symbol)?,
+                        Propagated::for_ty(&propagated.checker, ty, id)?,
                     )?;
                     tuple_data_set.push(tuple_data_element);
                 }

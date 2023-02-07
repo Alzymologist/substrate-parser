@@ -1019,7 +1019,7 @@ fn unchecked_extrinsic_1() {
                             data: ExtendedData {
                                 data: ParsedData::PrimitiveU32 {
                                     value: 1,
-                                    specialty: SpecialtyPrimitive::None,
+                                    specialty: SpecialtyPrimitive::Nonce,
                                 },
                                 info: vec![],
                             },
@@ -1058,7 +1058,7 @@ fn unchecked_extrinsic_1() {
                             data: ExtendedData {
                                 data: ParsedData::PrimitiveU128 {
                                     value: 0,
-                                    specialty: SpecialtyPrimitive::Balance,
+                                    specialty: SpecialtyPrimitive::Tip,
                                 },
                                 info: vec![],
                             },

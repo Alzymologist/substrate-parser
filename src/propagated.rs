@@ -1,14 +1,8 @@
 //! Data that can propagate hierarchically during parsing.
 use frame_metadata::v14::SignedExtensionMetadata;
-use scale_info::{form::PortableForm, interner::UntrackedSymbol, Field};
+use scale_info::{form::PortableForm, Field, Path, Type};
 
 use crate::std::vec::Vec;
-
-#[cfg(feature = "std")]
-use std::any::TypeId;
-
-#[cfg(not(feature = "std"))]
-use core::any::TypeId;
 
 use crate::cards::Info;
 use crate::error::ParserError;
@@ -62,6 +56,13 @@ impl SpecialtySet {
             Err(ParserError::UnexpectedCompactInsides { id })
         } else {
             Ok(())
+        }
+    }
+
+    /// Update `Hint` from type path, if no hint existed previously.
+    pub fn update_from_path(&mut self, path: &Path<PortableForm>) {
+        if let Hint::None = self.hint {
+            self.hint = Hint::from_path(path);
         }
     }
 
@@ -138,13 +139,11 @@ impl Checker {
     }
 
     /// Use known, propagated from above `Checker` to construct a new `Checker`
-    /// for a [`Type`](scale_info::Type).
-    pub fn update_for_ty_symbol(
-        &self,
-        ty_symbol: &UntrackedSymbol<TypeId>,
-    ) -> Result<Self, ParserError> {
+    /// for a [`Type`].
+    pub fn update_for_ty(&self, ty: &Type<PortableForm>, id: u32) -> Result<Self, ParserError> {
         let mut checker = self.clone();
-        checker.check_id(ty_symbol.id())?;
+        checker.check_id(id)?;
+        checker.specialty_set.update_from_path(ty.path());
         Ok(checker)
     }
 
@@ -234,13 +233,14 @@ impl Propagated {
     }
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`
-    /// for a [`Type`](scale_info::Type).
-    pub(crate) fn for_ty_symbol(
+    /// for a [`Type`].
+    pub(crate) fn for_ty(
         checker: &Checker,
-        ty_symbol: &UntrackedSymbol<TypeId>,
+        ty: &Type<PortableForm>,
+        id: u32,
     ) -> Result<Self, ParserError> {
         Ok(Self {
-            checker: Checker::update_for_ty_symbol(checker, ty_symbol)?,
+            checker: Checker::update_for_ty(checker, ty, id)?,
             info: Vec::new(),
         })
     }

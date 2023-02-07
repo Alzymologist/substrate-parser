@@ -94,7 +94,7 @@ struct CutNumber {
     /// <code>balance [unit with prefix] = balance \[unit\] &times; 10<sup>(-3 &times; mag)</sup></code>
     ///
     /// <table>
-    ///     <tr><th>mag</th><th colspan="2">corresponding unit prefix</th>
+    ///     <tr><th>mag</th><th colspan="2">corresponding unit prefix</th></tr>
     ///     <tr><td>-4</td><td>tera-</td><td>T</td></tr>
     ///     <tr><td>-3</td><td>giga-</td><td>G</td></tr>
     ///     <tr><td>-2</td><td>mega-</td><td>M</td></tr>
