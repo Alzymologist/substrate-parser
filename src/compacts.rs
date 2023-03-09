@@ -12,6 +12,11 @@ pub struct FoundCompact<T: HasCompact> {
     pub start_next_unit: usize,
 }
 
+/// Maximum possible encoded compact length, `Compact::compact_len(&u128::MAX)`.
+///
+/// Would not make sense to check slices of higher length for a compact.
+pub const MAX_COMPACT_LEN: usize = 17;
+
 /// Search `&[u8]` for compact at given position by brute force.
 ///
 /// Tries to find shortest `[u8]` slice that could be decoded as a compact.
@@ -45,6 +50,8 @@ where
             });
             break;
         }
+        // 
+        if i > MAX_COMPACT_LEN {break}
     }
     match out {
         Some(c) => Ok(c),
