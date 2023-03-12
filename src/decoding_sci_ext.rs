@@ -15,10 +15,10 @@ use crate::std::{
 use crate::cards::{ExtendedData, ParsedData};
 use crate::decoding_sci::{decode_with_type, Ty};
 use crate::error::{ExtensionsError, SignableError};
-use crate::metadata_check::CheckedMetadata;
 use crate::propagated::Propagated;
 use crate::special_indicators::SpecialtyPrimitive;
 use crate::special_types::UnsignedInteger;
+use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory};
 use crate::MarkedData;
 
 /// Parse extensions part of the signable transaction [`MarkedData`] using
@@ -34,44 +34,55 @@ use crate::MarkedData;
 ///
 /// Whole `signed_extensions` set is scanned first for types in `ty` field, and
 /// then the second time, for types in `additional_signed` field.
-pub fn decode_extensions(
-    marked_data: &MarkedData,
-    checked_metadata: &CheckedMetadata,
+pub fn decode_extensions<B, E, M>(
+    marked_data: &MarkedData<B, E>,
+    ext_memory: &mut E,
+    meta_v14: &M,
     genesis_hash: H256,
-) -> Result<Vec<ExtendedData>, SignableError> {
+) -> Result<Vec<ExtendedData>, SignableError>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
     let mut position = marked_data.extensions_start();
     let data = marked_data.data();
 
     let mut extensions: Vec<ExtendedData> = Vec::new();
-    for signed_extensions_metadata in checked_metadata.meta_v14.extrinsic.signed_extensions.iter() {
+    for signed_extensions_metadata in meta_v14.extrinsic().signed_extensions.iter() {
         extensions.push(
-            decode_with_type(
+            decode_with_type::<B, E, M>(
                 &Ty::Symbol(&signed_extensions_metadata.ty),
                 data,
+                ext_memory,
                 &mut position,
-                &checked_metadata.meta_v14.types,
+                meta_v14.types(),
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
             .map_err(SignableError::Parsing)?,
         )
     }
-    for signed_extensions_metadata in checked_metadata.meta_v14.extrinsic.signed_extensions.iter() {
+    for signed_extensions_metadata in meta_v14.extrinsic().signed_extensions.iter() {
         extensions.push(
-            decode_with_type(
+            decode_with_type::<B, E, M>(
                 &Ty::Symbol(&signed_extensions_metadata.additional_signed),
                 data,
+                ext_memory,
                 &mut position,
-                &checked_metadata.meta_v14.types,
+                meta_v14.types(),
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
             .map_err(SignableError::Parsing)?,
         )
     }
-    // `position > data.len()` is ruled out elsewhere
-    if position != data.len() {
+    // `position > data.total_len()` is ruled out elsewhere
+    if position != data.total_len() {
         return Err(SignableError::SomeDataNotUsedExtensions { from: position });
     }
-    check_extensions(&extensions, &checked_metadata.version, genesis_hash)?;
+    let printed_version = meta_v14
+        .version_printed(ext_memory)
+        .map_err(SignableError::MetaVersion)?;
+    check_extensions(&extensions, &printed_version, genesis_hash)?;
     Ok(extensions)
 }
 

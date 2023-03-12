@@ -1,6 +1,6 @@
 //! Special decoding triggers and indicators.
 //!
-//! Although the [`PortableRegistry`] has all sufficient data to decode the
+//! Although the metadata has all sufficient information to decode the
 //! data for a known type, some types must be treated specially for displaying
 //! and/or further data handling.
 //!
@@ -9,8 +9,7 @@
 //! type and cast into custom type later on.
 use frame_metadata::v14::SignedExtensionMetadata;
 use scale_info::{
-    form::PortableForm, interner::UntrackedSymbol, Field, Path, PortableRegistry, Type, TypeDef,
-    Variant,
+    form::PortableForm, interner::UntrackedSymbol, Field, Path, Type, TypeDef, Variant,
 };
 
 use crate::std::{borrow::ToOwned, string::String, vec::Vec};
@@ -23,6 +22,7 @@ use core::any::TypeId;
 
 use crate::cards::Info;
 use crate::decoding_sci::pick_variant;
+use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
 
 /// [`Field`] `type_name` set indicating that the value *may* be
 /// currency-related.
@@ -413,7 +413,7 @@ pub enum SpecialtyTypeChecked<'a> {
     PalletSpecific {
         pallet_name: String,
         pallet_info: Info,
-        variants: &'a [Variant<PortableForm>],
+        variants: Vec<Variant<PortableForm>>,
         item: PalletSpecificItem,
     },
     Perbill,
@@ -436,12 +436,18 @@ impl<'a> SpecialtyTypeChecked<'a> {
     ///
     /// Checks type internal structure and uses input data for
     /// [`PalletSpecificItem`].
-    pub fn from_type(
+    pub fn from_type<B, E, M>(
         ty: &'a Type<PortableForm>,
-        data: &[u8],
+        data: &B,
+        ext_memory: &mut E,
         position: &mut usize,
-        registry: &'a PortableRegistry,
-    ) -> Self {
+        registry: &'a M::TypeRegistry,
+    ) -> Self
+    where
+        B: AddressableBuffer<E>,
+        E: ExternalMemory,
+        M: AsMetadata<E>,
+    {
         match SpecialtyTypeHinted::from_path(ty.path()) {
             SpecialtyTypeHinted::None => Self::None,
             SpecialtyTypeHinted::AccountId32 => Self::AccountId32,
@@ -483,13 +489,13 @@ impl<'a> SpecialtyTypeChecked<'a> {
                 if let TypeDef::Variant(x) = ty.type_def() {
                     // found specific variant corresponding to pallet,
                     // get pallet name from here
-                    match pick_variant(x.variants(), data, *position) {
+                    match pick_variant::<B, E>(x.variants(), data, ext_memory, *position) {
                         Ok(pallet_variant) => {
                             let pallet_name = pallet_variant.name().to_owned();
                             let pallet_fields = pallet_variant.fields();
                             if pallet_fields.len() == 1 {
-                                match registry.resolve(pallet_fields[0].ty().id()) {
-                                    Some(variants_ty) => {
+                                match registry.resolve_ty(pallet_fields[0].ty().id(), ext_memory) {
+                                    Ok(variants_ty) => {
                                         if let SpecialtyTypeHinted::PalletSpecific(item_repeated) =
                                             SpecialtyTypeHinted::from_path(variants_ty.path())
                                         {
@@ -498,12 +504,12 @@ impl<'a> SpecialtyTypeChecked<'a> {
                                             } else if let TypeDef::Variant(var) =
                                                 variants_ty.type_def()
                                             {
-                                                let pallet_info = Info::from_ty(variants_ty);
+                                                let pallet_info = Info::from_ty(&variants_ty);
                                                 *position += ENUM_INDEX_ENCODED_LEN;
                                                 Self::PalletSpecific {
                                                     pallet_name,
                                                     pallet_info,
-                                                    variants: var.variants(),
+                                                    variants: var.variants().to_vec(),
                                                     item,
                                                 }
                                             } else {
@@ -513,7 +519,7 @@ impl<'a> SpecialtyTypeChecked<'a> {
                                             Self::None
                                         }
                                     }
-                                    None => Self::None,
+                                    Err(_) => Self::None,
                                 }
                             } else {
                                 Self::None
