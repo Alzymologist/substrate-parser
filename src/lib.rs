@@ -495,7 +495,7 @@ use core::{any::TypeId, marker::PhantomData};
 
 pub use decoding_sci::decode_as_call;
 pub use decoding_sci_ext::decode_extensions;
-pub use traits::{AddressableBuffer, AsMetadata, ExternalMemory, PalletCallTy};
+pub use traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
 
 use cards::{Call, ExtendedCard, ExtendedData};
 use compacts::get_compact;
@@ -535,7 +535,7 @@ where
     E: ExternalMemory,
 {
     /// Make `MarkedData` from a signable transaction data slice.
-    pub fn mark(data: &'a B, ext_memory: &mut E) -> Result<Self, SignableError> {
+    pub fn mark(data: &'a B, ext_memory: &mut E) -> Result<Self, SignableError<E>> {
         let mut call_start: usize = 0;
         let call_length = get_compact::<u32, B, E>(data, ext_memory, &mut call_start)
             .map_err(|_| SignableError::CutSignable)? as usize;
@@ -582,21 +582,21 @@ where
 ///
 /// Extensions must be decoded. Call decoding may be successful or not.
 #[derive(Debug)]
-pub struct TransactionParsed {
-    pub call_result: Result<Call, SignableError>,
+pub struct TransactionParsed<E: ExternalMemory> {
+    pub call_result: Result<Call, SignableError<E>>,
     pub extensions: Vec<ExtendedData>,
 }
 
 /// Signable transaction parsing outcome represented as formatted flat cards.
 #[derive(Debug)]
-pub struct TransactionCarded {
-    pub call_result: Result<Vec<ExtendedCard>, SignableError>,
+pub struct TransactionCarded<E: ExternalMemory> {
+    pub call_result: Result<Vec<ExtendedCard>, SignableError<E>>,
     pub extensions: Vec<ExtendedCard>,
 }
 
-impl TransactionParsed {
+impl<E: ExternalMemory> TransactionParsed<E> {
     /// Transform nested data from `TransactionParsed` into flat cards.
-    pub fn card(self, short_specs: &ShortSpecs) -> TransactionCarded {
+    pub fn card(self, short_specs: &ShortSpecs) -> TransactionCarded<E> {
         let start_indent = 0;
         let mut extensions: Vec<ExtendedCard> = Vec::new();
         for ext in self.extensions.iter() {
@@ -620,7 +620,7 @@ pub fn parse_transaction<B, E, M>(
     ext_memory: &mut E,
     meta_v14: &M,
     genesis_hash: H256,
-) -> Result<TransactionParsed, SignableError>
+) -> Result<TransactionParsed<E>, SignableError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -638,7 +638,7 @@ where
     // try parsing call data
     let call_result = decode_as_call::<B, E, M>(&marked_data, ext_memory, meta_v14);
 
-    Ok(TransactionParsed {
+    Ok(TransactionParsed::<E> {
         call_result,
         extensions,
     })
@@ -659,7 +659,7 @@ pub fn decode_as_type_at_position<B, E, M>(
     ext_memory: &mut E,
     registry: &M::TypeRegistry,
     position: &mut usize,
-) -> Result<ExtendedData, ParserError>
+) -> Result<ExtendedData, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -683,7 +683,7 @@ pub fn decode_all_as_type<B, E, M>(
     data: &B,
     ext_memory: &mut E,
     registry: &M::TypeRegistry,
-) -> Result<ExtendedData, ParserError>
+) -> Result<ExtendedData, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,

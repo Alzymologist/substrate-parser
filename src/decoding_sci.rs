@@ -57,7 +57,7 @@ fn decode_type_def_primitive<B, E>(
     ext_memory: &mut E,
     position: &mut usize,
     specialty_set: SpecialtySet,
-) -> Result<ParsedData, ParserError>
+) -> Result<ParsedData, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -128,7 +128,7 @@ fn decode_str<B, E>(
     data: &B,
     ext_memory: &mut E,
     position: &mut usize,
-) -> Result<ParsedData, ParserError>
+) -> Result<ParsedData, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -165,7 +165,7 @@ pub fn decode_as_call<B, E, M>(
     marked_data: &MarkedData<B, E>,
     ext_memory: &mut E,
     meta_v14: &M,
-) -> Result<Call, SignableError>
+) -> Result<Call, SignableError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -256,7 +256,7 @@ pub fn decode_with_type<B, E, M>(
     position: &mut usize,
     registry: &M::TypeRegistry,
     mut propagated: Propagated,
-) -> Result<ExtendedData, ParserError>
+) -> Result<ExtendedData, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -625,7 +625,7 @@ fn decode_fields<B, E, M>(
     position: &mut usize,
     registry: &M::TypeRegistry,
     mut checker: Checker,
-) -> Result<Vec<FieldData>, ParserError>
+) -> Result<Vec<FieldData>, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -675,7 +675,7 @@ fn decode_elements_set<B, E, M>(
     position: &mut usize,
     registry: &M::TypeRegistry,
     propagated: Propagated,
-) -> Result<ExtendedData, ParserError>
+) -> Result<ExtendedData, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -735,7 +735,7 @@ pub(crate) fn pick_variant<'a, B, E>(
     data: &B,
     ext_memory: &mut E,
     position: usize,
-) -> Result<&'a Variant<PortableForm>, ParserError>
+) -> Result<&'a Variant<PortableForm>, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -764,7 +764,7 @@ fn decode_variant<B, E, M>(
     ext_memory: &mut E,
     position: &mut usize,
     registry: &M::TypeRegistry,
-) -> Result<VariantData, ParserError>
+) -> Result<VariantData, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -812,7 +812,7 @@ fn decode_type_def_bit_sequence<B, E, M>(
     ext_memory: &mut E,
     position: &mut usize,
     registry: &M::TypeRegistry,
-) -> Result<ParsedData, ParserError>
+) -> Result<ParsedData, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -946,7 +946,7 @@ impl BitVecPositions {
     /// New `BitVecPositions` for given input data and position.
     ///
     /// `T` is corresponding `BitStore`.
-    fn new<T, B, E>(data: &B, ext_memory: &mut E, position: usize) -> Result<Self, ParserError>
+    fn new<T, B, E>(data: &B, ext_memory: &mut E, position: usize) -> Result<Self, ParserError<E>>
     where
         B: AddressableBuffer<E>,
         E: ExternalMemory,
@@ -997,7 +997,7 @@ fn into_bitvec_decode<'a, T, B, E>(
     data: &B,
     ext_memory: &'a mut E,
     position: &'a mut usize,
-) -> Result<B::ReadBuffer, ParserError>
+) -> Result<B::ReadBuffer, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -1020,7 +1020,7 @@ trait Patched: BitOrder + Sized {
         data: &B,
         ext_memory: &mut E,
         position: &mut usize,
-    ) -> Result<BitVec<u32, Self>, ParserError>
+    ) -> Result<BitVec<u32, Self>, ParserError<E>>
     where
         B: AddressableBuffer<E>,
         E: ExternalMemory;
@@ -1040,7 +1040,7 @@ macro_rules! impl_patched {
     ($($bitorder: ty, $reform_vec_fn: ident), *) => {
         $(
             impl Patched for $bitorder {
-                fn patch_bitvec_u64<B, E>(data: &B, ext_memory: &mut E, position: &mut usize) -> Result<BitVec<u32, Self>, ParserError>
+                fn patch_bitvec_u64<B, E>(data: &B, ext_memory: &mut E, position: &mut usize) -> Result<BitVec<u32, Self>, ParserError<E>>
                 where
                     B: AddressableBuffer<E>,
                     E: ExternalMemory
@@ -1161,7 +1161,7 @@ fn husk_type<E, M>(
     registry: &M::TypeRegistry,
     ext_memory: &mut E,
     mut checker: Checker,
-) -> Result<HuskedType, ParserError>
+) -> Result<HuskedType, ParserError<E>>
 where
     E: ExternalMemory,
     M: AsMetadata<E>,

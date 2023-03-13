@@ -26,7 +26,7 @@ pub fn find_compact<T, B, E>(
     data: &B,
     ext_memory: &mut E,
     position: usize,
-) -> Result<FoundCompact<T>, ParserError>
+) -> Result<FoundCompact<T>, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -74,7 +74,7 @@ pub(crate) fn get_compact<T, B, E>(
     data: &B,
     ext_memory: &mut E,
     position: &mut usize,
-) -> Result<T, ParserError>
+) -> Result<T, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,

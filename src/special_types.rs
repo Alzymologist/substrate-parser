@@ -53,7 +53,7 @@ pub(crate) trait StableLength: Sized {
         data: &B,
         ext_memory: &mut E,
         position: &mut usize,
-    ) -> Result<Self, ParserError>
+    ) -> Result<Self, ParserError<E>>
     where
         B: AddressableBuffer<E>,
         E: ExternalMemory;
@@ -67,7 +67,7 @@ macro_rules! impl_stable_length_mem_size_decode {
                 fn len_encoded() -> usize {
                     size_of::<Self>()
                 }
-                fn cut_and_decode<B, E>(data: &B, ext_memory: &mut E, position: &mut usize) -> Result<Self, ParserError>
+                fn cut_and_decode<B, E>(data: &B, ext_memory: &mut E, position: &mut usize) -> Result<Self, ParserError<E>>
                 where
                     B: AddressableBuffer<E>,
                     E: ExternalMemory
@@ -116,7 +116,7 @@ macro_rules! impl_stable_length_big_construct {
                 fn len_encoded() -> usize {
                     BIG_LEN
                 }
-                fn cut_and_decode<B, E>(data: &B, ext_memory: &mut E, position: &mut usize) -> Result<Self, ParserError>
+                fn cut_and_decode<B, E>(data: &B, ext_memory: &mut E, position: &mut usize) -> Result<Self, ParserError<E>>
                 where
                     B: AddressableBuffer<E>,
                     E: ExternalMemory
@@ -142,7 +142,7 @@ impl StableLength for char {
         data: &B,
         ext_memory: &mut E,
         position: &mut usize,
-    ) -> Result<Self, ParserError>
+    ) -> Result<Self, ParserError<E>>
     where
         B: AddressableBuffer<E>,
         E: ExternalMemory,
@@ -175,7 +175,7 @@ macro_rules! impl_stable_length_array_closed {
                 fn len_encoded() -> usize {
                     $length
                 }
-                fn cut_and_decode<B, E> (data: &B, ext_memory: &mut E, position: &mut usize) -> Result<Self, ParserError>
+                fn cut_and_decode<B, E> (data: &B, ext_memory: &mut E, position: &mut usize) -> Result<Self, ParserError<E>>
                 where
                     B: AddressableBuffer<E>,
                     E: ExternalMemory
@@ -216,7 +216,7 @@ macro_rules! impl_stable_length_array_open {
                 fn len_encoded() -> usize {
                     Self::len_bytes()
                 }
-                fn cut_and_decode<B, E> (data: &B, ext_memory: &mut E, position: &mut usize) -> Result<Self, ParserError>
+                fn cut_and_decode<B, E> (data: &B, ext_memory: &mut E, position: &mut usize) -> Result<Self, ParserError<E>>
                 where
                     B: AddressableBuffer<E>,
                     E: ExternalMemory
@@ -254,7 +254,7 @@ pub(crate) trait UnsignedInteger:
         ext_memory: &mut E,
         position: &mut usize,
         specialty_set: SpecialtySet,
-    ) -> Result<ParsedData, ParserError>
+    ) -> Result<ParsedData, ParserError<E>>
     where
         B: AddressableBuffer<E>,
         E: ExternalMemory;
@@ -266,7 +266,7 @@ macro_rules! impl_unsigned_integer {
     ($($ty: ty, $enum_variant: ident), *) => {
         $(
             impl UnsignedInteger for $ty {
-                fn parse_unsigned_integer<B, E> (data: &B, ext_memory: &mut E, position: &mut usize, specialty_set: SpecialtySet) -> Result<ParsedData, ParserError>
+                fn parse_unsigned_integer<B, E> (data: &B, ext_memory: &mut E, position: &mut usize, specialty_set: SpecialtySet) -> Result<ParsedData, ParserError<E>>
                 where
                     B: AddressableBuffer<E>,
                     E: ExternalMemory
@@ -299,7 +299,7 @@ pub(crate) trait CheckCompact: StableLength {
         ext_memory: &mut E,
         position: &mut usize,
         compact_at: Option<u32>,
-    ) -> Result<ParsedData, ParserError>
+    ) -> Result<ParsedData, ParserError<E>>
     where
         B: AddressableBuffer<E>,
         E: ExternalMemory;
@@ -310,7 +310,7 @@ macro_rules! impl_allow_compact {
     ($($perthing: ident), *) => {
         $(
             impl CheckCompact for $perthing where $perthing: HasCompact {
-                fn parse_check_compact<B, E> (data: &B, ext_memory: &mut E, position: &mut usize, compact_at: Option<u32>) -> Result<ParsedData, ParserError>
+                fn parse_check_compact<B, E> (data: &B, ext_memory: &mut E, position: &mut usize, compact_at: Option<u32>) -> Result<ParsedData, ParserError<E>>
                 where
                     B: AddressableBuffer<E>,
                     E: ExternalMemory
@@ -333,7 +333,7 @@ macro_rules! impl_block_compact {
     ($($ty: ty, $enum_variant: ident), *) => {
         $(
             impl CheckCompact for $ty {
-                fn parse_check_compact<B, E> (data: &B, ext_memory: &mut E, position: &mut usize, compact_at: Option<u32>) -> Result<ParsedData, ParserError>
+                fn parse_check_compact<B, E> (data: &B, ext_memory: &mut E, position: &mut usize, compact_at: Option<u32>) -> Result<ParsedData, ParserError<E>>
                 where
                     B: AddressableBuffer<E>,
                     E: ExternalMemory
@@ -477,7 +477,7 @@ pub(crate) fn special_case_h256<B, E>(
     ext_memory: &mut E,
     position: &mut usize,
     specialty_hash: SpecialtyH256,
-) -> Result<ParsedData, ParserError>
+) -> Result<ParsedData, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -503,7 +503,7 @@ pub(crate) fn special_case_era<B, E>(
     data: &B,
     ext_memory: &mut E,
     position: &mut usize,
-) -> Result<ParsedData, ParserError>
+) -> Result<ParsedData, ParserError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,

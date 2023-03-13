@@ -142,7 +142,7 @@ pub fn decode_as_storage_entry<B, E, M>(
     ext_memory: &mut E,
     entry_metadata: &StorageEntryMetadata<PortableForm>,
     registry: &M::TypeRegistry,
-) -> Result<Storage, StorageError>
+) -> Result<Storage, StorageError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -197,7 +197,7 @@ macro_rules! cut_hash {
             key_input: &B,
             ext_memory: &mut E,
             position: &mut usize,
-        ) -> Result<KeyPart, StorageError>
+        ) -> Result<KeyPart, StorageError<E>>
         where
             B: AddressableBuffer<E>,
             E: ExternalMemory,
@@ -237,7 +237,7 @@ macro_rules! check_hash {
             ext_memory: &mut E,
             position: &mut usize,
             registry: &M::TypeRegistry,
-        ) -> Result<KeyPart, StorageError>
+        ) -> Result<KeyPart, StorageError<E>>
         where
             B: AddressableBuffer<E>,
             E: ExternalMemory,
@@ -298,7 +298,7 @@ pub fn process_key_mapped<B, E, M>(
     ext_memory: &mut E,
     mut position: usize,
     registry: &M::TypeRegistry,
-) -> Result<KeyData, StorageError>
+) -> Result<KeyData, StorageError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,

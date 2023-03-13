@@ -39,7 +39,7 @@ pub fn decode_extensions<B, E, M>(
     ext_memory: &mut E,
     meta_v14: &M,
     genesis_hash: H256,
-) -> Result<Vec<ExtendedData>, SignableError>
+) -> Result<Vec<ExtendedData>, SignableError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -80,9 +80,9 @@ where
         return Err(SignableError::SomeDataNotUsedExtensions { from: position });
     }
     let printed_version = meta_v14
-        .version_printed(ext_memory)
+        .version_printed()
         .map_err(SignableError::MetaVersion)?;
-    check_extensions(&extensions, &printed_version, genesis_hash)?;
+    check_extensions::<E>(&extensions, &printed_version, genesis_hash)?;
     Ok(extensions)
 }
 
@@ -91,11 +91,11 @@ where
 /// Extensions must include metadata spec version and chain genesis hash.
 /// If extensions also include `Era`, block hash for immortal `Era` must match
 /// chain genesis hash.
-fn check_extensions(
+fn check_extensions<E: ExternalMemory>(
     extensions: &[ExtendedData],
     version: &str,
     genesis_hash: H256,
-) -> Result<(), SignableError> {
+) -> Result<(), SignableError<E>> {
     let mut collected_ext = CollectedExt::new();
     for ext in extensions.iter() {
         // single-field structs are also checked
@@ -167,37 +167,40 @@ impl CollectedExt {
     }
 
     /// Update set with `ParsedData`.
-    fn update(&mut self, parsed_data: &ParsedData) -> Result<(), SignableError> {
+    fn update<E: ExternalMemory>(
+        &mut self,
+        parsed_data: &ParsedData,
+    ) -> Result<(), SignableError<E>> {
         match parsed_data {
-            ParsedData::Era(era) => self.add_era(*era),
-            ParsedData::GenesisHash(h) => self.add_genesis_hash(*h),
-            ParsedData::BlockHash(h) => self.add_block_hash(*h),
+            ParsedData::Era(era) => self.add_era::<E>(*era),
+            ParsedData::GenesisHash(h) => self.add_genesis_hash::<E>(*h),
+            ParsedData::BlockHash(h) => self.add_block_hash::<E>(*h),
             ParsedData::PrimitiveU8 {
                 value,
                 specialty: SpecialtyPrimitive::SpecVersion,
-            } => self.add_spec_version::<u8>(*value),
+            } => self.add_spec_version::<u8, E>(*value),
             ParsedData::PrimitiveU16 {
                 value,
                 specialty: SpecialtyPrimitive::SpecVersion,
-            } => self.add_spec_version::<u16>(*value),
+            } => self.add_spec_version::<u16, E>(*value),
             ParsedData::PrimitiveU32 {
                 value,
                 specialty: SpecialtyPrimitive::SpecVersion,
-            } => self.add_spec_version::<u32>(*value),
+            } => self.add_spec_version::<u32, E>(*value),
             ParsedData::PrimitiveU64 {
                 value,
                 specialty: SpecialtyPrimitive::SpecVersion,
-            } => self.add_spec_version::<u64>(*value),
+            } => self.add_spec_version::<u64, E>(*value),
             ParsedData::PrimitiveU128 {
                 value,
                 specialty: SpecialtyPrimitive::SpecVersion,
-            } => self.add_spec_version::<u128>(*value),
+            } => self.add_spec_version::<u128, E>(*value),
             _ => Ok(()),
         }
     }
 
     /// Add `Era` to set.
-    fn add_era(&mut self, era: Era) -> Result<(), SignableError> {
+    fn add_era<E: ExternalMemory>(&mut self, era: Era) -> Result<(), SignableError<E>> {
         if self.era.is_some() {
             Err(SignableError::ExtensionsList(ExtensionsError::EraTwice))
         } else {
@@ -207,7 +210,10 @@ impl CollectedExt {
     }
 
     /// Add genesis hash to set.
-    fn add_genesis_hash(&mut self, genesis_hash: H256) -> Result<(), SignableError> {
+    fn add_genesis_hash<E: ExternalMemory>(
+        &mut self,
+        genesis_hash: H256,
+    ) -> Result<(), SignableError<E>> {
         if self.genesis_hash.is_some() {
             Err(SignableError::ExtensionsList(
                 ExtensionsError::GenesisHashTwice,
@@ -219,7 +225,10 @@ impl CollectedExt {
     }
 
     /// Add block hash to set.
-    fn add_block_hash(&mut self, block_hash: H256) -> Result<(), SignableError> {
+    fn add_block_hash<E: ExternalMemory>(
+        &mut self,
+        block_hash: H256,
+    ) -> Result<(), SignableError<E>> {
         if self.block_hash.is_some() {
             Err(SignableError::ExtensionsList(
                 ExtensionsError::BlockHashTwice,
@@ -231,10 +240,10 @@ impl CollectedExt {
     }
 
     /// Add metadata spec version to set.
-    fn add_spec_version<T: UnsignedInteger>(
+    fn add_spec_version<T: UnsignedInteger, E: ExternalMemory>(
         &mut self,
         spec_version: T,
-    ) -> Result<(), SignableError> {
+    ) -> Result<(), SignableError<E>> {
         if self.spec_version_printed.is_some() {
             Err(SignableError::ExtensionsList(
                 ExtensionsError::SpecVersionTwice,

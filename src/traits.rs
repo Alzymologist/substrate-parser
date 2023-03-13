@@ -1,7 +1,13 @@
 #[cfg(not(feature = "std"))]
-use core::any::TypeId;
+use core::{
+    any::TypeId,
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
+};
 #[cfg(feature = "std")]
-use std::any::TypeId;
+use std::{
+    any::TypeId,
+    fmt::{Debug, Display, Formatter, Result as FmtResult},
+};
 
 use crate::std::{
     borrow::ToOwned,
@@ -16,9 +22,22 @@ use crate::decode_all_as_type;
 use crate::error::{MetaVersionError, ParserError, SignableError};
 use crate::special_indicators::SpecialtyPrimitive;
 
-pub trait ExternalMemory {}
+pub trait ExternalMemory: Debug {
+    type ExternalMemoryError: Debug + Display + Eq + PartialEq;
+}
 
-impl ExternalMemory for () {}
+impl ExternalMemory for () {
+    type ExternalMemoryError = NoEntries;
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum NoEntries {}
+
+impl Display for NoEntries {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "")
+    }
+}
 
 pub trait AddressableBuffer<E: ExternalMemory> {
     type ReadBuffer: AsRef<[u8]>;
@@ -28,8 +47,8 @@ pub trait AddressableBuffer<E: ExternalMemory> {
         ext_memory: &mut E,
         position: usize,
         slice_len: usize,
-    ) -> Result<Self::ReadBuffer, ParserError>;
-    fn read_byte(&self, ext_memory: &mut E, position: usize) -> Result<u8, ParserError> {
+    ) -> Result<Self::ReadBuffer, ParserError<E>>;
+    fn read_byte(&self, ext_memory: &mut E, position: usize) -> Result<u8, ParserError<E>> {
         let byte_slice = self.read_slice(ext_memory, position, 1)?;
         Ok(byte_slice.as_ref()[0])
     }
@@ -52,7 +71,7 @@ impl<'a, E: ExternalMemory> AddressableBuffer<E> for &'a [u8] {
         _ext_memory: &mut E,
         position: usize,
         slice_len: usize,
-    ) -> Result<Self::ReadBuffer, ParserError> {
+    ) -> Result<Self::ReadBuffer, ParserError<E>> {
         if self.len() < position {
             return Err(ParserError::OutOfRange {
                 position,
@@ -84,18 +103,23 @@ pub trait AsMetadata<E: ExternalMemory> {
         &self,
         pallet_index: u8,
         ext_memory: &mut E,
-    ) -> Result<PalletCallTy, SignableError>;
-    fn version_printed(&self, ext_memory: &mut E) -> Result<String, MetaVersionError>;
+    ) -> Result<PalletCallTy, SignableError<E>>;
+    fn version_printed(&self) -> Result<String, MetaVersionError>;
     fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm>;
     fn ty(&self) -> UntrackedSymbol<TypeId>;
 }
 
 pub trait ResolveType<E: ExternalMemory> {
-    fn resolve_ty(&self, id: u32, ext_memory: &mut E) -> Result<Type<PortableForm>, ParserError>;
+    fn resolve_ty(&self, id: u32, ext_memory: &mut E)
+        -> Result<Type<PortableForm>, ParserError<E>>;
 }
 
 impl<E: ExternalMemory> ResolveType<E> for PortableRegistry {
-    fn resolve_ty(&self, id: u32, _ext_memory: &mut E) -> Result<Type<PortableForm>, ParserError> {
+    fn resolve_ty(
+        &self,
+        id: u32,
+        _ext_memory: &mut E,
+    ) -> Result<Type<PortableForm>, ParserError<E>> {
         match self.resolve(id) {
             Some(a) => Ok(a.to_owned()),
             None => Err(ParserError::V14TypeNotResolved { id }),
@@ -114,7 +138,7 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14 {
         &self,
         pallet_index: u8,
         ext_memory: &mut E,
-    ) -> Result<PalletCallTy, SignableError> {
+    ) -> Result<PalletCallTy, SignableError<E>> {
         let mut found_calls_in_pallet: Option<UntrackedSymbol<TypeId>> = None;
 
         let mut found_pallet_name: Option<String> = None;
@@ -147,7 +171,7 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14 {
         })
     }
 
-    fn version_printed(&self, ext_memory: &mut E) -> Result<String, MetaVersionError> {
+    fn version_printed(&self) -> Result<String, MetaVersionError> {
         let mut runtime_version_data_and_ty = None;
         let mut system_block = false;
         for pallet in self.pallets.iter() {
@@ -167,10 +191,10 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14 {
         let mut spec_version = None;
         match runtime_version_data_and_ty {
             Some((value, ty)) => {
-                match decode_all_as_type::<&[u8], E, RuntimeMetadataV14>(
+                match decode_all_as_type::<&[u8], (), RuntimeMetadataV14>(
                     &ty,
                     &value.as_ref(),
-                    ext_memory,
+                    &mut (),
                     &self.types,
                 ) {
                     Ok(extended_data) => {
@@ -259,11 +283,11 @@ impl<E: ExternalMemory> AsMetadata<E> for CheckedMetadata {
         &self,
         pallet_index: u8,
         ext_memory: &mut E,
-    ) -> Result<PalletCallTy, SignableError> {
+    ) -> Result<PalletCallTy, SignableError<E>> {
         self.meta_v14.find_calls_ty(pallet_index, ext_memory)
     }
 
-    fn version_printed(&self, _ext_memory: &mut E) -> Result<String, MetaVersionError> {
+    fn version_printed(&self) -> Result<String, MetaVersionError> {
         Ok(self.version.to_owned())
     }
 

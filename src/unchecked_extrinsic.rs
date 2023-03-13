@@ -82,7 +82,7 @@ pub fn decode_as_unchecked_extrinsic<B, E, M>(
     input: &B,
     ext_memory: &mut E,
     meta_v14: &M,
-) -> Result<UncheckedExtrinsic, UncheckedExtrinsicError>
+) -> Result<UncheckedExtrinsic, UncheckedExtrinsicError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
