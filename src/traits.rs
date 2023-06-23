@@ -17,6 +17,7 @@ use crate::std::{
 };
 
 use frame_metadata::v14::{ExtrinsicMetadata, PalletMetadata, RuntimeMetadataV14};
+use parity_scale_codec::{Decode, Encode};
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, PortableRegistry, Type};
 
 use crate::cards::ParsedData;
@@ -228,6 +229,7 @@ impl<E: ExternalMemory> ResolveType<E> for PortableRegistryShortened {
     }
 }
 
+#[derive(Debug, Decode, Encode)]
 pub struct RuntimeMetadataV14Shortened {
     pub meta_v14: RuntimeMetadataV14,
     pub map: BTreeMap<u32, u32>,
