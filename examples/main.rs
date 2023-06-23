@@ -8,7 +8,7 @@ use substrate_parser::{parse_transaction, traits::RuntimeMetadataV14Shortened};
 
 fn main() {
     let meta_hex = std::fs::read_to_string("for_tests/westend9111").unwrap();
-    let meta = hex::decode(&mut &meta_hex.trim()).unwrap();
+    let meta = hex::decode(&mut meta_hex.trim()).unwrap();
     let meta_v14 = RuntimeMetadataV14::decode(&mut &meta[5..]).unwrap();
 
     // remaining pallets (TODO automate this):
@@ -66,5 +66,5 @@ fn main() {
         westend_genesis_hash,
     )
     .unwrap();
-    println!("{:?}", parsed);
+    println!("{parsed:?}");
 }
