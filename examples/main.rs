@@ -8,7 +8,9 @@ use substrate_parser::{parse_transaction, traits::RuntimeMetadataV14Shortened};
 
 fn main() {
     let meta_hex = std::fs::read_to_string("for_tests/westend9111").unwrap();
-    let meta = hex::decode(&mut meta_hex.trim()).unwrap();
+    let meta = hex::decode(meta_hex.trim()).unwrap();
+    println!("length of basic meta: {}", meta.len());
+
     let meta_v14 = RuntimeMetadataV14::decode(&mut &meta[5..]).unwrap();
 
     // remaining pallets (TODO automate this):
