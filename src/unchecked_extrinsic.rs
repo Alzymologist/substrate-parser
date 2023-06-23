@@ -88,43 +88,39 @@ where
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let extrinsic_ty_id = meta_v14.extrinsic().ty.id();
-    let extrinsic_ty = meta_v14
-        .types()
+    let extrinsic_ty_id = meta_v14.extrinsic().ty.id;
+    let meta_v14_types = meta_v14.types();
+    let extrinsic_ty = meta_v14_types
         .resolve_ty(extrinsic_ty_id, ext_memory)
         .map_err(UncheckedExtrinsicError::Parser)?;
 
     // check here that the underlying type is really `Vec<u8>`
-    match extrinsic_ty.type_def() {
+    match extrinsic_ty.type_def {
         TypeDef::Sequence(s) => {
-            let element_ty_id = s.type_param().id();
-            let element_ty = meta_v14
-                .types()
+            let element_ty_id = s.type_param.id;
+            let element_ty = meta_v14_types
                 .resolve_ty(element_ty_id, ext_memory)
                 .map_err(UncheckedExtrinsicError::Parser)?;
-            if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def() {
+            if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
             } else {
                 return Err(UncheckedExtrinsicError::UnexpectedType { extrinsic_ty_id });
             }
         }
         TypeDef::Composite(c) => {
-            let fields = c.fields();
-            if fields.len() != 1 {
+            if c.fields.len() != 1 {
                 return Err(UncheckedExtrinsicError::UnexpectedType { extrinsic_ty_id });
             } else {
-                let field_ty_id = fields[0].ty().id();
-                let field_ty = meta_v14
-                    .types()
+                let field_ty_id = c.fields[0].ty.id;
+                let field_ty = meta_v14_types
                     .resolve_ty(field_ty_id, ext_memory)
                     .map_err(UncheckedExtrinsicError::Parser)?;
-                match field_ty.type_def() {
+                match field_ty.type_def {
                     TypeDef::Sequence(s) => {
-                        let element_ty_id = s.type_param().id();
-                        let element_ty = meta_v14
-                            .types()
+                        let element_ty_id = s.type_param.id;
+                        let element_ty = meta_v14_types
                             .resolve_ty(element_ty_id, ext_memory)
                             .map_err(UncheckedExtrinsicError::Parser)?;
-                        if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def() {
+                        if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
                         } else {
                             return Err(UncheckedExtrinsicError::UnexpectedType {
                                 extrinsic_ty_id,
@@ -182,18 +178,18 @@ where
         let mut found_call = None;
 
         // Need the call parameter from unchecked extrinsic parameters.
-        for param in extrinsic_ty.type_params() {
-            if param.name() == CALL_INDICATOR {
-                found_call = param.ty()
+        for param in extrinsic_ty.type_params {
+            if param.name == CALL_INDICATOR {
+                found_call = param.ty
             }
         }
 
         let call_ty = found_call.ok_or(UncheckedExtrinsicError::NoCallParam)?;
         let call_extended_data = decode_as_type_at_position::<B, E, M>(
-            call_ty,
+            &call_ty,
             input,
             ext_memory,
-            meta_v14.types(),
+            &meta_v14_types,
             &mut position,
         )
         .map_err(UncheckedExtrinsicError::Parser)?;
@@ -201,7 +197,7 @@ where
             Ok(UncheckedExtrinsic::Unsigned { call })
         } else {
             Err(UncheckedExtrinsicError::UnexpectedCallTy {
-                call_ty_id: call_ty.id(),
+                call_ty_id: call_ty.id,
             })
         }
     } else {
@@ -212,52 +208,52 @@ where
 
         // Unchecked extrinsic parameters typically contain address, signature,
         // and extensions. Expect to find all entries.
-        for param in extrinsic_ty.type_params() {
-            match param.name().as_str() {
-                ADDRESS_INDICATOR => found_address = param.ty(),
-                SIGNATURE_INDICATOR => found_signature = param.ty(),
-                EXTRA_INDICATOR => found_extra = param.ty(),
-                CALL_INDICATOR => found_call = param.ty(),
+        for param in extrinsic_ty.type_params {
+            match param.name.as_str() {
+                ADDRESS_INDICATOR => found_address = param.ty,
+                SIGNATURE_INDICATOR => found_signature = param.ty,
+                EXTRA_INDICATOR => found_extra = param.ty,
+                CALL_INDICATOR => found_call = param.ty,
                 _ => (),
             }
         }
 
         let address_ty = found_address.ok_or(UncheckedExtrinsicError::NoAddressParam)?;
         let address = decode_as_type_at_position::<B, E, M>(
-            address_ty,
+            &address_ty,
             input,
             ext_memory,
-            meta_v14.types(),
+            &meta_v14_types,
             &mut position,
         )
         .map_err(UncheckedExtrinsicError::Parser)?;
 
         let signature_ty = found_signature.ok_or(UncheckedExtrinsicError::NoSignatureParam)?;
         let signature = decode_as_type_at_position::<B, E, M>(
-            signature_ty,
+            &signature_ty,
             input,
             ext_memory,
-            meta_v14.types(),
+            &meta_v14_types,
             &mut position,
         )
         .map_err(UncheckedExtrinsicError::Parser)?;
 
         let extra_ty = found_extra.ok_or(UncheckedExtrinsicError::NoExtraParam)?;
         let extra = decode_as_type_at_position::<B, E, M>(
-            extra_ty,
+            &extra_ty,
             input,
             ext_memory,
-            meta_v14.types(),
+            &meta_v14_types,
             &mut position,
         )
         .map_err(UncheckedExtrinsicError::Parser)?;
 
         let call_ty = found_call.ok_or(UncheckedExtrinsicError::NoCallParam)?;
         let call_extended_data = decode_as_type_at_position::<B, E, M>(
-            call_ty,
+            &call_ty,
             input,
             ext_memory,
-            meta_v14.types(),
+            &meta_v14_types,
             &mut position,
         )
         .map_err(UncheckedExtrinsicError::Parser)?;
@@ -270,7 +266,7 @@ where
             })
         } else {
             Err(UncheckedExtrinsicError::UnexpectedCallTy {
-                call_ty_id: call_ty.id(),
+                call_ty_id: call_ty.id,
             })
         }
     }

@@ -145,7 +145,13 @@ pub enum ParserError<E: ExternalMemory> {
     UnexpectedOptionVariant {
         position: usize,
     },
+    V14ShortTypesIncomplete {
+        old_id: u32,
+    },
     V14TypeNotResolved {
+        id: u32,
+    },
+    V14TypeNotResolvedShortened {
         id: u32,
     },
 }
@@ -165,7 +171,9 @@ impl<E: ExternalMemory> ParserError<E> {
             ParserError::UnexpectedCompactInsides { id } => format!("Compact type {id} in metadata type registry has unexpected type inside compact."),
             ParserError::UnexpectedEnumVariant { position } => format!("Encountered unexpected enum variant at position {position}."),
             ParserError::UnexpectedOptionVariant { position } => format!("Encountered unexpected Option<_> variant at position {position}."),
+            ParserError::V14ShortTypesIncomplete { old_id } => format!("Unable to resolve type with old id {old_id} in shortened metadata type registry."),
             ParserError::V14TypeNotResolved { id } => format!("Unable to resolve type id {id} in metadata type registry."),
+            ParserError::V14TypeNotResolvedShortened { id } => format!("Unable to resolve type with updated id {id} in shortened metadata type registry."),
         }
     }
 }

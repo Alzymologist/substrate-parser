@@ -239,7 +239,7 @@ impl Hint {
     /// `Hint` for a [`Field`]. Both `name` and `type_name` are used, `name` is
     /// more reliable and gets checked first.
     pub fn from_field(field: &Field<PortableForm>) -> Self {
-        let mut out = match field.name() {
+        let mut out = match &field.name {
             Some(name) => match name.as_str() {
                 a if NONCE_ID_SET.contains(&a) => Self::FieldNonce,
                 a if SPEC_VERSION_ID_SET.contains(&a) => Self::FieldSpecVersion,
@@ -248,7 +248,7 @@ impl Hint {
             None => Self::None,
         };
         if let Self::None = out {
-            if let Some(type_name) = field.type_name() {
+            if let Some(type_name) = &field.type_name {
                 out = match type_name.as_str() {
                     a if BALANCE_ID_SET.contains(&a) => Self::FieldBalance,
                     _ => Self::None,
@@ -402,14 +402,14 @@ impl SpecialtyTypeHinted {
 ///
 /// Does not propagate. If found, causes parser to decode through special route.
 /// If decoding through special route fails, it is considered parser error.
-pub enum SpecialtyTypeChecked<'a> {
+pub enum SpecialtyTypeChecked {
     None,
     AccountId32,
     Era,
     H160,
     H256,
     H512,
-    Option(&'a UntrackedSymbol<TypeId>),
+    Option(UntrackedSymbol<TypeId>),
     PalletSpecific {
         pallet_name: String,
         pallet_info: Info,
@@ -429,7 +429,7 @@ pub enum SpecialtyTypeChecked<'a> {
     SignatureEcdsa,
 }
 
-impl<'a> SpecialtyTypeChecked<'a> {
+impl SpecialtyTypeChecked {
     /// Get `SpecialtyTypeChecked` for a [`Type`].
     ///
     /// Checks type internal structure for `Option`.
@@ -437,18 +437,18 @@ impl<'a> SpecialtyTypeChecked<'a> {
     /// Checks type internal structure and uses input data for
     /// [`PalletSpecificItem`].
     pub fn from_type<B, E, M>(
-        ty: &'a Type<PortableForm>,
+        ty: &Type<PortableForm>,
         data: &B,
         ext_memory: &mut E,
         position: &mut usize,
-        registry: &'a M::TypeRegistry,
+        registry: &M::TypeRegistry,
     ) -> Self
     where
         B: AddressableBuffer<E>,
         E: ExternalMemory,
         M: AsMetadata<E>,
     {
-        match SpecialtyTypeHinted::from_path(ty.path()) {
+        match SpecialtyTypeHinted::from_path(&ty.path) {
             SpecialtyTypeHinted::None => Self::None,
             SpecialtyTypeHinted::AccountId32 => Self::AccountId32,
             SpecialtyTypeHinted::Era => Self::Era,
@@ -456,21 +456,20 @@ impl<'a> SpecialtyTypeChecked<'a> {
             SpecialtyTypeHinted::H256 => Self::H256,
             SpecialtyTypeHinted::H512 => Self::H512,
             SpecialtyTypeHinted::Option => {
-                if let TypeDef::Variant(x) = ty.type_def() {
-                    let params = ty.type_params();
-                    if params.len() == 1 {
-                        if let Some(ty_symbol) = params[0].ty() {
+                if let TypeDef::Variant(x) = &ty.type_def {
+                    if ty.type_params.len() == 1 {
+                        if let Some(ty_symbol) = ty.type_params[0].ty {
                             let mut has_none = false;
                             let mut has_some = false;
-                            for variant in x.variants() {
-                                if variant.index() == 0 && variant.name() == NONE {
+                            for variant in x.variants.iter() {
+                                if variant.index == 0 && variant.name == NONE {
                                     has_none = true
                                 }
-                                if variant.index() == 1 && variant.name() == SOME {
+                                if variant.index == 1 && variant.name == SOME {
                                     has_some = true
                                 }
                             }
-                            if has_none && has_some && (x.variants().len() == 2) {
+                            if has_none && has_some && (x.variants.len() == 2) {
                                 Self::Option(ty_symbol)
                             } else {
                                 Self::None
@@ -486,30 +485,31 @@ impl<'a> SpecialtyTypeChecked<'a> {
                 }
             }
             SpecialtyTypeHinted::PalletSpecific(item) => {
-                if let TypeDef::Variant(x) = ty.type_def() {
+                if let TypeDef::Variant(x) = &ty.type_def {
                     // found specific variant corresponding to pallet,
                     // get pallet name from here
-                    match pick_variant::<B, E>(x.variants(), data, ext_memory, *position) {
+                    match pick_variant::<B, E>(&x.variants, data, ext_memory, *position) {
                         Ok(pallet_variant) => {
-                            let pallet_name = pallet_variant.name().to_owned();
-                            let pallet_fields = pallet_variant.fields();
-                            if pallet_fields.len() == 1 {
-                                match registry.resolve_ty(pallet_fields[0].ty().id(), ext_memory) {
+                            let pallet_name = pallet_variant.name.to_owned();
+                            if pallet_variant.fields.len() == 1 {
+                                match registry
+                                    .resolve_ty(pallet_variant.fields[0].ty.id, ext_memory)
+                                {
                                     Ok(variants_ty) => {
                                         if let SpecialtyTypeHinted::PalletSpecific(item_repeated) =
-                                            SpecialtyTypeHinted::from_path(variants_ty.path())
+                                            SpecialtyTypeHinted::from_path(&variants_ty.path)
                                         {
                                             if item != item_repeated {
                                                 Self::None
-                                            } else if let TypeDef::Variant(var) =
-                                                variants_ty.type_def()
+                                            } else if let TypeDef::Variant(ref var) =
+                                                variants_ty.type_def
                                             {
                                                 let pallet_info = Info::from_ty(&variants_ty);
                                                 *position += ENUM_INDEX_ENCODED_LEN;
                                                 Self::PalletSpecific {
                                                     pallet_name,
                                                     pallet_info,
-                                                    variants: var.variants().to_vec(),
+                                                    variants: var.variants.to_vec(),
                                                     item,
                                                 }
                                             } else {

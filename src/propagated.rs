@@ -137,7 +137,7 @@ impl Checker {
         }
 
         // check that `id` is not cycling and update `id` set
-        checker.check_id(field.ty().id())?;
+        checker.check_id(field.ty.id)?;
 
         Ok(checker)
     }
@@ -151,7 +151,7 @@ impl Checker {
     ) -> Result<Self, ParserError<E>> {
         let mut checker = self.clone();
         checker.check_id(id)?;
-        checker.specialty_set.update_from_path(ty.path());
+        checker.specialty_set.update_from_path(&ty.path);
         Ok(checker)
     }
 

@@ -310,8 +310,8 @@
 //!                     "check_mortality",
 //!                     "CheckMortality",
 //!                 ])
-//!                     .unwrap()
-//!                     .into_portable(&mut Registry::new()),
+//!                 .unwrap()
+//!                 .into_portable(&mut Registry::new()),
 //!             }
 //!         ]
 //!     },
@@ -665,8 +665,9 @@ where
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
+    let resolved_ty = registry.resolve_ty_external_id(ty_symbol.id, ext_memory)?;
     decode_with_type::<B, E, M>(
-        &Ty::Symbol(ty_symbol),
+        &Ty::Resolved(resolved_ty),
         data,
         ext_memory,
         position,

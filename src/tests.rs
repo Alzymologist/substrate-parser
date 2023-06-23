@@ -458,14 +458,14 @@ fn storage_1_good() {
     let system_digest_ty = system_digest_ty(&metadata);
 
     // `Digest` type is `11` in types registry.
-    assert!(system_digest_ty.id() == 11);
+    assert!(system_digest_ty.id == 11);
 
     // It is a composite with a single field.
     // Here in good metadata `westmint9270` the field type identifier is `12`
     // and further type resolving is possible.
     let metadata_type_11 = metadata.types.resolve(11).unwrap();
-    if let TypeDef::Composite(x) = metadata_type_11.type_def() {
-        assert!(x.fields()[0].ty().id() == 12);
+    if let TypeDef::Composite(x) = &metadata_type_11.type_def {
+        assert!(x.fields[0].ty.id == 12);
     } else {
         panic!("Expected composite.")
     }
@@ -551,7 +551,7 @@ fn storage_2_spoiled_digest() {
     let system_digest_ty = system_digest_ty(&metadata);
 
     // `Digest` type is `11` in types registry.
-    assert!(system_digest_ty.id() == 11);
+    assert!(system_digest_ty.id == 11);
 
     // In good metadata `westmint9270` the field type identifier was `12` (see
     // the `storage_1_good` test above), and further type resolving was
@@ -562,8 +562,8 @@ fn storage_2_spoiled_digest() {
     // This check is to make sure the metadata really contains error in type
     // referencing.
     let metadata_type_11 = metadata.types.resolve(11).unwrap();
-    if let TypeDef::Composite(x) = metadata_type_11.type_def() {
-        assert!(x.fields()[0].ty().id() == 11);
+    if let TypeDef::Composite(x) = &metadata_type_11.type_def {
+        assert!(x.fields[0].ty.id == 11);
     } else {
         panic!("Expected composite.")
     }

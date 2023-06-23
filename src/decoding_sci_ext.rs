@@ -18,7 +18,7 @@ use crate::error::{ExtensionsError, SignableError};
 use crate::propagated::Propagated;
 use crate::special_indicators::SpecialtyPrimitive;
 use crate::special_types::UnsignedInteger;
-use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory};
+use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
 use crate::MarkedData;
 
 /// Parse extensions part of the signable transaction [`MarkedData`] using
@@ -49,27 +49,34 @@ where
     let data = marked_data.data();
 
     let mut extensions: Vec<ExtendedData> = Vec::new();
+    let meta_v14_types = meta_v14.types();
     for signed_extensions_metadata in meta_v14.extrinsic().signed_extensions.iter() {
+        let resolved_ty = meta_v14_types
+            .resolve_ty_external_id(signed_extensions_metadata.ty.id, ext_memory)
+            .map_err(SignableError::Parsing)?;
         extensions.push(
             decode_with_type::<B, E, M>(
-                &Ty::Symbol(&signed_extensions_metadata.ty),
+                &Ty::Resolved(resolved_ty),
                 data,
                 ext_memory,
                 &mut position,
-                meta_v14.types(),
+                &meta_v14_types,
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
             .map_err(SignableError::Parsing)?,
         )
     }
     for signed_extensions_metadata in meta_v14.extrinsic().signed_extensions.iter() {
+        let resolved_ty = meta_v14_types
+            .resolve_ty_external_id(signed_extensions_metadata.additional_signed.id, ext_memory)
+            .map_err(SignableError::Parsing)?;
         extensions.push(
             decode_with_type::<B, E, M>(
-                &Ty::Symbol(&signed_extensions_metadata.additional_signed),
+                &Ty::Resolved(resolved_ty),
                 data,
                 ext_memory,
                 &mut position,
-                meta_v14.types(),
+                &meta_v14_types,
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
             .map_err(SignableError::Parsing)?,

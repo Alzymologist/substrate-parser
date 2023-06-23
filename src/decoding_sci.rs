@@ -184,16 +184,16 @@ where
 
     let pallet_info = Info::from_ty(&pallet_call_ty.call_ty);
 
-    if let TypeDef::Variant(x) = pallet_call_ty.call_ty.type_def() {
+    if let TypeDef::Variant(x) = &pallet_call_ty.call_ty.type_def {
         if let SpecialtyTypeHinted::PalletSpecific(PalletSpecificItem::Call) =
             SpecialtyTypeHinted::from_path(&pallet_info.path)
         {
             let variant_data = decode_variant::<B, E, M>(
-                x.variants(),
+                &x.variants,
                 &data,
                 ext_memory,
                 &mut position,
-                meta_v14.types(),
+                &meta_v14.types(),
             )
             .map_err(SignableError::Parsing)?;
             if position != marked_data.extensions_start() {
@@ -263,19 +263,16 @@ where
     M: AsMetadata<E>,
 {
     let (ty, id) = match ty_input {
-        Ty::Resolved { ty, id } => (ty.to_owned(), *id),
-        Ty::Symbol(ty_symbol) => (
-            registry.resolve_ty(ty_symbol.id(), ext_memory)?,
-            ty_symbol.id(),
-        ),
+        Ty::Resolved(resolved_ty) => (resolved_ty.ty.to_owned(), resolved_ty.id),
+        Ty::Symbol(ty_symbol) => (registry.resolve_ty(ty_symbol.id, ext_memory)?, ty_symbol.id),
     };
     let info_ty = Info::from_ty(&ty);
     propagated.add_info(&info_ty);
     match SpecialtyTypeChecked::from_type::<B, E, M>(&ty, data, ext_memory, position, registry) {
-        SpecialtyTypeChecked::None => match ty.type_def() {
+        SpecialtyTypeChecked::None => match &ty.type_def {
             TypeDef::Composite(x) => {
                 let field_data_set = decode_fields::<B, E, M>(
-                    x.fields(),
+                    &x.fields,
                     data,
                     ext_memory,
                     position,
@@ -290,7 +287,7 @@ where
             TypeDef::Variant(x) => {
                 propagated.reject_compact()?;
                 let variant_data =
-                    decode_variant::<B, E, M>(x.variants(), data, ext_memory, position, registry)?;
+                    decode_variant::<B, E, M>(&x.variants, data, ext_memory, position, registry)?;
                 Ok(ExtendedData {
                     data: ParsedData::Variant(variant_data),
                     info: propagated.info,
@@ -300,7 +297,7 @@ where
                 let number_of_elements = get_compact::<u32, B, E>(data, ext_memory, position)?;
                 propagated.checker.drop_cycle_check();
                 decode_elements_set::<B, E, M>(
-                    x.type_param(),
+                    &x.type_param,
                     number_of_elements,
                     data,
                     ext_memory,
@@ -310,8 +307,8 @@ where
                 )
             }
             TypeDef::Array(x) => decode_elements_set::<B, E, M>(
-                x.type_param(),
-                x.len(),
+                &x.type_param,
+                x.len,
                 data,
                 ext_memory,
                 position,
@@ -319,20 +316,19 @@ where
                 propagated,
             ),
             TypeDef::Tuple(x) => {
-                let inner_types_set = x.fields();
-                if inner_types_set.len() > 1 {
+                if x.fields.len() > 1 {
                     propagated.reject_compact()?;
                     propagated.forget_hint();
                 }
                 let mut tuple_data_set: Vec<ExtendedData> = Vec::new();
-                for inner_ty_symbol in inner_types_set.iter() {
-                    let id = inner_ty_symbol.id();
+                for inner_ty_symbol in x.fields.iter() {
+                    let id = inner_ty_symbol.id;
                     let ty = registry.resolve_ty(id, ext_memory)?;
                     let tuple_data_element = decode_with_type::<B, E, M>(
-                        &Ty::Resolved {
+                        &Ty::Resolved(ResolvedTy {
                             ty: ty.to_owned(),
                             id,
-                        },
+                        }),
                         data,
                         ext_memory,
                         position,
@@ -359,9 +355,9 @@ where
             TypeDef::Compact(x) => {
                 propagated.reject_compact()?;
                 propagated.checker.specialty_set.compact_at = Some(id);
-                propagated.checker.check_id(x.type_param().id())?;
+                propagated.checker.check_id(x.type_param.id)?;
                 decode_with_type::<B, E, M>(
-                    &Ty::Symbol(x.type_param()),
+                    &Ty::Symbol(&x.type_param),
                     data,
                     ext_memory,
                     position,
@@ -427,8 +423,8 @@ where
         }),
         SpecialtyTypeChecked::Option(ty_symbol) => {
             propagated.reject_compact()?;
-            let param_ty = registry.resolve_ty(ty_symbol.id(), ext_memory)?;
-            match param_ty.type_def() {
+            let param_ty = registry.resolve_ty(ty_symbol.id, ext_memory)?;
+            match &param_ty.type_def {
                 TypeDef::Primitive(TypeDefPrimitive::Bool) => {
                     let slice_to_decode =
                         data.read_slice(ext_memory, *position, ENUM_INDEX_ENCODED_LEN)?;
@@ -463,10 +459,10 @@ where
                     1 => {
                         *position += ENUM_INDEX_ENCODED_LEN;
                         let extended_option_data = decode_with_type::<B, E, M>(
-                            &Ty::Resolved {
+                            &Ty::Resolved(ResolvedTy {
                                 ty: param_ty,
-                                id: ty_symbol.id(),
-                            },
+                                id: ty_symbol.id,
+                            }),
                             data,
                             ext_memory,
                             position,
@@ -643,10 +639,10 @@ where
     }
     let mut out: Vec<FieldData> = Vec::new();
     for field in fields.iter() {
-        let field_name = field.name().map(|name| name.to_owned());
-        let type_name = field.type_name().map(|name| name.to_owned());
+        let field_name = field.name.to_owned();
+        let type_name = field.type_name.to_owned();
         let this_field_data = decode_with_type::<B, E, M>(
-            &Ty::Symbol(field.ty()),
+            &Ty::Symbol(&field.ty),
             data,
             ext_memory,
             position,
@@ -695,10 +691,10 @@ where
             let mut out: Vec<ParsedData> = Vec::new();
             for _i in 0..number_of_elements {
                 let element_extended_data = decode_with_type::<B, E, M>(
-                    &Ty::Resolved {
+                    &Ty::Resolved(ResolvedTy {
                         ty: husked.ty.to_owned(),
-                        id: element.id(),
-                    },
+                        id: element.id,
+                    }),
                     data,
                     ext_memory,
                     position,
@@ -744,7 +740,7 @@ where
 
     let mut found_variant = None;
     for x in variants.iter() {
-        if x.index() == enum_index {
+        if x.index == enum_index {
             found_variant = Some(x);
             break;
         }
@@ -772,10 +768,10 @@ where
 {
     let found_variant = pick_variant::<B, E>(variants, data, ext_memory, *position)?;
     *position += ENUM_INDEX_ENCODED_LEN;
-    let variant_name = found_variant.name().to_owned();
+    let variant_name = found_variant.name.to_owned();
     let variant_docs = found_variant.collect_docs();
     let fields = decode_fields::<B, E, M>(
-        found_variant.fields(),
+        &found_variant.fields,
         data,
         ext_memory,
         position,
@@ -821,9 +817,9 @@ where
     let bitvec_start = *position;
 
     // BitOrder
-    let bitorder_type = registry.resolve_ty(bit_ty.bit_order_type().id(), ext_memory)?;
-    let bitorder = match bitorder_type.type_def() {
-        TypeDef::Composite(_) => match bitorder_type.path().ident() {
+    let bitorder_type = registry.resolve_ty(bit_ty.bit_order_type.id, ext_memory)?;
+    let bitorder = match &bitorder_type.type_def {
+        TypeDef::Composite(_) => match bitorder_type.path.ident() {
             Some(x) => match x.as_str() {
                 LSB0 => FoundBitOrder::Lsb0,
                 MSB0 => FoundBitOrder::Msb0,
@@ -835,9 +831,9 @@ where
     };
 
     // BitStore
-    let bitstore_type = registry.resolve_ty(bit_ty.bit_store_type().id(), ext_memory)?;
+    let bitstore_type = registry.resolve_ty(bit_ty.bit_store_type.id, ext_memory)?;
 
-    match bitstore_type.type_def() {
+    match bitstore_type.type_def {
         TypeDef::Primitive(TypeDefPrimitive::U8) => {
             let into_decode = into_bitvec_decode::<u8, B, E>(data, ext_memory, position)?;
             match bitorder {
@@ -1166,7 +1162,7 @@ where
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let entry_symbol_id = entry_symbol.id();
+    let entry_symbol_id = entry_symbol.id;
     checker.check_id(entry_symbol_id)?;
     checker.specialty_set = SpecialtySet {
         compact_at: None,
@@ -1183,17 +1179,16 @@ where
             info.push(info_ty)
         }
 
-        if let SpecialtyTypeHinted::None = SpecialtyTypeHinted::from_path(ty.path()) {
-            let type_def = ty.type_def().to_owned();
+        if let SpecialtyTypeHinted::None = SpecialtyTypeHinted::from_path(&ty.path) {
+            let type_def = ty.type_def.to_owned();
             match type_def {
                 TypeDef::Composite(x) => {
-                    let fields = x.fields();
-                    if fields.len() == 1 {
-                        id = fields[0].ty().id();
+                    if x.fields.len() == 1 {
+                        id = x.fields[0].ty.id;
                         checker.check_id(id)?;
                         ty = registry.resolve_ty(id, ext_memory)?;
                         if let Hint::None = checker.specialty_set.hint {
-                            checker.specialty_set.hint = Hint::from_field(&fields[0])
+                            checker.specialty_set.hint = Hint::from_field(&x.fields[0])
                         }
                     } else {
                         break;
@@ -1202,7 +1197,7 @@ where
                 TypeDef::Compact(x) => {
                     checker.reject_compact()?;
                     checker.specialty_set.compact_at = Some(id);
-                    id = x.type_param().id();
+                    id = x.type_param.id;
                     checker.check_id(id)?;
                     ty = registry.resolve_ty(id, ext_memory)?;
                 }
@@ -1219,10 +1214,15 @@ where
 /// Type information used for parsing.
 pub enum Ty<'a> {
     /// Type is already resolved in metadata `Registry`.
-    Resolved { ty: Type<PortableForm>, id: u32 },
+    Resolved(ResolvedTy),
 
     /// Type is not yet resolved.
     Symbol(&'a UntrackedSymbol<TypeId>),
+}
+
+pub struct ResolvedTy {
+    pub ty: Type<PortableForm>,
+    pub id: u32,
 }
 
 #[cfg(target_pointer_width = "64")]

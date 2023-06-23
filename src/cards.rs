@@ -57,7 +57,7 @@ impl Info {
     pub fn from_ty(ty: &Type<PortableForm>) -> Self {
         Self {
             docs: ty.collect_docs(),
-            path: ty.path().to_owned(),
+            path: ty.path.to_owned(),
         }
     }
 
@@ -83,7 +83,7 @@ impl Info {
             if self.path.is_empty() {
                 None
             } else {
-                Some(self.path.segments().join(" >> "))
+                Some(self.path.segments.join(" >> "))
             }
         };
         InfoFlat { docs, path_flat }
@@ -102,7 +102,7 @@ macro_rules! impl_documented {
         $(
             impl Documented for $ty {
                 fn collect_docs(&self) -> String {
-                    self.docs().join("\n")
+                    self.docs.join("\n")
                 }
             }
         )*

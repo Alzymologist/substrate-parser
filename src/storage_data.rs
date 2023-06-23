@@ -212,7 +212,7 @@ macro_rules! cut_hash {
             *position += $hash_len;
             Ok(KeyPart::Hash(HashData {
                 hash: Hash::$enum_variant(hash_part),
-                type_id: key_ty.id(),
+                type_id: key_ty.id,
             }))
         }
     };
@@ -354,12 +354,12 @@ where
             }
         } else {
             let key_ty_resolved = registry
-                .resolve_ty(key_ty.id(), ext_memory)
+                .resolve_ty(key_ty.id, ext_memory)
                 .map_err(StorageError::ParsingKey)?;
             let info = Info::from_ty(&key_ty_resolved);
-            match key_ty_resolved.type_def() {
+            match key_ty_resolved.type_def {
                 TypeDef::Tuple(t) => {
-                    let tuple_elements = t.fields();
+                    let tuple_elements = &t.fields;
                     if tuple_elements.len() != hashers.len() {
                         return Err(StorageError::MultipleHashesNumberMismatch);
                     }
