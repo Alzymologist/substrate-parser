@@ -1,15 +1,18 @@
+use crate::std::{
+    any::TypeId,
+    string::{String, ToString},
+    vec::Vec,
+};
 use frame_metadata::v14::{RuntimeMetadataV14, StorageEntryMetadata};
 use parity_scale_codec::Decode;
 use primitive_types::H256;
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, IntoPortable, Path, Registry, TypeDef,
 };
-
-use crate::std::{
-    any::TypeId,
-    string::{String, ToString},
-    vec::Vec,
-};
+#[cfg(feature = "std")]
+use sp_core::{crypto::AccountId32, sr25519::Signature as SignatureSr25519};
+#[cfg(feature = "std")]
+use sp_runtime::generic::Era;
 
 use crate::cards::{
     ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
@@ -17,7 +20,9 @@ use crate::cards::{
 use crate::error::{ParserError, SignableError};
 use crate::special_indicators::SpecialtyPrimitive;
 use crate::storage_data::{decode_as_storage_entry, KeyData, KeyPart};
-use crate::{decode_all_as_type, parse_transaction, MetaInput, ShortSpecs};
+#[cfg(feature = "std")]
+use crate::unchecked_extrinsic::{decode_as_unchecked_extrinsic, UncheckedExtrinsic};
+use crate::{decode_all_as_type, parse_transaction, ShortSpecs};
 
 fn metadata(filename: &str) -> RuntimeMetadataV14 {
     let metadata_hex = std::fs::read_to_string(filename).unwrap();
@@ -76,8 +81,9 @@ fn assets_metadata_storage_entry(
 fn tr_1() {
     let data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
     let reply = parse_transaction(
-        &data,
-        MetaInput::Raw(metadata("for_tests/westend9111")),
+        &data.as_ref(),
+        &mut (),
+        &metadata("for_tests/westend9111"),
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -154,8 +160,9 @@ Block Hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff
 fn tr_2() {
     let data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
     let reply = parse_transaction(
-        &data,
-        MetaInput::Raw(metadata("for_tests/westend9111")),
+        &data.as_ref(),
+        &mut (),
+        &metadata("for_tests/westend9111"),
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -264,8 +271,9 @@ which is capped at CompactAssignments::LIMIT (MAX_NOMINATIONS).
 fn tr_3() {
     let data = hex::decode("9c0403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480284d717d5031504025a62029723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84").unwrap();
     let reply = parse_transaction(
-        &data,
-        MetaInput::Raw(metadata("for_tests/westend9111")),
+        &data.as_ref(),
+        &mut (),
+        &metadata("for_tests/westend9111"),
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -322,8 +330,9 @@ Block Hash: 98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84
 fn tr_4() {
     let data = hex::decode("2509000115094c6f72656d20697073756d20646f6c6f722073697420616d65742c20636f6e73656374657475722061646970697363696e6720656c69742c2073656420646f20656975736d6f642074656d706f7220696e6369646964756e74207574206c61626f726520657420646f6c6f7265206d61676e6120616c697175612e20436f6e67756520657520636f6e7365717561742061632066656c697320646f6e65632e20547572706973206567657374617320696e7465676572206567657420616c6971756574206e696268207072616573656e742e204e6571756520636f6e76616c6c6973206120637261732073656d70657220617563746f72206e657175652e204e65747573206574206d616c6573756164612066616d6573206163207475727069732065676573746173207365642074656d7075732e2050656c6c656e746573717565206861626974616e74206d6f726269207472697374697175652073656e6563747573206574206e657475732065742e205072657469756d2076756c7075746174652073617069656e206e656320736167697474697320616c697175616d2e20436f6e76616c6c69732061656e65616e20657420746f72746f7220617420726973757320766976657272612e20566976616d757320617263752066656c697320626962656e64756d207574207472697374697175652065742065676573746173207175697320697073756d2e204d616c6573756164612070726f696e206c696265726f206e756e6320636f6e73657175617420696e74657264756d207661726975732e2045022c009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e1b2b0a177ad4f3f93f9a56dae700e938a40201a5beabbda160a74c70e612c66a").unwrap();
     let reply = parse_transaction(
-        &data,
-        MetaInput::Raw(metadata("for_tests/westend9111")),
+        &data.as_ref(),
+        &mut (),
+        &metadata("for_tests/westend9111"),
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -382,8 +391,9 @@ fn tr_5() {
         unit: "ACA".to_string(),
     };
     let reply = parse_transaction(
-        &data,
-        MetaInput::Raw(metadata("for_tests/acala2012")),
+        &data.as_ref(),
+        &mut (),
+        &metadata("for_tests/acala2012"),
         H256(
             hex::decode("fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c")
                 .unwrap()
@@ -448,19 +458,25 @@ fn storage_1_good() {
     let system_digest_ty = system_digest_ty(&metadata);
 
     // `Digest` type is `11` in types registry.
-    assert!(system_digest_ty.id() == 11);
+    assert!(system_digest_ty.id == 11);
 
     // It is a composite with a single field.
     // Here in good metadata `westmint9270` the field type identifier is `12`
     // and further type resolving is possible.
     let metadata_type_11 = metadata.types.resolve(11).unwrap();
-    if let TypeDef::Composite(x) = metadata_type_11.type_def() {
-        assert!(x.fields()[0].ty().id() == 12);
+    if let TypeDef::Composite(x) = &metadata_type_11.type_def {
+        assert!(x.fields[0].ty.id == 12);
     } else {
         panic!("Expected composite.")
     }
 
-    let reply = decode_all_as_type(&system_digest_ty, &data, &metadata.types).unwrap();
+    let reply = decode_all_as_type::<&[u8], (), RuntimeMetadataV14>(
+        &system_digest_ty,
+        &data.as_ref(),
+        &mut (),
+        &metadata.types,
+    )
+    .unwrap();
     let reply_known = ExtendedData {
         data: ParsedData::Composite(vec![FieldData {
             field_name: Some(String::from("logs")),
@@ -535,7 +551,7 @@ fn storage_2_spoiled_digest() {
     let system_digest_ty = system_digest_ty(&metadata);
 
     // `Digest` type is `11` in types registry.
-    assert!(system_digest_ty.id() == 11);
+    assert!(system_digest_ty.id == 11);
 
     // In good metadata `westmint9270` the field type identifier was `12` (see
     // the `storage_1_good` test above), and further type resolving was
@@ -546,13 +562,19 @@ fn storage_2_spoiled_digest() {
     // This check is to make sure the metadata really contains error in type
     // referencing.
     let metadata_type_11 = metadata.types.resolve(11).unwrap();
-    if let TypeDef::Composite(x) = metadata_type_11.type_def() {
-        assert!(x.fields()[0].ty().id() == 11);
+    if let TypeDef::Composite(x) = &metadata_type_11.type_def {
+        assert!(x.fields[0].ty.id == 11);
     } else {
         panic!("Expected composite.")
     }
 
-    let reply = decode_all_as_type(&system_digest_ty, &data, &metadata.types).unwrap_err();
+    let reply = decode_all_as_type::<&[u8], (), RuntimeMetadataV14>(
+        &system_digest_ty,
+        &data.as_ref(),
+        &mut (),
+        &metadata.types,
+    )
+    .unwrap_err();
     let reply_known = ParserError::CyclicMetadata { id: 11 };
     assert_eq!(reply_known, reply);
 }
@@ -574,9 +596,10 @@ fn storage_3_assets_with_key() {
     // `StorageEntryMetadata` for `Assets` pallet, `Metadata` entry.
     let storage_entry_metadata = assets_metadata_storage_entry(&metadata);
 
-    let storage = decode_as_storage_entry(
-        &key_input,
-        &value_input,
+    let storage = decode_as_storage_entry::<&[u8], (), RuntimeMetadataV14>(
+        &key_input.as_ref(),
+        &value_input.as_ref(),
+        &mut (),
         storage_entry_metadata,
         &metadata.types,
     )
@@ -711,8 +734,9 @@ fn storage_3_assets_with_key() {
 fn parser_error_1() {
     let data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d55000800a023000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
     let error = parse_transaction(
-        &data,
-        MetaInput::Raw(metadata("for_tests/westend9111")),
+        &data.as_ref(),
+        &mut (),
+        &metadata("for_tests/westend9111"),
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -732,8 +756,9 @@ fn parser_error_1() {
 fn parser_error_2() {
     let data = hex::decode("a40403048eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480700e8764817b501b8009723000005000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f33").unwrap();
     let parsed = parse_transaction(
-        &data,
-        MetaInput::Raw(metadata("for_tests/westend9111")),
+        &data.as_ref(),
+        &mut (),
+        &metadata("for_tests/westend9111"),
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -751,8 +776,9 @@ fn parser_error_2() {
 fn parser_error3() {
     let data = hex::decode("a40403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480700e8764817b501b8009723000005000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f3300").unwrap();
     let signable_error = parse_transaction(
-        &data,
-        MetaInput::Raw(metadata("for_tests/westend9111")),
+        &data.as_ref(),
+        &mut (),
+        &metadata("for_tests/westend9111"),
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -769,8 +795,9 @@ fn parser_error3() {
 fn parser_error_4() {
     let data = hex::decode("a40403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a481700e8764817b501b8009723000005000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f33").unwrap();
     let parsed = parse_transaction(
-        &data,
-        MetaInput::Raw(metadata("for_tests/westend9111")),
+        &data.as_ref(),
+        &mut (),
+        &metadata("for_tests/westend9111"),
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -788,8 +815,9 @@ fn parser_error_4() {
 fn parser_error_5() {
     let data = hex::decode("a40403068eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480700e8764817b501b8009723000005000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f33").unwrap();
     let parsed = parse_transaction(
-        &data,
-        MetaInput::Raw(metadata("for_tests/westend9111")),
+        &data.as_ref(),
+        &mut (),
+        &metadata("for_tests/westend9111"),
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -808,8 +836,9 @@ fn parser_error_5() {
 fn parser_error_6() {
     let data = hex::decode("a40403028eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480700e8764817b501b8009723000005000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e538a7d7a0ac17eb6dd004578cb8e238c384a10f57c999a3fa1200409cd9b3f33").unwrap();
     let parsed = parse_transaction(
-        &data,
-        MetaInput::Raw(metadata("for_tests/westend9111")),
+        &data.as_ref(),
+        &mut (),
+        &metadata("for_tests/westend9111"),
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -832,4 +861,305 @@ fn parser_error_6() {
         minimal_length: 1,
     });
     assert_eq!(call_error_known, call_error);
+}
+
+#[cfg(feature = "std")]
+#[test]
+fn unchecked_extrinsic_1() {
+    let data = hex::decode("39028400d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d0158e09098782f2e40602b37d94fe3e2d051c2e4927c34bc85525297310642db08280110b4a02b89676e966d07fdf7f362cdeb858d28d681564bd0f7d33dce5c8cc50204000403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480284d717").unwrap();
+    let metadata = metadata("for_tests/westend9111");
+    let parsed = decode_as_unchecked_extrinsic(&data.as_ref(), &mut (), &metadata).unwrap();
+    match parsed {
+        UncheckedExtrinsic::Signed {
+            address,
+            signature,
+            extra,
+            call,
+        } => {
+            let expected_address = ExtendedData {
+                data: ParsedData::Variant(VariantData {
+                    variant_name: "Id".to_string(),
+                    variant_docs: "".to_string(),
+                    fields: vec![
+                        FieldData {
+                            field_name: None,
+                            type_name: Some("AccountId".to_string()),
+                            field_docs: "".to_string(),
+                            data: ExtendedData {
+                                data: ParsedData::Id(AccountId32::new(hex::decode("d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d").unwrap().try_into().unwrap())),
+                                info: vec![
+                                    Info {
+                                        docs: "".to_string(),
+                                        path: Path::from_segments(vec![
+                                            "sp_core",
+                                            "crypto",
+                                            "AccountId32",
+                                        ])
+                                        .unwrap()
+                                        .into_portable(&mut Registry::new()),
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }),
+                info: vec![
+                    Info {
+                        docs: "".to_string(),
+                        path: Path::from_segments(vec![
+                            "sp_runtime",
+                            "multiaddress",
+                            "MultiAddress",
+                        ])
+                        .unwrap()
+                        .into_portable(&mut Registry::new()),
+                    }
+                ]
+            };
+            assert_eq!(expected_address, address);
+
+            let expected_signature = ExtendedData {
+                data: ParsedData::Variant(VariantData {
+                    variant_name: "Sr25519".to_string(),
+                    variant_docs: "".to_string(),
+                    fields: vec![
+                        FieldData {
+                            field_name: None,
+                            type_name: Some("sr25519::Signature".to_string()),
+                            field_docs: "".to_string(),
+                            data: ExtendedData {
+                                data: ParsedData::SignatureSr25519(SignatureSr25519::from_raw(hex::decode("58e09098782f2e40602b37d94fe3e2d051c2e4927c34bc85525297310642db08280110b4a02b89676e966d07fdf7f362cdeb858d28d681564bd0f7d33dce5c8c").unwrap().try_into().unwrap())),
+                                info: vec![
+                                    Info {
+                                        docs: "".to_string(),
+                                        path: Path::from_segments(vec![
+                                            "sp_core",
+                                            "sr25519",
+                                            "Signature",
+                                        ])
+                                        .unwrap()
+                                        .into_portable(&mut Registry::new()),
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }),
+                info: vec![
+                    Info {
+                        docs: "".to_string(),
+                        path: Path::from_segments(vec![
+                            "sp_runtime",
+                            "MultiSignature",
+                        ])
+                        .unwrap()
+                        .into_portable(&mut Registry::new()),
+                    }
+                ]
+            };
+            assert_eq!(expected_signature, signature);
+
+            let expected_extra = ExtendedData {
+                data: ParsedData::Tuple(vec![
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "frame_system",
+                                "extensions",
+                                "check_spec_version",
+                                "CheckSpecVersion",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "frame_system",
+                                "extensions",
+                                "check_tx_version",
+                                "CheckTxVersion",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "frame_system",
+                                "extensions",
+                                "check_genesis",
+                                "CheckGenesis",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![FieldData {
+                            field_name: None,
+                            type_name: Some("Era".to_string()),
+                            field_docs: "".to_string(),
+                            data: ExtendedData {
+                                data: ParsedData::Era(Era::Mortal(64, 44)),
+                                info: vec![Info {
+                                    docs: "".to_string(),
+                                    path: Path::from_segments(vec![
+                                        "sp_runtime",
+                                        "generic",
+                                        "era",
+                                        "Era",
+                                    ])
+                                    .unwrap()
+                                    .into_portable(&mut Registry::new()),
+                                }],
+                            },
+                        }]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "frame_system",
+                                "extensions",
+                                "check_mortality",
+                                "CheckMortality",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![FieldData {
+                            field_name: None,
+                            type_name: Some("T::Index".to_string()),
+                            field_docs: "".to_string(),
+                            data: ExtendedData {
+                                data: ParsedData::PrimitiveU32 {
+                                    value: 1,
+                                    specialty: SpecialtyPrimitive::Nonce,
+                                },
+                                info: vec![],
+                            },
+                        }]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "frame_system",
+                                "extensions",
+                                "check_nonce",
+                                "CheckNonce",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "frame_system",
+                                "extensions",
+                                "check_weight",
+                                "CheckWeight",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                    ExtendedData {
+                        data: ParsedData::Composite(vec![FieldData {
+                            field_name: None,
+                            type_name: Some("BalanceOf<T>".to_string()),
+                            field_docs: "".to_string(),
+                            data: ExtendedData {
+                                data: ParsedData::PrimitiveU128 {
+                                    value: 0,
+                                    specialty: SpecialtyPrimitive::Tip,
+                                },
+                                info: vec![],
+                            },
+                        }]),
+                        info: vec![Info {
+                            docs: "".to_string(),
+                            path: Path::from_segments(vec![
+                                "pallet_transaction_payment",
+                                "ChargeTransactionPayment",
+                            ])
+                            .unwrap()
+                            .into_portable(&mut Registry::new()),
+                        }],
+                    },
+                ]),
+                info: vec![],
+            };
+            assert_eq!(expected_extra, extra);
+
+            let expected_call_fields = vec![
+                FieldData {
+                    field_name: Some("dest".to_string()),
+                    type_name: Some("<T::Lookup as StaticLookup>::Source".to_string()),
+                    field_docs: "".to_string(), 
+                    data: ExtendedData {
+                            data: ParsedData::Variant(VariantData {
+                                variant_name: "Id".to_string(),
+                                variant_docs: "".to_string(),
+                                fields: vec![
+                                    FieldData {
+                                        field_name: None,
+                                        type_name: Some("AccountId".to_string()),
+                                        field_docs: "".to_string(),
+                                        data: ExtendedData {
+                                            data: ParsedData::Id(AccountId32::new(hex::decode("8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48").unwrap().try_into().unwrap())),
+                                            info: vec![
+                                                Info {
+                                                    docs: "".to_string(),
+                                                    path: Path::from_segments(vec![
+                                                        "sp_core",
+                                                        "crypto",
+                                                        "AccountId32",
+                                                    ])
+                                                    .unwrap()
+                                                    .into_portable(&mut Registry::new()),
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }),
+                            info: vec![
+                                Info {
+                                    docs: "".to_string(),
+                                    path: Path::from_segments(vec![
+                                        "sp_runtime",
+                                        "multiaddress",
+                                        "MultiAddress",
+                                    ])
+                                    .unwrap()
+                                    .into_portable(&mut Registry::new()),
+                                }
+                            ]
+                        }
+                    },
+                    FieldData {
+                        field_name: Some("value".to_string()),
+                        type_name: Some("T::Balance".to_string()),
+                        field_docs: "".to_string(),
+                        data: ExtendedData {
+                            data: ParsedData::PrimitiveU128 { value: 100000000, specialty: SpecialtyPrimitive::Balance },
+                            info: vec![]
+                        }
+                    }
+                ];
+            assert_eq!(expected_call_fields, call.0.fields);
+        }
+        UncheckedExtrinsic::Unsigned { .. } => panic!("Expected signed extrinsic!"),
+    }
 }

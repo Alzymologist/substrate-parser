@@ -1,18 +1,13 @@
 //! Data that can propagate hierarchically during parsing.
 use frame_metadata::v14::SignedExtensionMetadata;
-use scale_info::{form::PortableForm, interner::UntrackedSymbol, Field};
+use scale_info::{form::PortableForm, Field, Path, Type};
 
 use crate::std::vec::Vec;
-
-#[cfg(feature = "std")]
-use std::any::TypeId;
-
-#[cfg(not(feature = "std"))]
-use core::any::TypeId;
 
 use crate::cards::Info;
 use crate::error::ParserError;
 use crate::special_indicators::{Hint, SpecialtyH256, SpecialtyPrimitive};
+use crate::traits::ExternalMemory;
 
 /// Type specialty data (type specialty [`Hint`] and compact info) that
 /// hierarchically propagates during the decoding.
@@ -57,11 +52,18 @@ impl SpecialtySet {
 
     /// Check that `compact_at` field is not `Some(_)`, i.e. there was no
     /// compact type encountered.
-    pub fn reject_compact(&self) -> Result<(), ParserError> {
+    pub fn reject_compact<E: ExternalMemory>(&self) -> Result<(), ParserError<E>> {
         if let Some(id) = self.compact_at {
             Err(ParserError::UnexpectedCompactInsides { id })
         } else {
             Ok(())
+        }
+    }
+
+    /// Update `Hint` from type path, if no hint existed previously.
+    pub fn update_from_path(&mut self, path: &Path<PortableForm>) {
+        if let Hint::None = self.hint {
+            self.hint = Hint::from_path(path);
         }
     }
 
@@ -112,8 +114,8 @@ impl Checker {
 
     /// Check that `compact_at` field in associated [`SpecialtySet`] is not
     /// `Some(_)`, i.e. there was no compact type encountered.
-    pub fn reject_compact(&self) -> Result<(), ParserError> {
-        self.specialty_set.reject_compact()
+    pub fn reject_compact<E: ExternalMemory>(&self) -> Result<(), ParserError<E>> {
+        self.specialty_set.reject_compact::<E>()
     }
 
     /// Discard previously found [`Hint`].
@@ -123,7 +125,10 @@ impl Checker {
 
     /// Use known, propagated from above `Checker` to construct a new `Checker`
     /// for an individual [`Field`].
-    pub fn update_for_field(&self, field: &Field<PortableForm>) -> Result<Self, ParserError> {
+    pub fn update_for_field<E: ExternalMemory>(
+        &self,
+        field: &Field<PortableForm>,
+    ) -> Result<Self, ParserError<E>> {
         let mut checker = self.clone();
 
         // update `Hint`
@@ -132,19 +137,21 @@ impl Checker {
         }
 
         // check that `id` is not cycling and update `id` set
-        checker.check_id(field.ty().id())?;
+        checker.check_id(field.ty.id)?;
 
         Ok(checker)
     }
 
     /// Use known, propagated from above `Checker` to construct a new `Checker`
-    /// for a [`Type`](scale_info::Type).
-    pub fn update_for_ty_symbol(
+    /// for a [`Type`].
+    pub fn update_for_ty<E: ExternalMemory>(
         &self,
-        ty_symbol: &UntrackedSymbol<TypeId>,
-    ) -> Result<Self, ParserError> {
+        ty: &Type<PortableForm>,
+        id: u32,
+    ) -> Result<Self, ParserError<E>> {
         let mut checker = self.clone();
-        checker.check_id(ty_symbol.id())?;
+        checker.check_id(id)?;
+        checker.specialty_set.update_from_path(&ty.path);
         Ok(checker)
     }
 
@@ -161,7 +168,7 @@ impl Checker {
     /// If type was already encountered in this `Checker` (and thus its `id` is
     /// in `cycle_check`), the decoding has entered a cycle and must be stopped.
     /// If not, type `id` is added into `cycle_check`.
-    pub fn check_id(&mut self, id: u32) -> Result<(), ParserError> {
+    pub fn check_id<E: ExternalMemory>(&mut self, id: u32) -> Result<(), ParserError<E>> {
         if self.cycle_check.contains(&id) {
             Err(ParserError::CyclicMetadata { id })
         } else {
@@ -223,10 +230,10 @@ impl Propagated {
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`
     /// for an individual [`Field`].
-    pub(crate) fn for_field(
+    pub(crate) fn for_field<E: ExternalMemory>(
         checker: &Checker,
         field: &Field<PortableForm>,
-    ) -> Result<Self, ParserError> {
+    ) -> Result<Self, ParserError<E>> {
         Ok(Self {
             checker: Checker::update_for_field(checker, field)?,
             info: Vec::new(),
@@ -234,13 +241,14 @@ impl Propagated {
     }
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`
-    /// for a [`Type`](scale_info::Type).
-    pub(crate) fn for_ty_symbol(
+    /// for a [`Type`].
+    pub(crate) fn for_ty<E: ExternalMemory>(
         checker: &Checker,
-        ty_symbol: &UntrackedSymbol<TypeId>,
-    ) -> Result<Self, ParserError> {
+        ty: &Type<PortableForm>,
+        id: u32,
+    ) -> Result<Self, ParserError<E>> {
         Ok(Self {
-            checker: Checker::update_for_ty_symbol(checker, ty_symbol)?,
+            checker: Checker::update_for_ty(checker, ty, id)?,
             info: Vec::new(),
         })
     }
@@ -252,8 +260,8 @@ impl Propagated {
 
     /// Check that `compact_at` field in associated [`SpecialtySet`] is not
     /// `Some(_)`, i.e. there was no compact type encountered.
-    pub(crate) fn reject_compact(&self) -> Result<(), ParserError> {
-        self.checker.specialty_set.reject_compact()
+    pub(crate) fn reject_compact<E: ExternalMemory>(&self) -> Result<(), ParserError<E>> {
+        self.checker.specialty_set.reject_compact::<E>()
     }
 
     /// Discard previously found [`Hint`].
