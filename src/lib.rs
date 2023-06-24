@@ -493,7 +493,7 @@ use std::{any::TypeId, marker::PhantomData};
 #[cfg(not(feature = "std"))]
 use core::{any::TypeId, marker::PhantomData};
 
-pub use decoding_sci::decode_as_call;
+pub use decoding_sci::{decode_as_call, ResolvedTy};
 pub use decoding_sci_ext::decode_extensions;
 pub use traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
 
