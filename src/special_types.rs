@@ -44,6 +44,11 @@ pub(crate) trait StableLength: Sized {
     /// Encoded length for the type.
     fn len_encoded() -> usize;
 
+    /// Shift position marker after decoding is done.
+    fn shift_position(position: &mut usize) {
+        *position += Self::len_encoded();
+    }
+
     /// Get type value from the data.
     ///
     /// Slice of appropriate length is selected from input `&[u8]` starting at
@@ -75,7 +80,7 @@ macro_rules! impl_stable_length_mem_size_decode {
                     let slice_to_decode = data.read_slice(ext_memory, *position, Self::len_encoded())?;
                     let out = <Self>::decode_all(&mut slice_to_decode.as_ref())
                         .map_err(|_| ParserError::TypeFailure{position: *position, ty: stringify!($ty)})?;
-                    *position += Self::len_encoded();
+                    Self::shift_position(position);
                     Ok(out)
                 }
             }
@@ -123,7 +128,7 @@ macro_rules! impl_stable_length_big_construct {
                 {
                     let slice_to_big256 = data.read_slice(ext_memory, *position, Self::len_encoded())?;
                     let out = Self::$get(slice_to_big256.as_ref());
-                    *position += Self::len_encoded();
+                    Self::shift_position(position);
                     Ok(out)
                 }
             }
@@ -155,7 +160,7 @@ impl StableLength for char {
                 .expect("constant length, always fit"),
         )) {
             Some(ch) => {
-                *position += Self::len_encoded();
+                Self::shift_position(position);
                 Ok(ch)
             }
             None => Err(ParserError::TypeFailure {
@@ -182,7 +187,7 @@ macro_rules! impl_stable_length_array_closed {
                 {
                     let slice_to_array = data.read_slice(ext_memory, *position, Self::len_encoded())?;
                     let out = Self::$make(slice_to_array.as_ref().try_into().expect("stable known length"));
-                    *position += Self::len_encoded();
+                    Self::shift_position(position);
                     Ok(out)
                 }
             }
@@ -223,7 +228,7 @@ macro_rules! impl_stable_length_array_open {
                 {
                     let slice_to_array = data.read_slice(ext_memory, *position, Self::len_encoded())?;
                     let out = Self(slice_to_array.as_ref().try_into().expect("stable known length"));
-                    *position += Self::len_encoded();
+                    Self::shift_position(position);
                     Ok(out)
                 }
             }

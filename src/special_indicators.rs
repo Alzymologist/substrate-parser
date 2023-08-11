@@ -413,6 +413,8 @@ pub enum SpecialtyTypeChecked {
     PalletSpecific {
         pallet_name: String,
         pallet_info: Info,
+        pallet_variant: Variant<PortableForm>,
+        item_ty_id: u32,
         variants: Vec<Variant<PortableForm>>,
         item: PalletSpecificItem,
     },
@@ -492,9 +494,8 @@ impl SpecialtyTypeChecked {
                         Ok(pallet_variant) => {
                             let pallet_name = pallet_variant.name.to_owned();
                             if pallet_variant.fields.len() == 1 {
-                                match registry
-                                    .resolve_ty(pallet_variant.fields[0].ty.id, ext_memory)
-                                {
+                                let item_ty_id = pallet_variant.fields[0].ty.id;
+                                match registry.resolve_ty(item_ty_id, ext_memory) {
                                     Ok(variants_ty) => {
                                         if let SpecialtyTypeHinted::PalletSpecific(item_repeated) =
                                             SpecialtyTypeHinted::from_path(&variants_ty.path)
@@ -509,6 +510,8 @@ impl SpecialtyTypeChecked {
                                                 Self::PalletSpecific {
                                                     pallet_name,
                                                     pallet_info,
+                                                    pallet_variant: pallet_variant.to_owned(),
+                                                    item_ty_id,
                                                     variants: var.variants.to_vec(),
                                                     item,
                                                 }

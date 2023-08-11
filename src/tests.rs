@@ -17,12 +17,13 @@ use sp_runtime::generic::Era;
 use crate::cards::{
     ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
 };
+use crate::cut_metadata::{pass_call, DraftRegistry};
 use crate::error::{ParserError, SignableError};
 use crate::special_indicators::SpecialtyPrimitive;
 use crate::storage_data::{decode_as_storage_entry, KeyData, KeyPart};
 #[cfg(feature = "std")]
 use crate::unchecked_extrinsic::{decode_as_unchecked_extrinsic, UncheckedExtrinsic};
-use crate::{decode_all_as_type, parse_transaction, ShortSpecs};
+use crate::{decode_all_as_type, parse_transaction, MarkedData, ShortSpecs};
 
 fn metadata(filename: &str) -> RuntimeMetadataV14 {
     let metadata_hex = std::fs::read_to_string(filename).unwrap();
@@ -1162,4 +1163,27 @@ fn unchecked_extrinsic_1() {
         }
         UncheckedExtrinsic::Unsigned { .. } => panic!("Expected signed extrinsic!"),
     }
+}
+
+#[test]
+fn short_metadata_1_call_only() {
+    let data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
+    let binding = data.as_ref();
+    let marked_data = MarkedData::mark(&binding, &mut ()).unwrap();
+    let mut draft_registry = DraftRegistry { types: Vec::new() };
+
+    let draft_metadata_header = pass_call(
+        &marked_data,
+        &mut (),
+        &metadata("for_tests/westend9111"),
+        &mut draft_registry,
+    )
+    .unwrap();
+
+    let short_registry = draft_registry.finalize();
+
+    assert_eq!(draft_metadata_header.pallet_name, "Utility");
+    assert_eq!(draft_metadata_header.call_ty_id, 265);
+    assert_eq!(draft_metadata_header.index, 16);
+    assert_eq!(short_registry.types.len(), 10);
 }

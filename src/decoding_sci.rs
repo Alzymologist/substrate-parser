@@ -44,7 +44,7 @@ use crate::special_indicators::{
 use crate::special_types::{
     special_case_era, special_case_h256, wrap_sequence, CheckCompact, UnsignedInteger,
 };
-use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
+use crate::traits::{AddressableBuffer, AsMetadata, AsPallet, ExternalMemory, ResolveType};
 use crate::MarkedData;
 
 /// Finalize parsing of primitives (variants of [`TypeDefPrimitive`]).
@@ -124,7 +124,7 @@ where
 /// vector (compact of length precedes the data).
 ///
 /// Current parser position gets changed.
-fn decode_str<B, E>(
+pub(crate) fn decode_str<B, E>(
     data: &B,
     ext_memory: &mut E,
     position: &mut usize,
@@ -180,22 +180,19 @@ where
 
     position += ENUM_INDEX_ENCODED_LEN;
 
-    let pallet_call_ty = meta_v14.find_calls_ty(pallet_index, ext_memory)?;
+    let pallet = meta_v14.pallet_by_index(pallet_index)?;
+    let types = meta_v14.types();
+    let call_ty = M::call_ty(&pallet, &types, ext_memory)?;
 
-    let pallet_info = Info::from_ty(&pallet_call_ty.call_ty);
+    let pallet_info = Info::from_ty(&call_ty);
 
-    if let TypeDef::Variant(x) = &pallet_call_ty.call_ty.type_def {
+    if let TypeDef::Variant(x) = &call_ty.type_def {
         if let SpecialtyTypeHinted::PalletSpecific(PalletSpecificItem::Call) =
             SpecialtyTypeHinted::from_path(&pallet_info.path)
         {
-            let variant_data = decode_variant::<B, E, M>(
-                &x.variants,
-                &data,
-                ext_memory,
-                &mut position,
-                &meta_v14.types(),
-            )
-            .map_err(SignableError::Parsing)?;
+            let variant_data =
+                decode_variant::<B, E, M>(&x.variants, &data, ext_memory, &mut position, &types)
+                    .map_err(SignableError::Parsing)?;
             if position != marked_data.extensions_start() {
                 Err(SignableError::SomeDataNotUsedCall {
                     from: position,
@@ -205,16 +202,16 @@ where
                 Ok(Call(PalletSpecificData {
                     pallet_info,
                     variant_docs: variant_data.variant_docs.to_owned(),
-                    pallet_name: pallet_call_ty.pallet_name,
+                    pallet_name: pallet.name(),
                     variant_name: variant_data.variant_name.to_owned(),
                     fields: variant_data.fields,
                 }))
             }
         } else {
-            Err(SignableError::NotACall(pallet_call_ty.pallet_name))
+            Err(SignableError::NotACall(pallet.name()))
         }
     } else {
-        Err(SignableError::NotACall(pallet_call_ty.pallet_name))
+        Err(SignableError::NotACall(pallet.name()))
     }
 }
 
@@ -484,6 +481,8 @@ where
         SpecialtyTypeChecked::PalletSpecific {
             pallet_name,
             pallet_info,
+            pallet_variant: _,
+            item_ty_id: _,
             variants,
             item,
         } => {
@@ -693,7 +692,7 @@ where
                 let element_extended_data = decode_with_type::<B, E, M>(
                     &Ty::Resolved(ResolvedTy {
                         ty: husked.ty.to_owned(),
-                        id: element.id,
+                        id: husked.id,
                     }),
                     data,
                     ext_memory,
@@ -915,7 +914,7 @@ where
 }
 
 /// Positions and related values for decoding `BitVec`.
-struct BitVecPositions {
+pub(crate) struct BitVecPositions {
     /// Encoded `BitVec` start position, includes bit length compact.
     bitvec_start: usize,
 
@@ -924,7 +923,7 @@ struct BitVecPositions {
     data_start: usize,
 
     /// Encoded `BitVec` end position.
-    bitvec_end: usize,
+    pub(crate) bitvec_end: usize,
 
     /// Number of bits in `BitVec`, for patch only.
     #[cfg(any(target_pointer_width = "32", test))]
@@ -942,7 +941,11 @@ impl BitVecPositions {
     /// New `BitVecPositions` for given input data and position.
     ///
     /// `T` is corresponding `BitStore`.
-    fn new<T, B, E>(data: &B, ext_memory: &mut E, position: usize) -> Result<Self, ParserError<E>>
+    pub(crate) fn new<T, B, E>(
+        data: &B,
+        ext_memory: &mut E,
+        position: usize,
+    ) -> Result<Self, ParserError<E>>
     where
         B: AddressableBuffer<E>,
         E: ExternalMemory,
@@ -1146,6 +1149,7 @@ struct HuskedType {
     info: Vec<Info>,
     checker: Checker,
     ty: Type<PortableForm>,
+    id: u32,
 }
 
 /// Resolve [`Type`] of set element.
@@ -1208,7 +1212,12 @@ where
         }
     }
 
-    Ok(HuskedType { info, checker, ty })
+    Ok(HuskedType {
+        info,
+        checker,
+        ty,
+        id,
+    })
 }
 
 /// Type information used for parsing.
