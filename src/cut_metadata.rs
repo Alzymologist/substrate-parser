@@ -1,4 +1,5 @@
 //! Metadata shortened, draft phase.
+use frame_metadata::v14::ExtrinsicMetadata;
 use num_bigint::{BigInt, BigUint};
 use parity_scale_codec::{Decode, OptionBool};
 use primitive_types::{H160, H512};
@@ -137,18 +138,22 @@ pub enum EntryDetails {
     },
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ShortRegistry {
     pub types: Vec<ShortRegistryEntry>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ShortRegistryEntry {
     pub id: u32,
     pub ty: Type<PortableForm>,
 }
 
 impl DraftRegistry {
+    pub fn new() -> Self {
+        Self { types: Vec::new() }
+    }
+
     pub fn finalize(self) -> ShortRegistry {
         let mut short_registry = ShortRegistry { types: Vec::new() };
         for draft_entry in self.types.into_iter() {
@@ -166,6 +171,12 @@ impl DraftRegistry {
         }
         short_registry.types.sort_by(|a, b| a.id.cmp(&b.id));
         short_registry
+    }
+}
+
+impl Default for DraftRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -271,7 +282,7 @@ where
 
     let pallet = meta_v14.pallet_by_index(pallet_index)?;
     let types = meta_v14.types();
-    let call_ty_id = pallet.call_ty_symbol()?.id;
+    let call_ty_id = pallet.call_ty_id()?;
     let call_ty = M::call_ty(&pallet, &types, ext_memory)?;
 
     if let TypeDef::Variant(x) = &call_ty.type_def {
@@ -308,6 +319,99 @@ where
     } else {
         Err(SignableError::NotACall(pallet.name()))
     }
+}
+
+pub fn pass_extensions<B, E, M>(
+    marked_data: &MarkedData<B, E>,
+    ext_memory: &mut E,
+    meta_v14: &M,
+    draft_registry: &mut DraftRegistry,
+) -> Result<(), SignableError<E>>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
+    let mut position = marked_data.extensions_start();
+    let data = marked_data.data();
+
+    let meta_v14_types = meta_v14.types();
+    for signed_extensions_metadata in meta_v14.extrinsic().signed_extensions.iter() {
+        let resolved_ty = meta_v14_types
+            .resolve_ty_external_id(signed_extensions_metadata.ty.id, ext_memory)
+            .map_err(SignableError::Parsing)?;
+        pass_type::<B, E, M>(
+            &Ty::Resolved(resolved_ty),
+            data,
+            ext_memory,
+            &mut position,
+            &meta_v14_types,
+            Propagated::from_ext_meta(signed_extensions_metadata),
+            draft_registry,
+        )
+        .map_err(SignableError::Parsing)?;
+    }
+    for signed_extensions_metadata in meta_v14.extrinsic().signed_extensions.iter() {
+        let resolved_ty = meta_v14_types
+            .resolve_ty_external_id(signed_extensions_metadata.additional_signed.id, ext_memory)
+            .map_err(SignableError::Parsing)?;
+        pass_type::<B, E, M>(
+            &Ty::Resolved(resolved_ty),
+            data,
+            ext_memory,
+            &mut position,
+            &meta_v14_types,
+            Propagated::from_ext_meta(signed_extensions_metadata),
+            draft_registry,
+        )
+        .map_err(SignableError::Parsing)?;
+    }
+    // `position > data.total_len()` is ruled out elsewhere
+    if position != data.total_len() {
+        return Err(SignableError::SomeDataNotUsedExtensions { from: position });
+    }
+    Ok(())
+}
+
+#[derive(Debug)]
+pub struct ShortMetadata {
+    pub chain_name: String,
+    pub chain_version_encoded: Vec<u8>,
+    pub chain_version_ty_id: u32,
+    pub short_registry: ShortRegistry,
+    pub pallet_name: String,
+    pub pallet_call_ty_id: u32,
+    pub pallet_index: u8,
+    pub extrinsic: ExtrinsicMetadata<PortableForm>,
+}
+
+pub fn cut_metadata<B, E, M>(
+    data: &B,
+    ext_memory: &mut E,
+    meta_v14: &M,
+) -> Result<ShortMetadata, SignableError<E>>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
+    let mut draft_registry = DraftRegistry::new();
+
+    let marked_data = MarkedData::<B, E>::mark(data, ext_memory)?;
+    let draft_metadata_header =
+        pass_call::<B, E, M>(&marked_data, ext_memory, meta_v14, &mut draft_registry)?;
+    pass_extensions::<B, E, M>(&marked_data, ext_memory, meta_v14, &mut draft_registry)?;
+
+    Ok(ShortMetadata {
+        chain_name: String::from("change that"),
+        chain_version_encoded: Vec::new(),
+        chain_version_ty_id: 0u32,
+        short_registry: draft_registry.finalize(),
+        pallet_name: draft_metadata_header.pallet_name,
+        pallet_call_ty_id: draft_metadata_header.call_ty_id,
+        pallet_index: draft_metadata_header.index,
+        extrinsic: meta_v14.extrinsic(),
+    })
 }
 
 pub fn pass_type<B, E, M>(
