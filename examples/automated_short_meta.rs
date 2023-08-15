@@ -7,11 +7,13 @@ use sp_core::H256;
 #[cfg(feature = "std")]
 use std::str::FromStr;
 #[cfg(feature = "std")]
-use substrate_parser::{parse_transaction, cut_metadata::{cut_metadata, ShortMetadata}};
+use substrate_parser::{
+    cut_metadata::{cut_metadata, ShortMetadata},
+    parse_transaction,
+};
 
 #[cfg(feature = "std")]
 fn main() {
-
     let meta_file = std::fs::read("for_tests/westend9430").unwrap();
     let meta = Vec::<u8>::decode(&mut &meta_file[..]).unwrap();
     println!("length of basic meta: {}", meta.len());
@@ -22,9 +24,14 @@ fn main() {
     let short_metadata = cut_metadata(&data.as_ref(), &mut (), &meta_v14).unwrap();
     let short_meta_scaled = short_metadata.encode();
     println!("length of shortened meta: {}", short_meta_scaled.len());
-    std::fs::write("for_tests/westend9430_short_for_transaction", short_meta_scaled).unwrap();
+    std::fs::write(
+        "for_tests/westend9430_short_for_transaction",
+        short_meta_scaled,
+    )
+    .unwrap();
 
-    let meta_shortened_encoded = std::fs::read("for_tests/westend9430_short_for_transaction").unwrap();
+    let meta_shortened_encoded =
+        std::fs::read("for_tests/westend9430_short_for_transaction").unwrap();
     let short_metadata = ShortMetadata::decode(&mut &meta_shortened_encoded[..]).unwrap();
     let westend_genesis_hash =
         H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap();
