@@ -462,6 +462,7 @@ use scale_info::interner::UntrackedSymbol;
 pub mod additional_types;
 pub mod cards;
 pub mod compacts;
+pub mod cut_metadata;
 mod decoding_sci;
 mod decoding_sci_ext;
 pub mod error;

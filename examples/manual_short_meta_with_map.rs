@@ -1,11 +1,15 @@
-#![cfg(feature = "std")]
-
+#[cfg(feature = "std")]
 use frame_metadata::v14::RuntimeMetadataV14;
+#[cfg(feature = "std")]
 use parity_scale_codec::{Decode, Encode};
+#[cfg(feature = "std")]
 use sp_core::H256;
+#[cfg(feature = "std")]
 use std::str::FromStr;
+#[cfg(feature = "std")]
 use substrate_parser::{parse_transaction, traits::RuntimeMetadataV14Shortened};
 
+#[cfg(feature = "std")]
 fn main() {
     let meta_hex = std::fs::read_to_string("for_tests/westend9111").unwrap();
     let meta = hex::decode(meta_hex.trim()).unwrap();
@@ -69,4 +73,9 @@ fn main() {
     )
     .unwrap();
     println!("{parsed:?}");
+}
+
+#[cfg(not(feature = "std"))]
+fn main() {
+    panic!("Example is not intended for no-std.");
 }

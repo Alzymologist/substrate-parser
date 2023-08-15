@@ -17,12 +17,13 @@ use sp_runtime::generic::Era;
 use crate::cards::{
     ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
 };
+use crate::cut_metadata::{cut_metadata, pass_call, DraftRegistry};
 use crate::error::{ParserError, SignableError};
 use crate::special_indicators::SpecialtyPrimitive;
 use crate::storage_data::{decode_as_storage_entry, KeyData, KeyPart};
 #[cfg(feature = "std")]
 use crate::unchecked_extrinsic::{decode_as_unchecked_extrinsic, UncheckedExtrinsic};
-use crate::{decode_all_as_type, parse_transaction, ShortSpecs};
+use crate::{decode_all_as_type, parse_transaction, MarkedData, ShortSpecs};
 
 fn metadata(filename: &str) -> RuntimeMetadataV14 {
     let metadata_hex = std::fs::read_to_string(filename).unwrap();
@@ -1162,4 +1163,110 @@ fn unchecked_extrinsic_1() {
         }
         UncheckedExtrinsic::Unsigned { .. } => panic!("Expected signed extrinsic!"),
     }
+}
+
+#[test]
+fn short_metadata_1_call_only() {
+    let data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
+    let binding = data.as_ref();
+    let marked_data = MarkedData::mark(&binding, &mut ()).unwrap();
+    let mut draft_registry = DraftRegistry { types: Vec::new() };
+
+    let draft_metadata_header = pass_call(
+        &marked_data,
+        &mut (),
+        &metadata("for_tests/westend9111"),
+        &mut draft_registry,
+    )
+    .unwrap();
+
+    let short_registry = draft_registry.finalize();
+
+    assert_eq!(draft_metadata_header.pallet_name, "Utility");
+    assert_eq!(draft_metadata_header.call_ty_id, 265);
+    assert_eq!(draft_metadata_header.index, 16);
+    assert_eq!(short_registry.types.len(), 10);
+}
+
+#[test]
+fn short_metadata_2_decode() {
+    let data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
+
+    let short_metadata =
+        cut_metadata(&data.as_ref(), &mut (), &metadata("for_tests/westend9111")).unwrap();
+
+    let reply = parse_transaction(
+        &data.as_ref(),
+        &mut (),
+        &short_metadata,
+        H256(
+            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
+    )
+    .unwrap()
+    .card(&specs());
+
+    let call_printed = format!(
+        "\n{}\n",
+        reply
+            .call_result
+            .unwrap()
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let call_known = "
+Pallet: Utility
+  Call: batch_all
+    Field Name: calls
+      Sequence: 2 element(s)
+        Pallet: Staking
+          Call: bond
+            Field Name: controller
+              Enum
+                Enum Variant Name: Id
+                  Id: 5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV
+            Field Name: value
+              Balance: 1.061900000000 WND
+            Field Name: payee
+              Enum
+                Enum Variant Name: Staked
+        Pallet: Staking
+          Call: nominate
+            Field Name: targets
+              Sequence: 3 element(s)
+                Enum
+                  Enum Variant Name: Id
+                    Id: 5CFPcUJgYgWryPaV1aYjSbTpbTLu42V32Ytw1L9rfoMAsfGh
+                Enum
+                  Enum Variant Name: Id
+                    Id: 5G1ojzh47Yt8KoYhuAjXpHcazvsoCXe3G8LZchKDvumozJJJ
+                Enum
+                  Enum Variant Name: Id
+                    Id: 5FZoQhgUCmqBxnkHX7jCqThScS2xQWiwiF61msg63CFL3Y8f
+";
+    assert_eq!(call_known, call_printed);
+
+    let extensions_printed = format!(
+        "\n{}\n",
+        reply
+            .extensions
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let extensions_known = "
+Era: Mortal, phase: 5, period: 64
+Nonce: 2
+Tip: 0 pWND
+Network: westend9111
+Tx Version: 7
+Block Hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff
+";
+    assert_eq!(extensions_known, extensions_printed);
 }

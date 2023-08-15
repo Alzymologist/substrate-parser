@@ -21,6 +21,7 @@ use parity_scale_codec::{Decode, Encode};
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, PortableRegistry, Type};
 
 use crate::cards::ParsedData;
+use crate::cut_metadata::{DraftMetadataHeader, ShortMetadata, ShortRegistry};
 use crate::decode_all_as_type;
 use crate::decoding_sci::ResolvedTy;
 use crate::error::{MetaVersionError, ParserError, SignableError};
@@ -95,22 +96,18 @@ impl<'a, E: ExternalMemory> AddressableBuffer<E> for &'a [u8] {
     }
 }
 
-pub struct PalletCallTy {
-    pub pallet_name: String,
-    pub call_ty: Type<PortableForm>,
-}
-
 pub trait AsMetadata<E: ExternalMemory> {
     type TypeRegistry: ResolveType<E>;
+    type PalletMetadataEntry: AsPallet<E>;
     fn types(&self) -> Self::TypeRegistry;
-    fn find_calls_ty(
-        &self,
-        pallet_index: u8,
+    fn pallet_by_index(&self, index: u8) -> Result<Self::PalletMetadataEntry, SignableError<E>>;
+    fn call_ty(
+        pallet: &Self::PalletMetadataEntry,
+        types: &Self::TypeRegistry,
         ext_memory: &mut E,
-    ) -> Result<PalletCallTy, SignableError<E>>;
+    ) -> Result<Type<PortableForm>, SignableError<E>>;
     fn version_printed(&self) -> Result<String, MetaVersionError>;
     fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm>;
-    fn ty(&self) -> UntrackedSymbol<TypeId>;
 }
 
 pub trait ResolveType<E: ExternalMemory> {
@@ -147,29 +144,57 @@ impl<E: ExternalMemory> ResolveType<E> for PortableRegistry {
     }
 }
 
+pub trait AsPallet<E: ExternalMemory> {
+    fn name(&self) -> String;
+    fn index(&self) -> u8;
+    fn call_ty_id(&self) -> Result<u32, SignableError<E>>;
+}
+
+impl<E: ExternalMemory> AsPallet<E> for PalletMetadata<PortableForm> {
+    fn name(&self) -> String {
+        self.name.to_owned()
+    }
+    fn index(&self) -> u8 {
+        self.index
+    }
+    fn call_ty_id(&self) -> Result<u32, SignableError<E>> {
+        match self.calls.as_ref() {
+            Some(pallet_call_metadata) => Ok(pallet_call_metadata.ty.id),
+            None => Err(SignableError::NoCallsInPallet(
+                <PalletMetadata<PortableForm> as AsPallet<E>>::name(self),
+            )),
+        }
+    }
+}
+
 impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14 {
     type TypeRegistry = PortableRegistry;
+
+    type PalletMetadataEntry = PalletMetadata<PortableForm>;
 
     fn types(&self) -> Self::TypeRegistry {
         self.types.to_owned()
     }
 
-    fn find_calls_ty(
-        &self,
-        pallet_index: u8,
-        ext_memory: &mut E,
-    ) -> Result<PalletCallTy, SignableError<E>> {
-        let (call_ty_symbol, pallet_name) =
-            call_ty_id_pallet_name::<E>(&self.pallets, pallet_index)?;
-        let call_ty = self
-            .types
-            .resolve_ty(call_ty_symbol.id, ext_memory)
-            .map_err(SignableError::Parsing)?;
+    fn pallet_by_index(&self, index: u8) -> Result<Self::PalletMetadataEntry, SignableError<E>> {
+        for x in self.pallets.iter() {
+            if x.index == index {
+                return Ok(x.to_owned());
+            }
+        }
+        Err(SignableError::PalletNotFound(index))
+    }
 
-        Ok(PalletCallTy {
-            pallet_name,
-            call_ty,
-        })
+    fn call_ty(
+        pallet: &Self::PalletMetadataEntry,
+        types: &Self::TypeRegistry,
+        ext_memory: &mut E,
+    ) -> Result<Type<PortableForm>, SignableError<E>> {
+        let call_ty_id = pallet.call_ty_id()?;
+
+        types
+            .resolve_ty(call_ty_id, ext_memory)
+            .map_err(SignableError::Parsing)
     }
 
     fn version_printed(&self) -> Result<String, MetaVersionError> {
@@ -187,10 +212,6 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14 {
 
     fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm> {
         self.extrinsic.to_owned()
-    }
-
-    fn ty(&self) -> UntrackedSymbol<TypeId> {
-        self.ty
     }
 }
 
@@ -238,6 +259,8 @@ pub struct RuntimeMetadataV14Shortened {
 impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14Shortened {
     type TypeRegistry = PortableRegistryShortened;
 
+    type PalletMetadataEntry = PalletMetadata<PortableForm>;
+
     fn types(&self) -> Self::TypeRegistry {
         PortableRegistryShortened {
             registry: self.meta_v14.types.to_owned(),
@@ -245,25 +268,25 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14Shortened {
         }
     }
 
-    fn find_calls_ty(
-        &self,
-        pallet_index: u8,
-        ext_memory: &mut E,
-    ) -> Result<PalletCallTy, SignableError<E>> {
-        let (call_ty_symbol, pallet_name) =
-            call_ty_id_pallet_name::<E>(&self.meta_v14.pallets, pallet_index)?;
-        let call_ty_id = call_ty_symbol.id;
-        if let Some(call_ty_id_new) = self.map.get(&call_ty_id) {
-            let call_ty = self
-                .meta_v14
-                .types
-                .resolve_ty(*call_ty_id_new, ext_memory)
-                .map_err(SignableError::Parsing)?;
+    fn pallet_by_index(&self, index: u8) -> Result<Self::PalletMetadataEntry, SignableError<E>> {
+        for x in self.meta_v14.pallets.iter() {
+            if x.index == index {
+                return Ok(x.clone());
+            }
+        }
+        Err(SignableError::PalletNotFound(index))
+    }
 
-            Ok(PalletCallTy {
-                pallet_name,
-                call_ty,
-            })
+    fn call_ty(
+        pallet: &Self::PalletMetadataEntry,
+        types: &Self::TypeRegistry,
+        ext_memory: &mut E,
+    ) -> Result<Type<PortableForm>, SignableError<E>> {
+        let call_ty_id = pallet.call_ty_id()?;
+        if let Some(call_ty_id_new) = types.map.get(&call_ty_id) {
+            types
+                .resolve_ty(*call_ty_id_new, ext_memory)
+                .map_err(SignableError::Parsing)
         } else {
             Err(SignableError::Parsing(
                 ParserError::V14ShortTypesIncomplete { old_id: call_ty_id },
@@ -287,10 +310,6 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14Shortened {
     fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm> {
         self.meta_v14.extrinsic.to_owned()
     }
-
-    fn ty(&self) -> UntrackedSymbol<TypeId> {
-        self.meta_v14.ty.to_owned()
-    }
 }
 
 /// Metadata with spec version.
@@ -305,16 +324,27 @@ pub struct CheckedMetadata {
 impl<E: ExternalMemory> AsMetadata<E> for CheckedMetadata {
     type TypeRegistry = PortableRegistry;
 
+    type PalletMetadataEntry = PalletMetadata<PortableForm>;
+
     fn types(&self) -> Self::TypeRegistry {
         self.meta_v14.types.to_owned()
     }
 
-    fn find_calls_ty(
-        &self,
-        pallet_index: u8,
+    fn pallet_by_index(&self, index: u8) -> Result<Self::PalletMetadataEntry, SignableError<E>> {
+        for x in self.meta_v14.pallets.iter() {
+            if x.index == index {
+                return Ok(x.to_owned());
+            }
+        }
+        Err(SignableError::PalletNotFound(index))
+    }
+
+    fn call_ty(
+        pallet: &Self::PalletMetadataEntry,
+        types: &Self::TypeRegistry,
         ext_memory: &mut E,
-    ) -> Result<PalletCallTy, SignableError<E>> {
-        self.meta_v14.find_calls_ty(pallet_index, ext_memory)
+    ) -> Result<Type<PortableForm>, SignableError<E>> {
+        RuntimeMetadataV14::call_ty(pallet, types, ext_memory)
     }
 
     fn version_printed(&self) -> Result<String, MetaVersionError> {
@@ -323,38 +353,6 @@ impl<E: ExternalMemory> AsMetadata<E> for CheckedMetadata {
 
     fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm> {
         self.meta_v14.extrinsic.to_owned()
-    }
-
-    fn ty(&self) -> UntrackedSymbol<TypeId> {
-        self.meta_v14.ty
-    }
-}
-
-fn call_ty_id_pallet_name<E: ExternalMemory>(
-    pallets: &[PalletMetadata<PortableForm>],
-    pallet_index: u8,
-) -> Result<(UntrackedSymbol<TypeId>, String), SignableError<E>> {
-    let mut found_calls_in_pallet: Option<UntrackedSymbol<TypeId>> = None;
-
-    let mut found_pallet_name: Option<String> = None;
-    for x in pallets.iter() {
-        if x.index == pallet_index {
-            found_pallet_name = Some(x.name.to_owned());
-            if let Some(a) = &x.calls {
-                found_calls_in_pallet = Some(a.ty);
-            }
-            break;
-        }
-    }
-
-    let pallet_name = match found_pallet_name {
-        Some(a) => a,
-        None => return Err(SignableError::PalletNotFound(pallet_index)),
-    };
-
-    match found_calls_in_pallet {
-        Some(calls_in_pallet_symbol) => Ok((calls_in_pallet_symbol, pallet_name)),
-        None => Err(SignableError::NoCallsInPallet(pallet_name)),
     }
 }
 
@@ -429,5 +427,85 @@ fn find_version_in_parsed_data(parsed_data: ParsedData) -> Result<String, MetaVe
     match spec_version {
         Some(a) => Ok(a),
         None => Err(MetaVersionError::NoSpecVersionIdentifier),
+    }
+}
+
+impl<E: ExternalMemory> ResolveType<E> for ShortRegistry {
+    fn resolve_ty(
+        &self,
+        id: u32,
+        _ext_memory: &mut E,
+    ) -> Result<Type<PortableForm>, ParserError<E>> {
+        for short_registry_entry in self.types.iter() {
+            if short_registry_entry.id == id {
+                return Ok(short_registry_entry.ty.to_owned());
+            }
+        }
+        Err(ParserError::V14TypeNotResolved { id })
+    }
+    fn resolve_ty_external_id(
+        &self,
+        external_id: u32,
+        ext_memory: &mut E,
+    ) -> Result<ResolvedTy, ParserError<E>> {
+        let ty = self.resolve_ty(external_id, ext_memory)?;
+        Ok(ResolvedTy {
+            ty,
+            id: external_id,
+        })
+    }
+}
+
+impl<E: ExternalMemory> AsPallet<E> for DraftMetadataHeader {
+    fn name(&self) -> String {
+        self.pallet_name.to_owned()
+    }
+    fn index(&self) -> u8 {
+        self.index
+    }
+    fn call_ty_id(&self) -> Result<u32, SignableError<E>> {
+        Ok(self.call_ty_id)
+    }
+}
+
+impl<E: ExternalMemory> AsMetadata<E> for ShortMetadata {
+    type TypeRegistry = ShortRegistry;
+
+    type PalletMetadataEntry = DraftMetadataHeader;
+
+    fn types(&self) -> Self::TypeRegistry {
+        self.short_registry.to_owned()
+    }
+
+    fn pallet_by_index(&self, index: u8) -> Result<Self::PalletMetadataEntry, SignableError<E>> {
+        if self.pallet_index == index {
+            Ok(DraftMetadataHeader {
+                pallet_name: self.pallet_name.to_owned(),
+                call_ty_id: self.pallet_call_ty_id,
+                index: self.pallet_index,
+            })
+        } else {
+            Err(SignableError::PalletNotFound(index))
+        }
+    }
+
+    fn call_ty(
+        pallet: &Self::PalletMetadataEntry,
+        types: &Self::TypeRegistry,
+        ext_memory: &mut E,
+    ) -> Result<Type<PortableForm>, SignableError<E>> {
+        let call_ty_id = pallet.call_ty_id()?;
+
+        types
+            .resolve_ty(call_ty_id, ext_memory)
+            .map_err(SignableError::Parsing)
+    }
+
+    fn version_printed(&self) -> Result<String, MetaVersionError> {
+        Ok(self.chain_version_printed.to_owned())
+    }
+
+    fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm> {
+        self.extrinsic.to_owned()
     }
 }
