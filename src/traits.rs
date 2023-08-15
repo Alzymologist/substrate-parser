@@ -502,7 +502,7 @@ impl<E: ExternalMemory> AsMetadata<E> for ShortMetadata {
     }
 
     fn version_printed(&self) -> Result<String, MetaVersionError> {
-        Ok(String::from("9111"))
+        Ok(self.chain_version_printed.to_owned())
     }
 
     fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm> {

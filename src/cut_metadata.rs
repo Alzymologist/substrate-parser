@@ -1,7 +1,7 @@
 //! Metadata shortened, draft phase.
 use frame_metadata::v14::ExtrinsicMetadata;
 use num_bigint::{BigInt, BigUint};
-use parity_scale_codec::{Decode, OptionBool};
+use parity_scale_codec::{Decode, Encode, OptionBool};
 use primitive_types::{H160, H512};
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, Path, Type, TypeDef, TypeDefBitSequence,
@@ -138,12 +138,12 @@ pub enum EntryDetails {
     },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Decode, Encode)]
 pub struct ShortRegistry {
     pub types: Vec<ShortRegistryEntry>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Decode, Encode)]
 pub struct ShortRegistryEntry {
     pub id: u32,
     pub ty: Type<PortableForm>,
@@ -373,11 +373,9 @@ where
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Decode, Encode)]
 pub struct ShortMetadata {
-    pub chain_name: String,
-    pub chain_version_encoded: Vec<u8>,
-    pub chain_version_ty_id: u32,
+    pub chain_version_printed: String, // restore later to set of chain name, encoded chain version, and chain version ty
     pub short_registry: ShortRegistry,
     pub pallet_name: String,
     pub pallet_call_ty_id: u32,
@@ -403,9 +401,9 @@ where
     pass_extensions::<B, E, M>(&marked_data, ext_memory, meta_v14, &mut draft_registry)?;
 
     Ok(ShortMetadata {
-        chain_name: String::from("change that"),
-        chain_version_encoded: Vec::new(),
-        chain_version_ty_id: 0u32,
+        chain_version_printed: meta_v14
+            .version_printed()
+            .map_err(SignableError::MetaVersion)?,
         short_registry: draft_registry.finalize(),
         pallet_name: draft_metadata_header.pallet_name,
         pallet_call_ty_id: draft_metadata_header.call_ty_id,
