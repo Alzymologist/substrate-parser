@@ -116,7 +116,7 @@
 //!```
 //! #[cfg(feature = "std")]
 //! # {
-//! use frame_metadata::RuntimeMetadataV14;
+//! use frame_metadata::v14::RuntimeMetadataV14;
 //! use parity_scale_codec::Decode;
 //! use primitive_types::H256;
 //! use scale_info::{IntoPortable, Path, Registry};
