@@ -51,7 +51,7 @@ use crate::MarkedData;
 ///
 /// Current parser position gets changed. Propagated to this point
 /// [`SpecialtySet`] is used.
-fn decode_type_def_primitive<B, E>(
+pub(crate) fn decode_type_def_primitive<B, E>(
     found_ty: &TypeDefPrimitive,
     data: &B,
     ext_memory: &mut E,

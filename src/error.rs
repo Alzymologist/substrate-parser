@@ -277,6 +277,22 @@ impl<E: ExternalMemory> UncheckedExtrinsicError<E> {
     }
 }
 
+/// Error in generating shortened metadata.
+#[derive(Debug, Eq, PartialEq)]
+pub enum MetaCutError<E: ExternalMemory> {
+    IndexTwice { id: u32 },
+    Signable(SignableError<E>),
+}
+
+impl<E: ExternalMemory> MetaCutError<E> {
+    fn error_text(&self) -> String {
+        match &self {
+            MetaCutError::IndexTwice{id} => format!("While forming shortened metadata types registry, tried to enter type with already existing index {id} and different description. This is code bug, please report it."),
+            MetaCutError::Signable(signable_error) => format!("Unable to decode properly the signable transaction used for metadata shortening. {signable_error}"),
+        }
+    }
+}
+
 /// Implement [`Display`] for errors in both `std` and `no_std` cases.
 /// Implement `Error` for `std` case.
 macro_rules! impl_display_and_error {
@@ -322,6 +338,7 @@ macro_rules! impl_display_and_error_traited {
 }
 
 impl_display_and_error_traited!(
+    MetaCutError<E>,
     ParserError<E>,
     SignableError<E>,
     StorageError<E>,
