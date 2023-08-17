@@ -18,8 +18,8 @@ blake2 = {version = "0.10.6", default-features = false, optional = true}
 frame-metadata = {version = "16.0.0", default-features = false, features = ["current", "decode"]}
 hex = {version = "0.4.3", default-features = false, features = ["alloc"]}
 num-bigint = {version = "0.4.3", default-features = false}
+plot_icon = {version = "0.3.0", optional = true, default-features = false, features = ["pix"]}
 parity-scale-codec = {version = "3.6.4", default-features = false, features = ["derive", "bit-vec"]}
-plot_icon = {version = "0.2.0", optional = true, default-features = false, features = ["pix"]}
 primitive-types = {version = "0.12.1", default-features = false}
 scale-info = {version = "2.9.0", default-features = false}
 sp-arithmetic = {version = "17.0.0", default-features = false}
