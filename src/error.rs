@@ -12,9 +12,11 @@ use std::{
 #[cfg(not(feature = "std"))]
 use core::fmt::{Display, Formatter, Result as FmtResult};
 
+use crate::traits::ExternalMemory;
+
 /// Errors in signable transactions parsing.
 #[derive(Debug, Eq, PartialEq)]
-pub enum SignableError {
+pub enum SignableError<E: ExternalMemory> {
     CutSignable,
     ExtensionsList(ExtensionsError),
     ImmortalHashMismatch,
@@ -22,7 +24,7 @@ pub enum SignableError {
     NoCallsInPallet(String),
     NotACall(String),
     PalletNotFound(u8),
-    Parsing(ParserError),
+    Parsing(ParserError<E>),
     SomeDataNotUsedCall {
         from: usize,
         to: usize,
@@ -40,7 +42,7 @@ pub enum SignableError {
     },
 }
 
-impl SignableError {
+impl<E: ExternalMemory> SignableError<E> {
     fn error_text(&self) -> String {
         match &self {
             SignableError::CutSignable => String::from("Unable to separate signable transaction data into call data and extensions data."),
@@ -61,18 +63,18 @@ impl SignableError {
 
 /// Errors in storage entry parsing.
 #[derive(Debug, Eq, PartialEq)]
-pub enum StorageError {
+pub enum StorageError<E: ExternalMemory> {
     KeyPartHashMismatch,
     KeyPartsUnused,
     KeyShorterThanPrefix,
     MultipleHashesNotATuple,
     MultipleHashesNumberMismatch,
-    ParsingKey(ParserError),
-    ParsingValue(ParserError),
+    ParsingKey(ParserError<E>),
+    ParsingValue(ParserError<E>),
     PlainKeyExceedsPrefix,
 }
 
-impl StorageError {
+impl<E: ExternalMemory> StorageError<E> {
     fn error_text(&self) -> String {
         match &self {
             StorageError::KeyPartHashMismatch => {
@@ -105,7 +107,7 @@ impl StorageError {
 
 /// Errors in data parsing.
 #[derive(Debug, Eq, PartialEq)]
-pub enum ParserError {
+pub enum ParserError<E: ExternalMemory> {
     DataTooShort {
         position: usize,
         minimal_length: usize,
@@ -113,6 +115,7 @@ pub enum ParserError {
     CyclicMetadata {
         id: u32,
     },
+    External(E::ExternalMemoryError),
     NoCompact {
         position: usize,
     },
@@ -142,16 +145,23 @@ pub enum ParserError {
     UnexpectedOptionVariant {
         position: usize,
     },
+    V14ShortTypesIncomplete {
+        old_id: u32,
+    },
     V14TypeNotResolved {
+        id: u32,
+    },
+    V14TypeNotResolvedShortened {
         id: u32,
     },
 }
 
-impl ParserError {
+impl<E: ExternalMemory> ParserError<E> {
     fn error_text(&self) -> String {
         match &self {
             ParserError::DataTooShort { position, minimal_length } => format!("Data is too short for expected content. Expected at least {minimal_length} element(s) after position {position}."),
             ParserError::CyclicMetadata { id } => format!("Resolving type id {id} in metadata type registry results in cycling."),
+            ParserError::External(e) => format!("Error accessing external memory. {e}"),
             ParserError::NoCompact { position } => format!("Expected compact starting at position {position}, not found one."),
             ParserError::NotBitOrderType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitOrder type."),
             ParserError::NotBitStoreType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitStore type."),
@@ -161,7 +171,9 @@ impl ParserError {
             ParserError::UnexpectedCompactInsides { id } => format!("Compact type {id} in metadata type registry has unexpected type inside compact."),
             ParserError::UnexpectedEnumVariant { position } => format!("Encountered unexpected enum variant at position {position}."),
             ParserError::UnexpectedOptionVariant { position } => format!("Encountered unexpected Option<_> variant at position {position}."),
+            ParserError::V14ShortTypesIncomplete { old_id } => format!("Unable to resolve type with old id {old_id} in shortened metadata type registry."),
             ParserError::V14TypeNotResolved { id } => format!("Unable to resolve type id {id} in metadata type registry."),
+            ParserError::V14TypeNotResolvedShortened { id } => format!("Unable to resolve type with updated id {id} in shortened metadata type registry."),
         }
     }
 }
@@ -237,19 +249,19 @@ impl MetaVersionError {
 
 /// Error in parsing an unchecked extrinsic.
 #[derive(Debug, Eq, PartialEq)]
-pub enum UncheckedExtrinsicError {
+pub enum UncheckedExtrinsicError<E: ExternalMemory> {
     FormatNoCompact,
     NoAddressParam,
     NoCallParam,
     NoExtraParam,
     NoSignatureParam,
-    Parser(ParserError),
+    Parser(ParserError<E>),
     VersionMismatch { version_byte: u8, version: u8 },
     UnexpectedCallTy { call_ty_id: u32 },
     UnexpectedType { extrinsic_ty_id: u32 },
 }
 
-impl UncheckedExtrinsicError {
+impl<E: ExternalMemory> UncheckedExtrinsicError<E> {
     fn error_text(&self) -> String {
         match &self {
             UncheckedExtrinsicError::FormatNoCompact => String::from("Unchecked extrinsic was expected to be a SCALE-encoded opaque `Vec<u8>`. Have not found a compact indicating vector length."),
@@ -261,6 +273,22 @@ impl UncheckedExtrinsicError {
             UncheckedExtrinsicError::VersionMismatch { version_byte, version } => format!("Version byte in unchecked extrinsic {version_byte} does not match with version {version} from provided metadata. Last 7 bits were expected to be identical."),
             UncheckedExtrinsicError::UnexpectedCallTy { call_ty_id } => format!("Parameter type for call {call_ty_id} in metadata type registry is not a call type, and does not match known call type descriptors."),
             UncheckedExtrinsicError::UnexpectedType { extrinsic_ty_id } => format!("Unchecked extrinsic type is assumed to resolve into a SCALE-encoded opaque `Vec<u8>`. Unexpected type description is found for type {extrinsic_ty_id} in metadata type registry."),
+        }
+    }
+}
+
+/// Error in generating shortened metadata.
+#[derive(Debug, Eq, PartialEq)]
+pub enum MetaCutError<E: ExternalMemory> {
+    IndexTwice { id: u32 },
+    Signable(SignableError<E>),
+}
+
+impl<E: ExternalMemory> MetaCutError<E> {
+    fn error_text(&self) -> String {
+        match &self {
+            MetaCutError::IndexTwice{id} => format!("While forming shortened metadata types registry, tried to enter type with already existing index {id} and different description. This is code bug, please report it."),
+            MetaCutError::Signable(signable_error) => format!("Unable to decode properly the signable transaction used for metadata shortening. {signable_error}"),
         }
     }
 }
@@ -286,11 +314,33 @@ macro_rules! impl_display_and_error {
     }
 }
 
-impl_display_and_error!(
-    ExtensionsError,
-    MetaVersionError,
-    ParserError,
-    SignableError,
-    StorageError,
-    UncheckedExtrinsicError
+impl_display_and_error!(ExtensionsError, MetaVersionError);
+
+/// Implement [`Display`] for errors in both `std` and `no_std` cases.
+/// Implement `Error` for `std` case.
+macro_rules! impl_display_and_error_traited {
+    ($($ty: ty), *) => {
+        $(
+            impl <E: ExternalMemory> Display for $ty {
+                fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+                    write!(f, "{}", self.error_text())
+                }
+            }
+
+            #[cfg(feature = "std")]
+            impl <E: ExternalMemory> Error for $ty {
+                fn source(&self) -> Option<&(dyn Error + 'static)> {
+                    None
+                }
+            }
+        )*
+    }
+}
+
+impl_display_and_error_traited!(
+    MetaCutError<E>,
+    ParserError<E>,
+    SignableError<E>,
+    StorageError<E>,
+    UncheckedExtrinsicError<E>
 );

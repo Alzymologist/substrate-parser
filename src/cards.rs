@@ -57,7 +57,7 @@ impl Info {
     pub fn from_ty(ty: &Type<PortableForm>) -> Self {
         Self {
             docs: ty.collect_docs(),
-            path: ty.path().to_owned(),
+            path: ty.path.to_owned(),
         }
     }
 
@@ -83,7 +83,7 @@ impl Info {
             if self.path.is_empty() {
                 None
             } else {
-                Some(self.path.segments().join(" >> "))
+                Some(self.path.segments.join(" >> "))
             }
         };
         InfoFlat { docs, path_flat }
@@ -96,13 +96,13 @@ pub trait Documented {
 }
 
 /// Collect documentation from documented [`scale_info`] entity ([`Type`],
-/// [`Field`], [`Variant`]).
+/// [`Field`], [`Variant`], [`StorageEntryMetadata<PortableForm>`]).
 macro_rules! impl_documented {
     ($($ty: ty), *) => {
         $(
             impl Documented for $ty {
                 fn collect_docs(&self) -> String {
-                    self.docs().join("\n")
+                    self.docs.join("\n")
                 }
             }
         )*
@@ -112,14 +112,9 @@ macro_rules! impl_documented {
 impl_documented!(
     Type<PortableForm>,
     Field<PortableForm>,
-    Variant<PortableForm>
+    Variant<PortableForm>,
+    StorageEntryMetadata<PortableForm>
 );
-
-impl Documented for StorageEntryMetadata<PortableForm> {
-    fn collect_docs(&self) -> String {
-        self.docs.join("\n")
-    }
-}
 
 /// Parsed data and collected relevant type information.
 #[derive(Clone, Debug, Eq, PartialEq)]
