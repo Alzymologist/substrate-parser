@@ -48,6 +48,33 @@ where
     let mut position = marked_data.extensions_start();
     let data = marked_data.data();
 
+    decode_extensions_unmarked(data, &mut position, ext_memory, meta_v14, genesis_hash)
+}
+
+/// Parse extensions part of the signable transaction using provided metadata.
+///
+/// Extensions data is expected to be decoded completely, with no data left.
+///
+/// Metadata spec version and chain genesis hash are used to check that correct
+/// metadata is used for parsing.
+///
+/// Extensions and their order are determined by `signed_extensions` in
+/// [`ExtrinsicMetadata`](frame_metadata::v14::ExtrinsicMetadata).
+///
+/// Whole `signed_extensions` set is scanned first for types in `ty` field, and
+/// then the second time, for types in `additional_signed` field.
+pub fn decode_extensions_unmarked<B, E, M>(
+    data: &B,
+    position: &mut usize,
+    ext_memory: &mut E,
+    meta_v14: &M,
+    genesis_hash: H256,
+) -> Result<Vec<ExtendedData>, SignableError<E>>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
     let mut extensions: Vec<ExtendedData> = Vec::new();
     let meta_v14_types = meta_v14.types();
     for signed_extensions_metadata in meta_v14.extrinsic().signed_extensions.iter() {
@@ -59,7 +86,7 @@ where
                 &Ty::Resolved(resolved_ty),
                 data,
                 ext_memory,
-                &mut position,
+                position,
                 &meta_v14_types,
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
@@ -75,7 +102,7 @@ where
                 &Ty::Resolved(resolved_ty),
                 data,
                 ext_memory,
-                &mut position,
+                position,
                 &meta_v14_types,
                 Propagated::from_ext_meta(signed_extensions_metadata),
             )
@@ -83,8 +110,8 @@ where
         )
     }
     // `position > data.total_len()` is ruled out elsewhere
-    if position != data.total_len() {
-        return Err(SignableError::SomeDataNotUsedExtensions { from: position });
+    if *position != data.total_len() {
+        return Err(SignableError::SomeDataNotUsedExtensions { from: *position });
     }
     let printed_version = meta_v14
         .version_printed()

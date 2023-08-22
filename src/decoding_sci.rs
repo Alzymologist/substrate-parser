@@ -174,11 +174,39 @@ where
     let data = marked_data.data_no_extensions();
     let mut position = marked_data.call_start();
 
+    let call = decode_as_call_unmarked(&data, &mut position, ext_memory, meta_v14)?;
+    if position != marked_data.extensions_start() {
+        Err(SignableError::SomeDataNotUsedCall {
+            from: position,
+            to: marked_data.extensions_start(),
+        })
+    } else {
+        Ok(call)
+    }
+}
+
+/// Parse call part of the signable transaction using provided metadata.
+///
+/// The first `u8` element of the call data is a pallet index, the type within
+/// corresponding `PalletCallMetadata` is expected to be an enum with
+/// pallet-specific calls. If the pallet-call pattern is not observed, an error
+/// occurs.
+pub fn decode_as_call_unmarked<B, E, M>(
+    data: &B,
+    position: &mut usize,
+    ext_memory: &mut E,
+    meta_v14: &M,
+) -> Result<Call, SignableError<E>>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
     let pallet_index = data
-        .read_byte(ext_memory, position)
+        .read_byte(ext_memory, *position)
         .map_err(SignableError::Parsing)?;
 
-    position += ENUM_INDEX_ENCODED_LEN;
+    *position += ENUM_INDEX_ENCODED_LEN;
 
     let pallet = meta_v14.pallet_by_index(pallet_index)?;
     let types = meta_v14.types();
@@ -191,22 +219,15 @@ where
             SpecialtyTypeHinted::from_path(&pallet_info.path)
         {
             let variant_data =
-                decode_variant::<B, E, M>(&x.variants, &data, ext_memory, &mut position, &types)
+                decode_variant::<B, E, M>(&x.variants, data, ext_memory, position, &types)
                     .map_err(SignableError::Parsing)?;
-            if position != marked_data.extensions_start() {
-                Err(SignableError::SomeDataNotUsedCall {
-                    from: position,
-                    to: marked_data.extensions_start(),
-                })
-            } else {
-                Ok(Call(PalletSpecificData {
-                    pallet_info,
-                    variant_docs: variant_data.variant_docs.to_owned(),
-                    pallet_name: pallet.name(),
-                    variant_name: variant_data.variant_name.to_owned(),
-                    fields: variant_data.fields,
-                }))
-            }
+            Ok(Call(PalletSpecificData {
+                pallet_info,
+                variant_docs: variant_data.variant_docs.to_owned(),
+                pallet_name: pallet.name(),
+                variant_name: variant_data.variant_name.to_owned(),
+                fields: variant_data.fields,
+            }))
         } else {
             Err(SignableError::NotACall(pallet.name()))
         }

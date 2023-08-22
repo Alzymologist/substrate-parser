@@ -494,8 +494,8 @@ use std::{any::TypeId, marker::PhantomData};
 #[cfg(not(feature = "std"))]
 use core::{any::TypeId, marker::PhantomData};
 
-pub use decoding_sci::{decode_as_call, ResolvedTy};
-pub use decoding_sci_ext::decode_extensions;
+pub use decoding_sci::{decode_as_call, decode_as_call_unmarked, ResolvedTy};
+pub use decoding_sci_ext::{decode_extensions, decode_extensions_unmarked};
 pub use traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
 
 use cards::{Call, ExtendedCard, ExtendedData};
@@ -643,6 +643,45 @@ where
         call_result,
         extensions,
     })
+}
+
+/// Signable transaction parsing outcome.
+///
+/// Extensions must be decoded. Call decoding may be successful or not.
+#[derive(Debug)]
+pub struct TransactionUnmarkedParsed {
+    pub call: Call,
+    pub extensions: Vec<ExtendedData>,
+}
+
+/// Parse a signable transaction, Ledger format. Call is not prefixed with call length.
+pub fn parse_transaction_unmarked<B, E, M>(
+    data: &B,
+    ext_memory: &mut E,
+    meta_v14: &M,
+    genesis_hash: H256,
+) -> Result<TransactionUnmarkedParsed, SignableError<E>>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
+    let mut position = 0;
+
+    // try parsing call data
+    let call = decode_as_call_unmarked::<B, E, M>(data, &mut position, ext_memory, meta_v14)?;
+
+    // try parsing extensions, check that spec version and genesis hash are
+    // correct
+    let extensions = decode_extensions_unmarked::<B, E, M>(
+        data,
+        &mut position,
+        ext_memory,
+        meta_v14,
+        genesis_hash,
+    )?;
+
+    Ok(TransactionUnmarkedParsed { call, extensions })
 }
 
 /// Decode part of `&[u8]` slice as a known type using `V14` metadata.
