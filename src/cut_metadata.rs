@@ -226,11 +226,35 @@ where
     let data = marked_data.data_no_extensions();
     let mut position = marked_data.call_start();
 
+    let draft_metadata_header =
+        pass_call_unmarked(&data, &mut position, ext_memory, meta_v14, draft_registry)?;
+    if position != marked_data.extensions_start() {
+        Err(MetaCutError::Signable(SignableError::SomeDataNotUsedCall {
+            from: position,
+            to: marked_data.extensions_start(),
+        }))
+    } else {
+        Ok(draft_metadata_header)
+    }
+}
+
+pub fn pass_call_unmarked<B, E, M>(
+    data: &B,
+    position: &mut usize,
+    ext_memory: &mut E,
+    meta_v14: &M,
+    draft_registry: &mut DraftRegistry,
+) -> Result<DraftMetadataHeader, MetaCutError<E>>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
     let pallet_index = data
-        .read_byte(ext_memory, position)
+        .read_byte(ext_memory, *position)
         .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
 
-    position += ENUM_INDEX_ENCODED_LEN;
+    *position += ENUM_INDEX_ENCODED_LEN;
 
     let pallet = meta_v14
         .pallet_by_index(pallet_index)
@@ -245,27 +269,20 @@ where
         {
             pass_variant::<B, E, M>(
                 &x.variants,
-                &data,
+                data,
                 ext_memory,
-                &mut position,
+                position,
                 &meta_v14.types(),
                 draft_registry,
                 &call_ty.path,
                 call_ty_id,
             )?;
 
-            if position != marked_data.extensions_start() {
-                Err(MetaCutError::Signable(SignableError::SomeDataNotUsedCall {
-                    from: position,
-                    to: marked_data.extensions_start(),
-                }))
-            } else {
-                Ok(DraftMetadataHeader {
-                    pallet_name: pallet.name(),
-                    call_ty_id,
-                    index: pallet_index,
-                })
-            }
+            Ok(DraftMetadataHeader {
+                pallet_name: pallet.name(),
+                call_ty_id,
+                index: pallet_index,
+            })
         } else {
             Err(MetaCutError::Signable(SignableError::NotACall(
                 pallet.name(),
@@ -292,6 +309,21 @@ where
     let mut position = marked_data.extensions_start();
     let data = marked_data.data();
 
+    pass_extensions_unmarked(data, &mut position, ext_memory, meta_v14, draft_registry)
+}
+
+pub fn pass_extensions_unmarked<B, E, M>(
+    data: &B,
+    position: &mut usize,
+    ext_memory: &mut E,
+    meta_v14: &M,
+    draft_registry: &mut DraftRegistry,
+) -> Result<(), MetaCutError<E>>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
     let meta_v14_types = meta_v14.types();
     for signed_extensions_metadata in meta_v14.extrinsic().signed_extensions.iter() {
         let resolved_ty = meta_v14_types
@@ -301,7 +333,7 @@ where
             &Ty::Resolved(resolved_ty),
             data,
             ext_memory,
-            &mut position,
+            position,
             &meta_v14_types,
             Propagated::from_ext_meta(signed_extensions_metadata),
             draft_registry,
@@ -315,16 +347,16 @@ where
             &Ty::Resolved(resolved_ty),
             data,
             ext_memory,
-            &mut position,
+            position,
             &meta_v14_types,
             Propagated::from_ext_meta(signed_extensions_metadata),
             draft_registry,
         )?;
     }
     // `position > data.total_len()` is ruled out elsewhere
-    if position != data.total_len() {
+    if *position != data.total_len() {
         Err(MetaCutError::Signable(
-            SignableError::SomeDataNotUsedExtensions { from: position },
+            SignableError::SomeDataNotUsedExtensions { from: *position },
         ))
     } else {
         Ok(())
@@ -357,6 +389,46 @@ where
     let draft_metadata_header =
         pass_call::<B, E, M>(&marked_data, ext_memory, meta_v14, &mut draft_registry)?;
     pass_extensions::<B, E, M>(&marked_data, ext_memory, meta_v14, &mut draft_registry)?;
+
+    Ok(ShortMetadata {
+        chain_version_printed: meta_v14
+            .version_printed()
+            .map_err(|e| MetaCutError::Signable(SignableError::MetaVersion(e)))?,
+        short_registry: draft_registry.finalize(),
+        pallet_name: draft_metadata_header.pallet_name,
+        pallet_call_ty_id: draft_metadata_header.call_ty_id,
+        pallet_index: draft_metadata_header.index,
+        extrinsic: meta_v14.extrinsic(),
+    })
+}
+
+pub fn cut_metadata_transaction_unmarked<B, E, M>(
+    data: &B,
+    ext_memory: &mut E,
+    meta_v14: &M,
+) -> Result<ShortMetadata, MetaCutError<E>>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
+    let mut draft_registry = DraftRegistry::new();
+
+    let mut position = 0;
+    let draft_metadata_header = pass_call_unmarked::<B, E, M>(
+        data,
+        &mut position,
+        ext_memory,
+        meta_v14,
+        &mut draft_registry,
+    )?;
+    pass_extensions_unmarked::<B, E, M>(
+        data,
+        &mut position,
+        ext_memory,
+        meta_v14,
+        &mut draft_registry,
+    )?;
 
     Ok(ShortMetadata {
         chain_version_printed: meta_v14
