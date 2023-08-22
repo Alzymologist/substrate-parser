@@ -82,6 +82,28 @@ pub struct ShortRegistryEntry {
     pub ty: Type<PortableForm>,
 }
 
+impl ShortRegistryEntry {
+    pub fn hash_prep(&self) -> Vec<ShortRegistryEntry> {
+        if let TypeDef::Variant(ref type_def_variant) = self.ty.type_def {
+            let mut out: Vec<ShortRegistryEntry> = Vec::new();
+            for variant in type_def_variant.variants.iter() {
+                let ty = Type {
+                    path: self.ty.path.to_owned(),
+                    type_params: Vec::new(),
+                    type_def: TypeDef::Variant(TypeDefVariant {
+                        variants: vec![variant.to_owned()],
+                    }),
+                    docs: Vec::new(),
+                };
+                out.push(ShortRegistryEntry { id: self.id, ty })
+            }
+            out
+        } else {
+            vec![self.to_owned()]
+        }
+    }
+}
+
 impl DraftRegistry {
     pub fn new() -> Self {
         Self { types: Vec::new() }
@@ -150,7 +172,9 @@ fn add_as_enum<E: ExternalMemory>(
     for draft_registry_entry in draft_registry.types.iter_mut() {
         if draft_registry_entry.id == id {
             match draft_registry_entry.entry_details {
-                EntryDetails::Regular { ty: _ } => return Err(MetaCutError::IndexTwice { id }),
+                EntryDetails::Regular { ty: _ } => {
+                    return Err(MetaCutError::IndexTwice { id });
+                }
                 EntryDetails::ReduceableEnum {
                     path: ref known_path,
                     ref mut variants,
@@ -578,24 +602,38 @@ where
                         ))
                     })?;
                     *position += ENUM_INDEX_ENCODED_LEN;
+                    add_ty_as_regular::<E>(draft_registry, param_ty, ty_symbol.id)
                 }
                 _ => match data
                     .read_byte(ext_memory, *position)
                     .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?
                 {
-                    0 | 1 => {
+                    0 => {
                         *position += ENUM_INDEX_ENCODED_LEN;
+                        Ok(())
                     }
-                    _ => {
-                        return Err(MetaCutError::Signable(SignableError::Parsing(
-                            ParserError::UnexpectedOptionVariant {
-                                position: *position,
-                            },
-                        )))
+                    1 => {
+                        *position += ENUM_INDEX_ENCODED_LEN;
+                        pass_type::<B, E, M>(
+                            &Ty::Resolved(ResolvedTy {
+                                ty: param_ty.to_owned(),
+                                id: ty_symbol.id,
+                            }),
+                            data,
+                            ext_memory,
+                            position,
+                            registry,
+                            propagated,
+                            draft_registry,
+                        )
                     }
+                    _ => Err(MetaCutError::Signable(SignableError::Parsing(
+                        ParserError::UnexpectedOptionVariant {
+                            position: *position,
+                        },
+                    ))),
                 },
-            };
-            add_ty_as_regular::<E>(draft_registry, param_ty, ty_symbol.id)
+            }
         }
         SpecialtyTypeChecked::PalletSpecific {
             pallet_name: _,

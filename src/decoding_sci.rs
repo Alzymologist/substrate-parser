@@ -1221,6 +1221,7 @@ where
 }
 
 /// Type information used for parsing.
+#[derive(Debug)]
 pub enum Ty<'a> {
     /// Type is already resolved in metadata `Registry`.
     Resolved(ResolvedTy),
@@ -1229,6 +1230,7 @@ pub enum Ty<'a> {
     Symbol(&'a UntrackedSymbol<TypeId>),
 }
 
+#[derive(Debug)]
 pub struct ResolvedTy {
     pub ty: Type<PortableForm>,
     pub id: u32,
