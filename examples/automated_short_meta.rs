@@ -8,7 +8,7 @@ use sp_core::H256;
 use std::str::FromStr;
 #[cfg(feature = "std")]
 use substrate_parser::{
-    cut_metadata::{cut_metadata, ShortMetadata},
+    cut_metadata::{cut_metadata, HashPrep, ShortMetadata},
     parse_transaction,
 };
 
@@ -44,6 +44,27 @@ fn main() {
     .unwrap();
 
     println!("{parsed:?}");
+
+    let hash_prep_whole_registry = meta_v14.types.hash_prep::<()>().unwrap();
+    println!(
+        "number of hashable entries in whole registry: {}",
+        hash_prep_whole_registry.len()
+    );
+
+    let hash_prep_short_registry = short_metadata.short_registry.hash_prep::<()>().unwrap();
+    println!(
+        "number of hashable entries in shortened registry: {}",
+        hash_prep_short_registry.len()
+    );
+
+    let excluded = short_metadata
+        .short_registry
+        .exclude_from::<()>(&meta_v14.types)
+        .unwrap();
+    println!(
+        "exclusion worked, number of hashable entries after it: {}",
+        excluded.len()
+    );
 }
 
 #[cfg(not(feature = "std"))]

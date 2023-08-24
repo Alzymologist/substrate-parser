@@ -216,7 +216,7 @@ where
 
     if let TypeDef::Variant(x) = &call_ty.type_def {
         if let SpecialtyTypeHinted::PalletSpecific(PalletSpecificItem::Call) =
-            SpecialtyTypeHinted::from_path(&pallet_info.path)
+            SpecialtyTypeHinted::from_ty(&call_ty)
         {
             let variant_data =
                 decode_variant::<B, E, M>(&x.variants, data, ext_memory, position, &types)
@@ -1204,7 +1204,7 @@ where
             info.push(info_ty)
         }
 
-        if let SpecialtyTypeHinted::None = SpecialtyTypeHinted::from_path(&ty.path) {
+        if let SpecialtyTypeHinted::None = SpecialtyTypeHinted::from_ty(&ty) {
             let type_def = ty.type_def.to_owned();
             match type_def {
                 TypeDef::Composite(x) => {

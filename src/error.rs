@@ -281,6 +281,7 @@ impl<E: ExternalMemory> UncheckedExtrinsicError<E> {
 #[derive(Debug, Eq, PartialEq)]
 pub enum MetaCutError<E: ExternalMemory> {
     IndexTwice { id: u32 },
+    NoEntryLargerRegistry { id: u32 },
     Signable(SignableError<E>),
 }
 
@@ -288,6 +289,7 @@ impl<E: ExternalMemory> MetaCutError<E> {
     fn error_text(&self) -> String {
         match &self {
             MetaCutError::IndexTwice{id} => format!("While forming shortened metadata types registry, tried to enter type with already existing index {id} and different description. This is code bug, please report it."),
+            MetaCutError::NoEntryLargerRegistry{id} => format!("While forming metadata types registry with excluded types, found type with index {id} that should exist in larger registry, but does not. This is code bug, please report it."),
             MetaCutError::Signable(signable_error) => format!("Unable to decode properly the signable transaction used for metadata shortening. {signable_error}"),
         }
     }

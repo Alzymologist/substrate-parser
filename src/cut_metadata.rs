@@ -3,8 +3,8 @@ use frame_metadata::v14::ExtrinsicMetadata;
 use parity_scale_codec::{Decode, Encode, OptionBool};
 use primitive_types::{H160, H512};
 use scale_info::{
-    form::PortableForm, interner::UntrackedSymbol, Field, Path, Type, TypeDef, TypeDefBitSequence,
-    TypeDefComposite, TypeDefPrimitive, TypeDefVariant, Variant,
+    form::PortableForm, interner::UntrackedSymbol, Field, Path, PortableRegistry, Type, TypeDef,
+    TypeDefBitSequence, TypeDefPrimitive, TypeDefVariant, Variant,
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 
@@ -82,8 +82,12 @@ pub struct ShortRegistryEntry {
     pub ty: Type<PortableForm>,
 }
 
-impl ShortRegistryEntry {
-    pub fn hash_prep(&self) -> Vec<ShortRegistryEntry> {
+pub trait HashPrep {
+    fn hash_prep<E: ExternalMemory>(&self) -> Result<Vec<ShortRegistryEntry>, MetaCutError<E>>;
+}
+
+impl HashPrep for ShortRegistryEntry {
+    fn hash_prep<E: ExternalMemory>(&self) -> Result<Vec<ShortRegistryEntry>, MetaCutError<E>> {
         if let TypeDef::Variant(ref type_def_variant) = self.ty.type_def {
             let mut out: Vec<ShortRegistryEntry> = Vec::new();
             for variant in type_def_variant.variants.iter() {
@@ -97,10 +101,116 @@ impl ShortRegistryEntry {
                 };
                 out.push(ShortRegistryEntry { id: self.id, ty })
             }
-            out
+            Ok(out)
         } else {
-            vec![self.to_owned()]
+            Ok(vec![self.to_owned()])
         }
+    }
+}
+
+impl HashPrep for ShortRegistry {
+    fn hash_prep<E: ExternalMemory>(&self) -> Result<Vec<ShortRegistryEntry>, MetaCutError<E>> {
+        let mut out: Vec<ShortRegistryEntry> = Vec::new();
+        for short_registry_entry in self.types.iter() {
+            out.append(&mut short_registry_entry.hash_prep()?)
+        }
+        Ok(out)
+    }
+}
+
+impl ShortRegistry {
+    pub fn exclude_from<E: ExternalMemory>(
+        &self,
+        portable_registry: &PortableRegistry,
+    ) -> Result<Vec<ShortRegistryEntry>, MetaCutError<E>> {
+        let mut out = portable_registry.hash_prep()?;
+        let short_registry = self.hash_prep()?;
+        for short_registry_entry in short_registry.iter() {
+            let mut found_in_portable_registry: Option<usize> = None;
+            for (index, whole_registry_entry) in out.iter().enumerate() {
+                if whole_registry_entry.id == short_registry_entry.id {
+                    match whole_registry_entry.ty.type_def {
+                        TypeDef::Variant(ref type_def_variant_whole) => {
+                            if let TypeDef::Variant(ref type_def_variant_short) =
+                                short_registry_entry.ty.type_def
+                            {
+                                if type_def_variant_whole == type_def_variant_short {
+                                    found_in_portable_registry = Some(index);
+                                    break;
+                                }
+                            } else {
+                                return Err(MetaCutError::IndexTwice {
+                                    id: short_registry_entry.id,
+                                });
+                            }
+                        }
+                        _ => {
+                            if whole_registry_entry.ty == short_registry_entry.ty {
+                                found_in_portable_registry = Some(index);
+                                break;
+                            } else {
+                                return Err(MetaCutError::IndexTwice {
+                                    id: short_registry_entry.id,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some(index) = found_in_portable_registry {
+                out.remove(index);
+            } else {
+                return Err(MetaCutError::NoEntryLargerRegistry {
+                    id: short_registry_entry.id,
+                });
+            }
+        }
+        Ok(out)
+    }
+}
+
+impl HashPrep for PortableRegistry {
+    fn hash_prep<E: ExternalMemory>(&self) -> Result<Vec<ShortRegistryEntry>, MetaCutError<E>> {
+        let mut draft_registry = DraftRegistry::new();
+        for registry_entry in self.types.iter() {
+            match SpecialtyTypeHinted::from_ty(&registry_entry.ty) {
+                SpecialtyTypeHinted::Era => {
+                    add_as_enum::<E>(
+                        &mut draft_registry,
+                        &registry_entry.ty.path,
+                        None,
+                        registry_entry.id,
+                    )?;
+                }
+                SpecialtyTypeHinted::Option(_) => {
+                    add_ty_as_regular::<E>(
+                        &mut draft_registry,
+                        registry_entry.ty.to_owned(),
+                        registry_entry.id,
+                    )?;
+                }
+                _ => match registry_entry.ty.type_def {
+                    TypeDef::Variant(ref type_def_variant) => {
+                        for variant in type_def_variant.variants.iter() {
+                            add_as_enum::<E>(
+                                &mut draft_registry,
+                                &registry_entry.ty.path,
+                                Some(variant.to_owned()),
+                                registry_entry.id,
+                            )?;
+                        }
+                    }
+                    _ => {
+                        add_ty_as_regular::<E>(
+                            &mut draft_registry,
+                            registry_entry.ty.to_owned(),
+                            registry_entry.id,
+                        )?;
+                    }
+                },
+            }
+        }
+        draft_registry.finalize().hash_prep()
     }
 }
 
@@ -137,7 +247,7 @@ impl Default for DraftRegistry {
 
 fn add_ty_as_regular<E: ExternalMemory>(
     draft_registry: &mut DraftRegistry,
-    ty: Type<PortableForm>,
+    mut ty: Type<PortableForm>,
     id: u32,
 ) -> Result<(), MetaCutError<E>> {
     for draft_registry_entry in draft_registry.types.iter() {
@@ -157,6 +267,28 @@ fn add_ty_as_regular<E: ExternalMemory>(
             }
         }
     }
+    match ty.type_def {
+        // Remove docs from each field in structs.
+        TypeDef::Composite(ref mut type_def_composite) => {
+            for field in type_def_composite.fields.iter_mut() {
+                field.docs.clear();
+            }
+        }
+
+        // Some types are added as regular ones, even though technically are enums,
+        // for example, `Option`.
+        // Remove docs from each variant in enums.
+        TypeDef::Variant(ref mut type_def_variant) => {
+            for variant in type_def_variant.variants.iter_mut() {
+                variant.docs.clear();
+                for field in variant.fields.iter_mut() {
+                    field.docs.clear();
+                }
+            }
+        }
+        _ => {}
+    }
+    ty.docs.clear();
     let entry_details = EntryDetails::Regular { ty };
     let draft_registry_entry = DraftRegistryEntry { id, entry_details };
     draft_registry.types.push(draft_registry_entry);
@@ -184,6 +316,9 @@ fn add_as_enum<E: ExternalMemory>(
                             if !variants.contains(&variant) {
                                 // remove variant docs in shortened metadata
                                 variant.docs.clear();
+                                for field in variant.fields.iter_mut() {
+                                    field.docs.clear();
+                                }
                                 variants.push(variant)
                             }
                         }
@@ -199,6 +334,9 @@ fn add_as_enum<E: ExternalMemory>(
         Some(mut variant) => {
             // remove variant docs in shortened metadata
             variant.docs.clear();
+            for field in variant.fields.iter_mut() {
+                field.docs.clear();
+            }
             vec![variant]
         }
         None => Vec::new(),
@@ -265,7 +403,7 @@ where
 
     if let TypeDef::Variant(x) = &call_ty.type_def {
         if let SpecialtyTypeHinted::PalletSpecific(PalletSpecificItem::Call) =
-            SpecialtyTypeHinted::from_path(&call_ty.path)
+            SpecialtyTypeHinted::from_ty(&call_ty)
         {
             pass_variant::<B, E, M>(
                 &x.variants,
@@ -456,7 +594,7 @@ where
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let (mut ty, id) = match ty_input {
+    let (ty, id) = match ty_input {
         Ty::Resolved(resolved_ty) => (resolved_ty.ty.to_owned(), resolved_ty.id),
         Ty::Symbol(ty_symbol) => (
             registry
@@ -466,15 +604,12 @@ where
         ),
     };
 
-    // remove type docs for shortened metadata
-    ty.docs.clear();
-
     let info_ty = Info::from_ty(&ty);
     propagated.add_info(&info_ty);
     match SpecialtyTypeChecked::from_type::<B, E, M>(&ty, data, ext_memory, position, registry) {
         SpecialtyTypeChecked::None => match &ty.type_def {
             TypeDef::Composite(x) => {
-                let new_fields = pass_and_modify_fields::<B, E, M>(
+                pass_fields::<B, E, M>(
                     &x.fields,
                     data,
                     ext_memory,
@@ -483,8 +618,7 @@ where
                     propagated.checker,
                     draft_registry,
                 )?;
-                ty.type_def = TypeDef::Composite(TypeDefComposite { fields: new_fields });
-                add_ty_as_regular::<E>(draft_registry, ty, id)
+                add_ty_as_regular::<E>(draft_registry, ty.to_owned(), id)
             }
             TypeDef::Variant(x) => {
                 propagated
@@ -854,7 +988,7 @@ where
     }
 }
 
-fn pass_and_modify_fields<B, E, M>(
+fn pass_fields<B, E, M>(
     fields: &[Field<PortableForm>],
     data: &B,
     ext_memory: &mut E,
@@ -862,7 +996,7 @@ fn pass_and_modify_fields<B, E, M>(
     registry: &M::TypeRegistry,
     mut checker: Checker,
     draft_registry: &mut DraftRegistry,
-) -> Result<Vec<Field<PortableForm>>, MetaCutError<E>>
+) -> Result<(), MetaCutError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -880,11 +1014,7 @@ where
         // Note: checker gets renewed when fields of enum are processed.
         checker.forget_hint();
     }
-    let mut new_fields: Vec<Field<PortableForm>> = Vec::new();
     for field in fields.iter() {
-        let mut new_field = field.to_owned();
-        new_field.docs.clear();
-        new_fields.push(new_field);
         pass_type::<B, E, M>(
             &Ty::Symbol(&field.ty),
             data,
@@ -896,7 +1026,7 @@ where
             draft_registry,
         )?;
     }
-    Ok(new_fields)
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -965,7 +1095,7 @@ where
 
     *position += ENUM_INDEX_ENCODED_LEN;
 
-    let new_fields = pass_and_modify_fields::<B, E, M>(
+    pass_fields::<B, E, M>(
         &found_variant.fields,
         data,
         ext_memory,
@@ -975,10 +1105,12 @@ where
         draft_registry,
     )?;
 
-    let mut new_variant = found_variant.to_owned();
-    new_variant.fields = new_fields;
-    new_variant.docs.clear();
-    add_as_enum::<E>(draft_registry, path, Some(new_variant), enum_ty_id)
+    add_as_enum::<E>(
+        draft_registry,
+        path,
+        Some(found_variant.to_owned()),
+        enum_ty_id,
+    )
 }
 
 fn pass_type_def_bit_sequence<B, E, M>(
@@ -1082,7 +1214,7 @@ where
         .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
     let mut id = entry_symbol_id;
 
-    while let SpecialtyTypeHinted::None = SpecialtyTypeHinted::from_path(&ty.path) {
+    while let SpecialtyTypeHinted::None = SpecialtyTypeHinted::from_ty(&ty) {
         let type_def = ty.type_def.to_owned();
         match type_def {
             TypeDef::Composite(x) => {
