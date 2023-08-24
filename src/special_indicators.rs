@@ -308,12 +308,14 @@ impl Hint {
     }
 }
 
-/// Unconfirmed specialty for a [`Type`], based only on its [`Path`].
+/// Unconfirmed specialty for a [`Type`].
 ///
 /// Does not propagate.
 ///
-/// Type internal structure must be additionally confirmed for `Call`, `Event`
-/// and `Option` before transforming into [`SpecialtyTypeChecked`], the type
+/// Checks type internal structure for `Option`.
+///
+/// Type internal structure must be additionally confirmed for `Call` and
+/// `Event` before transforming into [`SpecialtyTypeChecked`], the type
 /// specialty that causes parser action.
 pub enum SpecialtyTypeHinted {
     None,
@@ -322,7 +324,7 @@ pub enum SpecialtyTypeHinted {
     H160,
     H256,
     H512,
-    Option,
+    Option(UntrackedSymbol<TypeId>),
     PalletSpecific(PalletSpecificItem),
     Perbill,
     Percent,
@@ -351,8 +353,8 @@ pub enum PalletSpecificItem {
 
 impl SpecialtyTypeHinted {
     /// Get `SpecialtyTypeHinted` from type-associated [`Path`].
-    pub fn from_path(path: &Path<PortableForm>) -> Self {
-        match path.ident() {
+    pub fn from_ty(ty: &Type<PortableForm>) -> Self {
+        match ty.path.ident() {
             Some(a) => match a.as_str() {
                 ACCOUNT_ID32 => Self::AccountId32,
                 a if CALL.contains(&a) => Self::PalletSpecific(PalletSpecificItem::Call),
@@ -361,13 +363,42 @@ impl SpecialtyTypeHinted {
                 a if H160.contains(&a) => Self::H160,
                 H256 => Self::H256,
                 H512 => Self::H512,
-                OPTION => Self::Option,
+                OPTION => {
+                    if let TypeDef::Variant(x) = &ty.type_def {
+                        if ty.type_params.len() == 1 {
+                            if let Some(ty_symbol) = ty.type_params[0].ty {
+                                let mut has_none = false;
+                                let mut has_some = false;
+                                for variant in x.variants.iter() {
+                                    if variant.index == 0 && variant.name == NONE {
+                                        has_none = true
+                                    }
+                                    if variant.index == 1 && variant.name == SOME {
+                                        has_some = true
+                                    }
+                                }
+                                if has_none && has_some && (x.variants.len() == 2) {
+                                    Self::Option(ty_symbol)
+                                } else {
+                                    Self::None
+                                }
+                            } else {
+                                Self::None
+                            }
+                        } else {
+                            Self::None
+                        }
+                    } else {
+                        Self::None
+                    }
+                }
                 PERBILL => Self::Perbill,
                 PERCENT => Self::Percent,
                 PERMILL => Self::Permill,
                 PERQUINTILL => Self::Perquintill,
                 PERU16 => Self::PerU16,
-                PUBLIC => match path
+                PUBLIC => match ty
+                    .path
                     .namespace()
                     .iter()
                     .map(|x| x.as_str())
@@ -379,7 +410,8 @@ impl SpecialtyTypeHinted {
                     SP_CORE_ECDSA => Self::PublicEcdsa,
                     _ => Self::None,
                 },
-                SIGNATURE => match path
+                SIGNATURE => match ty
+                    .path
                     .namespace()
                     .iter()
                     .map(|x| x.as_str())
@@ -434,8 +466,6 @@ pub enum SpecialtyTypeChecked {
 impl SpecialtyTypeChecked {
     /// Get `SpecialtyTypeChecked` for a [`Type`].
     ///
-    /// Checks type internal structure for `Option`.
-    ///
     /// Checks type internal structure and uses input data for
     /// [`PalletSpecificItem`].
     pub fn from_type<B, E, M>(
@@ -450,42 +480,14 @@ impl SpecialtyTypeChecked {
         E: ExternalMemory,
         M: AsMetadata<E>,
     {
-        match SpecialtyTypeHinted::from_path(&ty.path) {
+        match SpecialtyTypeHinted::from_ty(ty) {
             SpecialtyTypeHinted::None => Self::None,
             SpecialtyTypeHinted::AccountId32 => Self::AccountId32,
             SpecialtyTypeHinted::Era => Self::Era,
             SpecialtyTypeHinted::H160 => Self::H160,
             SpecialtyTypeHinted::H256 => Self::H256,
             SpecialtyTypeHinted::H512 => Self::H512,
-            SpecialtyTypeHinted::Option => {
-                if let TypeDef::Variant(x) = &ty.type_def {
-                    if ty.type_params.len() == 1 {
-                        if let Some(ty_symbol) = ty.type_params[0].ty {
-                            let mut has_none = false;
-                            let mut has_some = false;
-                            for variant in x.variants.iter() {
-                                if variant.index == 0 && variant.name == NONE {
-                                    has_none = true
-                                }
-                                if variant.index == 1 && variant.name == SOME {
-                                    has_some = true
-                                }
-                            }
-                            if has_none && has_some && (x.variants.len() == 2) {
-                                Self::Option(ty_symbol)
-                            } else {
-                                Self::None
-                            }
-                        } else {
-                            Self::None
-                        }
-                    } else {
-                        Self::None
-                    }
-                } else {
-                    Self::None
-                }
-            }
+            SpecialtyTypeHinted::Option(x) => Self::Option(x),
             SpecialtyTypeHinted::PalletSpecific(item) => {
                 if let TypeDef::Variant(x) = &ty.type_def {
                     // found specific variant corresponding to pallet,
@@ -498,7 +500,7 @@ impl SpecialtyTypeChecked {
                                 match registry.resolve_ty(item_ty_id, ext_memory) {
                                     Ok(variants_ty) => {
                                         if let SpecialtyTypeHinted::PalletSpecific(item_repeated) =
-                                            SpecialtyTypeHinted::from_path(&variants_ty.path)
+                                            SpecialtyTypeHinted::from_ty(&variants_ty)
                                         {
                                             if item != item_repeated {
                                                 Self::None
