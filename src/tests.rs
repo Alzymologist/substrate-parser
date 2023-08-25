@@ -1185,7 +1185,7 @@ fn short_metadata_1_call_only() {
     assert_eq!(draft_metadata_header.pallet_name, "Utility");
     assert_eq!(draft_metadata_header.call_ty_id, 265);
     assert_eq!(draft_metadata_header.index, 16);
-    assert_eq!(short_registry.types.len(), 10);
+    assert_eq!(short_registry.types.len(), 12);
 }
 
 #[test]

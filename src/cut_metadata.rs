@@ -1,24 +1,9 @@
 //! Metadata shortened, draft phase.
 use frame_metadata::v14::ExtrinsicMetadata;
 use parity_scale_codec::{Decode, Encode, OptionBool};
-use primitive_types::{H160, H512};
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, Path, PortableRegistry, Type, TypeDef,
     TypeDefBitSequence, TypeDefPrimitive, TypeDefVariant, Variant,
-};
-use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
-
-#[cfg(not(feature = "std"))]
-use crate::additional_types::{
-    AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
-    SignatureSr25519,
-};
-#[cfg(feature = "std")]
-use sp_core::{
-    crypto::AccountId32,
-    ecdsa::{Public as PublicEcdsa, Signature as SignatureEcdsa},
-    ed25519::{Public as PublicEd25519, Signature as SignatureEd25519},
-    sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
 };
 
 use crate::std::{borrow::ToOwned, string::String, vec::Vec};
@@ -36,9 +21,8 @@ use crate::decoding_sci::{
 use crate::error::{MetaCutError, ParserError, SignableError};
 use crate::propagated::{Checker, Propagated, SpecialtySet};
 use crate::special_indicators::{
-    Hint, PalletSpecificItem, SpecialtyTypeChecked, SpecialtyTypeHinted, ENUM_INDEX_ENCODED_LEN,
+    Hint, PalletSpecificItem, SpecialtyTypeHinted, ENUM_INDEX_ENCODED_LEN,
 };
-use crate::special_types::{special_case_era, special_case_h256, CheckCompact};
 use crate::traits::{AddressableBuffer, AsMetadata, AsPallet, ExternalMemory, ResolveType};
 use crate::MarkedData;
 
@@ -173,15 +157,7 @@ impl HashPrep for PortableRegistry {
     fn hash_prep<E: ExternalMemory>(&self) -> Result<Vec<ShortRegistryEntry>, MetaCutError<E>> {
         let mut draft_registry = DraftRegistry::new();
         for registry_entry in self.types.iter() {
-            match SpecialtyTypeHinted::from_ty(&registry_entry.ty) {
-                SpecialtyTypeHinted::Era => {
-                    add_as_enum::<E>(
-                        &mut draft_registry,
-                        &registry_entry.ty.path,
-                        None,
-                        registry_entry.id,
-                    )?;
-                }
+            match SpecialtyTypeHinted::from_type(&registry_entry.ty) {
                 SpecialtyTypeHinted::Option(_) => {
                     add_ty_as_regular::<E>(
                         &mut draft_registry,
@@ -403,7 +379,7 @@ where
 
     if let TypeDef::Variant(x) = &call_ty.type_def {
         if let SpecialtyTypeHinted::PalletSpecific(PalletSpecificItem::Call) =
-            SpecialtyTypeHinted::from_ty(&call_ty)
+            SpecialtyTypeHinted::from_type(&call_ty)
         {
             pass_variant::<B, E, M>(
                 &x.variants,
@@ -606,8 +582,64 @@ where
 
     let info_ty = Info::from_ty(&ty);
     propagated.add_info(&info_ty);
-    match SpecialtyTypeChecked::from_type::<B, E, M>(&ty, data, ext_memory, position, registry) {
-        SpecialtyTypeChecked::None => match &ty.type_def {
+
+    if let SpecialtyTypeHinted::Option(ty_symbol) = SpecialtyTypeHinted::from_type(&ty) {
+        propagated
+            .reject_compact()
+            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
+        add_ty_as_regular::<E>(draft_registry, ty, id)?;
+
+        let param_ty = registry
+            .resolve_ty(ty_symbol.id, ext_memory)
+            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
+
+        match &param_ty.type_def {
+            TypeDef::Primitive(TypeDefPrimitive::Bool) => {
+                let slice_to_decode = data
+                    .read_slice(ext_memory, *position, ENUM_INDEX_ENCODED_LEN)
+                    .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
+                OptionBool::decode(&mut slice_to_decode.as_ref()).map_err(|_| {
+                    MetaCutError::Signable(SignableError::Parsing(
+                        ParserError::UnexpectedOptionVariant {
+                            position: *position,
+                        },
+                    ))
+                })?;
+                *position += ENUM_INDEX_ENCODED_LEN;
+                add_ty_as_regular::<E>(draft_registry, param_ty, ty_symbol.id)
+            }
+            _ => match data
+                .read_byte(ext_memory, *position)
+                .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?
+            {
+                0 => {
+                    *position += ENUM_INDEX_ENCODED_LEN;
+                    Ok(())
+                }
+                1 => {
+                    *position += ENUM_INDEX_ENCODED_LEN;
+                    pass_type::<B, E, M>(
+                        &Ty::Resolved(ResolvedTy {
+                            ty: param_ty.to_owned(),
+                            id: ty_symbol.id,
+                        }),
+                        data,
+                        ext_memory,
+                        position,
+                        registry,
+                        propagated,
+                        draft_registry,
+                    )
+                }
+                _ => Err(MetaCutError::Signable(SignableError::Parsing(
+                    ParserError::UnexpectedOptionVariant {
+                        position: *position,
+                    },
+                ))),
+            },
+        }
+    } else {
+        match &ty.type_def {
             TypeDef::Composite(x) => {
                 pass_fields::<B, E, M>(
                     &x.fields,
@@ -738,252 +770,6 @@ where
                 )?;
                 add_ty_as_regular::<E>(draft_registry, ty, id)
             }
-        },
-        SpecialtyTypeChecked::AccountId32 => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            AccountId32::parse_check_compact::<B, E>(
-                data,
-                ext_memory,
-                position,
-                propagated.compact_at(),
-            )
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::Era => {
-            propagated
-                .reject_compact()
-                .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            add_as_enum::<E>(draft_registry, &ty.path, None, id)?;
-            special_case_era::<B, E>(data, ext_memory, position)
-                .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::H160 => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            H160::parse_check_compact::<B, E>(data, ext_memory, position, propagated.compact_at())
-                .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::H256 => {
-            propagated
-                .reject_compact()
-                .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            special_case_h256::<B, E>(
-                data,
-                ext_memory,
-                position,
-                propagated.checker.specialty_set.hash256(),
-            )
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::H512 => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            H512::parse_check_compact::<B, E>(data, ext_memory, position, propagated.compact_at())
-                .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::Option(ty_symbol) => {
-            propagated
-                .reject_compact()
-                .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-
-            let param_ty = registry
-                .resolve_ty(ty_symbol.id, ext_memory)
-                .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-
-            match &param_ty.type_def {
-                TypeDef::Primitive(TypeDefPrimitive::Bool) => {
-                    let slice_to_decode = data
-                        .read_slice(ext_memory, *position, ENUM_INDEX_ENCODED_LEN)
-                        .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-                    OptionBool::decode(&mut slice_to_decode.as_ref()).map_err(|_| {
-                        MetaCutError::Signable(SignableError::Parsing(
-                            ParserError::UnexpectedOptionVariant {
-                                position: *position,
-                            },
-                        ))
-                    })?;
-                    *position += ENUM_INDEX_ENCODED_LEN;
-                    add_ty_as_regular::<E>(draft_registry, param_ty, ty_symbol.id)
-                }
-                _ => match data
-                    .read_byte(ext_memory, *position)
-                    .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?
-                {
-                    0 => {
-                        *position += ENUM_INDEX_ENCODED_LEN;
-                        Ok(())
-                    }
-                    1 => {
-                        *position += ENUM_INDEX_ENCODED_LEN;
-                        pass_type::<B, E, M>(
-                            &Ty::Resolved(ResolvedTy {
-                                ty: param_ty.to_owned(),
-                                id: ty_symbol.id,
-                            }),
-                            data,
-                            ext_memory,
-                            position,
-                            registry,
-                            propagated,
-                            draft_registry,
-                        )
-                    }
-                    _ => Err(MetaCutError::Signable(SignableError::Parsing(
-                        ParserError::UnexpectedOptionVariant {
-                            position: *position,
-                        },
-                    ))),
-                },
-            }
-        }
-        SpecialtyTypeChecked::PalletSpecific {
-            pallet_name: _,
-            pallet_info,
-            pallet_variant,
-            item_ty_id,
-            variants,
-            item: _,
-        } => {
-            propagated
-                .reject_compact()
-                .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            add_as_enum::<E>(draft_registry, &ty.path, Some(pallet_variant), id)?;
-            pass_variant::<B, E, M>(
-                &variants,
-                data,
-                ext_memory,
-                position,
-                registry,
-                draft_registry,
-                &pallet_info.path,
-                item_ty_id,
-            )
-        }
-        SpecialtyTypeChecked::Perbill => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            Perbill::parse_check_compact::<B, E>(
-                data,
-                ext_memory,
-                position,
-                propagated.compact_at(),
-            )
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::Percent => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            Percent::parse_check_compact::<B, E>(
-                data,
-                ext_memory,
-                position,
-                propagated.compact_at(),
-            )
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::Permill => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            Permill::parse_check_compact::<B, E>(
-                data,
-                ext_memory,
-                position,
-                propagated.compact_at(),
-            )
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::Perquintill => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            Perquintill::parse_check_compact::<B, E>(
-                data,
-                ext_memory,
-                position,
-                propagated.compact_at(),
-            )
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::PerU16 => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            PerU16::parse_check_compact::<B, E>(
-                data,
-                ext_memory,
-                position,
-                propagated.compact_at(),
-            )
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::PublicEd25519 => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            PublicEd25519::parse_check_compact::<B, E>(
-                data,
-                ext_memory,
-                position,
-                propagated.compact_at(),
-            )
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::PublicSr25519 => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            PublicSr25519::parse_check_compact::<B, E>(
-                data,
-                ext_memory,
-                position,
-                propagated.compact_at(),
-            )
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::PublicEcdsa => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            PublicEcdsa::parse_check_compact::<B, E>(
-                data,
-                ext_memory,
-                position,
-                propagated.compact_at(),
-            )
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::SignatureEd25519 => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            SignatureEd25519::parse_check_compact::<B, E>(
-                data,
-                ext_memory,
-                position,
-                propagated.compact_at(),
-            )
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::SignatureSr25519 => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            SignatureSr25519::parse_check_compact::<B, E>(
-                data,
-                ext_memory,
-                position,
-                propagated.compact_at(),
-            )
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
-        }
-        SpecialtyTypeChecked::SignatureEcdsa => {
-            add_ty_as_regular::<E>(draft_registry, ty, id)?;
-            SignatureEcdsa::parse_check_compact::<B, E>(
-                data,
-                ext_memory,
-                position,
-                propagated.compact_at(),
-            )
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
-            Ok(())
         }
     }
 }
@@ -1214,7 +1000,7 @@ where
         .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
     let mut id = entry_symbol_id;
 
-    while let SpecialtyTypeHinted::None = SpecialtyTypeHinted::from_ty(&ty) {
+    while let SpecialtyTypeHinted::None = SpecialtyTypeHinted::from_type(&ty) {
         let type_def = ty.type_def.to_owned();
         match type_def {
             TypeDef::Composite(x) => {

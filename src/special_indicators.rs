@@ -353,7 +353,7 @@ pub enum PalletSpecificItem {
 
 impl SpecialtyTypeHinted {
     /// Get `SpecialtyTypeHinted` from type-associated [`Path`].
-    pub fn from_ty(ty: &Type<PortableForm>) -> Self {
+    pub fn from_type(ty: &Type<PortableForm>) -> Self {
         match ty.path.ident() {
             Some(a) => match a.as_str() {
                 ACCOUNT_ID32 => Self::AccountId32,
@@ -480,7 +480,7 @@ impl SpecialtyTypeChecked {
         E: ExternalMemory,
         M: AsMetadata<E>,
     {
-        match SpecialtyTypeHinted::from_ty(ty) {
+        match SpecialtyTypeHinted::from_type(ty) {
             SpecialtyTypeHinted::None => Self::None,
             SpecialtyTypeHinted::AccountId32 => Self::AccountId32,
             SpecialtyTypeHinted::Era => Self::Era,
@@ -500,7 +500,7 @@ impl SpecialtyTypeChecked {
                                 match registry.resolve_ty(item_ty_id, ext_memory) {
                                     Ok(variants_ty) => {
                                         if let SpecialtyTypeHinted::PalletSpecific(item_repeated) =
-                                            SpecialtyTypeHinted::from_ty(&variants_ty)
+                                            SpecialtyTypeHinted::from_type(&variants_ty)
                                         {
                                             if item != item_repeated {
                                                 Self::None
