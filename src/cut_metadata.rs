@@ -171,7 +171,7 @@ impl HashPrep for PortableRegistry {
                             add_as_enum::<E>(
                                 &mut draft_registry,
                                 &registry_entry.ty.path,
-                                Some(variant.to_owned()),
+                                variant.to_owned(),
                                 registry_entry.id,
                             )?;
                         }
@@ -274,7 +274,7 @@ fn add_ty_as_regular<E: ExternalMemory>(
 fn add_as_enum<E: ExternalMemory>(
     draft_registry: &mut DraftRegistry,
     path: &Path<PortableForm>,
-    optional_variant: Option<Variant<PortableForm>>,
+    mut variant: Variant<PortableForm>,
     id: u32,
 ) -> Result<(), MetaCutError<E>> {
     for draft_registry_entry in draft_registry.types.iter_mut() {
@@ -288,15 +288,13 @@ fn add_as_enum<E: ExternalMemory>(
                     ref mut variants,
                 } => {
                     if known_path == path {
-                        if let Some(mut variant) = optional_variant {
-                            if !variants.contains(&variant) {
-                                // remove variant docs in shortened metadata
-                                variant.docs.clear();
-                                for field in variant.fields.iter_mut() {
-                                    field.docs.clear();
-                                }
-                                variants.push(variant)
+                        if !variants.contains(&variant) {
+                            // remove variant docs in shortened metadata
+                            variant.docs.clear();
+                            for field in variant.fields.iter_mut() {
+                                field.docs.clear();
                             }
+                            variants.push(variant)
                         }
                         return Ok(());
                     } else {
@@ -306,17 +304,11 @@ fn add_as_enum<E: ExternalMemory>(
             }
         }
     }
-    let variants = match optional_variant {
-        Some(mut variant) => {
-            // remove variant docs in shortened metadata
-            variant.docs.clear();
-            for field in variant.fields.iter_mut() {
-                field.docs.clear();
-            }
-            vec![variant]
-        }
-        None => Vec::new(),
-    };
+    variant.docs.clear();
+    for field in variant.fields.iter_mut() {
+        field.docs.clear();
+    }
+    let variants = vec![variant];
     let entry_details = EntryDetails::ReduceableEnum {
         path: path.to_owned(),
         variants,
@@ -891,12 +883,7 @@ where
         draft_registry,
     )?;
 
-    add_as_enum::<E>(
-        draft_registry,
-        path,
-        Some(found_variant.to_owned()),
-        enum_ty_id,
-    )
+    add_as_enum::<E>(draft_registry, path, found_variant.to_owned(), enum_ty_id)
 }
 
 fn pass_type_def_bit_sequence<B, E, M>(
