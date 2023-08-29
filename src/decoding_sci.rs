@@ -7,7 +7,7 @@ use parity_scale_codec::{Decode, DecodeAll, OptionBool};
 use primitive_types::{H160, H512};
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, Type, TypeDef, TypeDefBitSequence,
-    TypeDefPrimitive, Variant,
+    TypeDefPrimitive, TypeParameter, Variant,
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 
@@ -44,7 +44,7 @@ use crate::special_indicators::{
 use crate::special_types::{
     special_case_era, special_case_h256, wrap_sequence, CheckCompact, UnsignedInteger,
 };
-use crate::traits::{AddressableBuffer, AsMetadata, AsPallet, ExternalMemory, ResolveType};
+use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
 use crate::MarkedData;
 
 /// Finalize parsing of primitives (variants of [`TypeDefPrimitive`]).
@@ -202,39 +202,88 @@ where
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let pallet_index = data
-        .read_byte(ext_memory, *position)
-        .map_err(SignableError::Parsing)?;
-
-    *position += ENUM_INDEX_ENCODED_LEN;
-
-    let pallet = meta_v14.pallet_by_index(pallet_index)?;
+    let extrinsic_type_params =
+        extrinsic_type_params(ext_memory, meta_v14).map_err(SignableError::Parsing)?;
     let types = meta_v14.types();
-    let call_ty = M::call_ty(&pallet, &types, ext_memory)?;
 
-    let pallet_info = Info::from_ty(&call_ty);
+    let mut found_all_calls_ty = None;
 
-    if let TypeDef::Variant(x) = &call_ty.type_def {
-        if let SpecialtyTypeHinted::PalletSpecific(PalletSpecificItem::Call) =
-            SpecialtyTypeHinted::from_type(&call_ty)
-        {
-            let variant_data =
-                decode_variant::<B, E, M>(&x.variants, data, ext_memory, position, &types)
-                    .map_err(SignableError::Parsing)?;
-            Ok(Call(PalletSpecificData {
-                pallet_info,
-                variant_docs: variant_data.variant_docs.to_owned(),
-                pallet_name: pallet.name(),
-                variant_name: variant_data.variant_name.to_owned(),
-                fields: variant_data.fields,
-            }))
-        } else {
-            Err(SignableError::NotACall(pallet.name()))
+    for param in extrinsic_type_params.iter() {
+        if param.name == CALL_INDICATOR {
+            found_all_calls_ty = param.ty
         }
+    }
+
+    let all_calls_ty =
+        found_all_calls_ty.ok_or(SignableError::Parsing(ParserError::ExtrinsicNoCallParam))?;
+
+    let call_extended_data = decode_with_type::<B, E, M>(
+        &Ty::Symbol(&all_calls_ty),
+        data,
+        ext_memory,
+        position,
+        &types,
+        Propagated::new(),
+    )
+    .map_err(SignableError::Parsing)?;
+    if let ParsedData::Call(call) = call_extended_data.data {
+        Ok(call)
     } else {
-        Err(SignableError::NotACall(pallet.name()))
+        Err(SignableError::NotACall(all_calls_ty.id))
     }
 }
+
+/// Check that extrinsic type resolves into a SCALE-encoded opaque `Vec<u8>`,
+/// get associated `TypeParameter`s set.
+pub fn extrinsic_type_params<E, M>(
+    ext_memory: &mut E,
+    meta_v14: &M,
+) -> Result<Vec<TypeParameter<PortableForm>>, ParserError<E>>
+where
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
+    let extrinsic_ty_id = meta_v14.extrinsic().ty.id;
+    let meta_v14_types = meta_v14.types();
+    let extrinsic_ty = meta_v14_types.resolve_ty(extrinsic_ty_id, ext_memory)?;
+
+    // check here that the underlying type is really `Vec<u8>`
+    match extrinsic_ty.type_def {
+        TypeDef::Sequence(s) => {
+            let element_ty_id = s.type_param.id;
+            let element_ty = meta_v14_types.resolve_ty(element_ty_id, ext_memory)?;
+            if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
+                Ok(extrinsic_ty.type_params)
+            } else {
+                Err(ParserError::UnexpectedExtrinsicType { extrinsic_ty_id })
+            }
+        }
+        TypeDef::Composite(c) => {
+            if c.fields.len() != 1 {
+                Err(ParserError::UnexpectedExtrinsicType { extrinsic_ty_id })
+            } else {
+                let field_ty_id = c.fields[0].ty.id;
+                let field_ty = meta_v14_types.resolve_ty(field_ty_id, ext_memory)?;
+                match field_ty.type_def {
+                    TypeDef::Sequence(s) => {
+                        let element_ty_id = s.type_param.id;
+                        let element_ty = meta_v14_types.resolve_ty(element_ty_id, ext_memory)?;
+                        if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
+                            Ok(extrinsic_ty.type_params)
+                        } else {
+                            Err(ParserError::UnexpectedExtrinsicType { extrinsic_ty_id })
+                        }
+                    }
+                    _ => Err(ParserError::UnexpectedExtrinsicType { extrinsic_ty_id }),
+                }
+            }
+        }
+        _ => Err(ParserError::UnexpectedExtrinsicType { extrinsic_ty_id }),
+    }
+}
+
+/// [`TypeParameter`](scale_info::TypeParameter) name for `call`.
+pub(crate) const CALL_INDICATOR: &str = "Call";
 
 /// General decoder function. Parse part of data as [`Ty`].
 ///

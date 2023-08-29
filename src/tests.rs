@@ -1172,7 +1172,7 @@ fn short_metadata_1_call_only() {
     let marked_data = MarkedData::mark(&binding, &mut ()).unwrap();
     let mut draft_registry = DraftRegistry { types: Vec::new() };
 
-    let draft_metadata_header = pass_call(
+    pass_call(
         &marked_data,
         &mut (),
         &metadata("for_tests/westend9111"),
@@ -1181,11 +1181,7 @@ fn short_metadata_1_call_only() {
     .unwrap();
 
     let short_registry = draft_registry.finalize();
-
-    assert_eq!(draft_metadata_header.pallet_name, "Utility");
-    assert_eq!(draft_metadata_header.call_ty_id, 265);
-    assert_eq!(draft_metadata_header.index, 16);
-    assert_eq!(short_registry.types.len(), 12);
+    assert_eq!(short_registry.types.len(), 14);
 }
 
 #[test]

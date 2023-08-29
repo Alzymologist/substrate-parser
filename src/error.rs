@@ -21,9 +21,7 @@ pub enum SignableError<E: ExternalMemory> {
     ExtensionsList(ExtensionsError),
     ImmortalHashMismatch,
     MetaVersion(MetaVersionError),
-    NoCallsInPallet(String),
-    NotACall(String),
-    PalletNotFound(u8),
+    NotACall(u32),
     Parsing(ParserError<E>),
     SomeDataNotUsedCall {
         from: usize,
@@ -49,9 +47,7 @@ impl<E: ExternalMemory> SignableError<E> {
             SignableError::ExtensionsList(extensions_error) => extensions_error.error_text(),
             SignableError::ImmortalHashMismatch => String::from("Extensions error. Block hash does not match the chain genesis hash in transaction with immortal `Era`."),
             SignableError::MetaVersion(meta_version_error) => format!("Unable to determine metadata spec version. {meta_version_error}"),
-            SignableError::NoCallsInPallet(pallet_name) => format!("Unable to decode the call data of the signable transaction. Pallet {pallet_name} has no calls."),
-            SignableError::NotACall(pallet_name) => format!("Unable to decode the call data of the signable transaction. Call type in pallet {pallet_name} is not an enum."),
-            SignableError::PalletNotFound(index) => format!("Unable to decode the call data of the signable transaction. Metadata contains no pallet with index {index}."),
+            SignableError::NotACall(all_calls_ty_id) => format!("Decoded signable transaction is not a call. Unexpected structure of calls descriptor type {all_calls_ty_id}."),
             SignableError::Parsing(parser_error) => format!("Parsing error. {parser_error}"),
             SignableError::SomeDataNotUsedCall { from, to } => format!("Some call data (input positions [{from}..{to}]) remained unused after decoding."),
             SignableError::SomeDataNotUsedExtensions { from } => format!("Some extensions data (input positions [{from}..]) remained unused after decoding."),
@@ -116,6 +112,7 @@ pub enum ParserError<E: ExternalMemory> {
         id: u32,
     },
     External(E::ExternalMemoryError),
+    ExtrinsicNoCallParam,
     NoCompact {
         position: usize,
     },
@@ -142,6 +139,9 @@ pub enum ParserError<E: ExternalMemory> {
     UnexpectedEnumVariant {
         position: usize,
     },
+    UnexpectedExtrinsicType {
+        extrinsic_ty_id: u32,
+    },
     UnexpectedOptionVariant {
         position: usize,
     },
@@ -162,6 +162,7 @@ impl<E: ExternalMemory> ParserError<E> {
             ParserError::DataTooShort { position, minimal_length } => format!("Data is too short for expected content. Expected at least {minimal_length} element(s) after position {position}."),
             ParserError::CyclicMetadata { id } => format!("Resolving type id {id} in metadata type registry results in cycling."),
             ParserError::External(e) => format!("Error accessing external memory. {e}"),
+            ParserError::ExtrinsicNoCallParam => String::from("Extrinsic type in provided metadata has no specified call parameter."),
             ParserError::NoCompact { position } => format!("Expected compact starting at position {position}, not found one."),
             ParserError::NotBitOrderType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitOrder type."),
             ParserError::NotBitStoreType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitStore type."),
@@ -170,6 +171,7 @@ impl<E: ExternalMemory> ParserError<E> {
             ParserError::TypeFailure { position, ty } => format!("Unable to decode data starting at position {position} as {ty}."),
             ParserError::UnexpectedCompactInsides { id } => format!("Compact type {id} in metadata type registry has unexpected type inside compact."),
             ParserError::UnexpectedEnumVariant { position } => format!("Encountered unexpected enum variant at position {position}."),
+            ParserError::UnexpectedExtrinsicType { extrinsic_ty_id } => format!("Decoding is based on assumption that extrinsic type resolves into a SCALE-encoded opaque `Vec<u8>`. Unexpected type description is found for type {extrinsic_ty_id} in metadata type registry."),
             ParserError::UnexpectedOptionVariant { position } => format!("Encountered unexpected Option<_> variant at position {position}."),
             ParserError::V14ShortTypesIncomplete { old_id } => format!("Unable to resolve type with old id {old_id} in shortened metadata type registry."),
             ParserError::V14TypeNotResolved { id } => format!("Unable to resolve type id {id} in metadata type registry."),
@@ -258,7 +260,6 @@ pub enum UncheckedExtrinsicError<E: ExternalMemory> {
     Parser(ParserError<E>),
     VersionMismatch { version_byte: u8, version: u8 },
     UnexpectedCallTy { call_ty_id: u32 },
-    UnexpectedType { extrinsic_ty_id: u32 },
 }
 
 impl<E: ExternalMemory> UncheckedExtrinsicError<E> {
@@ -272,7 +273,6 @@ impl<E: ExternalMemory> UncheckedExtrinsicError<E> {
             UncheckedExtrinsicError::Parser(parser_error) => format!("Error parsing unchecked extrinsic data. {parser_error}"),
             UncheckedExtrinsicError::VersionMismatch { version_byte, version } => format!("Version byte in unchecked extrinsic {version_byte} does not match with version {version} from provided metadata. Last 7 bits were expected to be identical."),
             UncheckedExtrinsicError::UnexpectedCallTy { call_ty_id } => format!("Parameter type for call {call_ty_id} in metadata type registry is not a call type, and does not match known call type descriptors."),
-            UncheckedExtrinsicError::UnexpectedType { extrinsic_ty_id } => format!("Unchecked extrinsic type is assumed to resolve into a SCALE-encoded opaque `Vec<u8>`. Unexpected type description is found for type {extrinsic_ty_id} in metadata type registry."),
         }
     }
 }
