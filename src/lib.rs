@@ -705,9 +705,8 @@ where
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let resolved_ty = registry.resolve_ty_external_id(ty_symbol.id, ext_memory)?;
     decode_with_type::<B, E, M>(
-        &Ty::Resolved(resolved_ty),
+        &Ty::Symbol(ty_symbol),
         data,
         ext_memory,
         position,

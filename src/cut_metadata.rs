@@ -3,7 +3,7 @@ use frame_metadata::v14::ExtrinsicMetadata;
 use parity_scale_codec::{Decode, Encode, OptionBool};
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, Path, PortableRegistry, Type, TypeDef,
-    TypeDefBitSequence, TypeDefPrimitive, TypeDefVariant, Variant,
+    TypeDefBitSequence, TypeDefPrimitive, TypeDefVariant, TypeParameter, Variant,
 };
 
 use crate::std::{borrow::ToOwned, string::String, vec::Vec};
@@ -16,22 +16,13 @@ use std::any::TypeId;
 use crate::cards::Info;
 use crate::compacts::get_compact;
 use crate::decoding_sci::{
-    decode_type_def_primitive, pick_variant, BitVecPositions, ResolvedTy, Ty,
+    decode_type_def_primitive, pick_variant, BitVecPositions, ResolvedTy, Ty, CALL_INDICATOR,
 };
 use crate::error::{MetaCutError, ParserError, SignableError};
 use crate::propagated::{Checker, Propagated, SpecialtySet};
-use crate::special_indicators::{
-    Hint, PalletSpecificItem, SpecialtyTypeHinted, ENUM_INDEX_ENCODED_LEN,
-};
-use crate::traits::{AddressableBuffer, AsMetadata, AsPallet, ExternalMemory, ResolveType};
+use crate::special_indicators::{Hint, SpecialtyTypeHinted, ENUM_INDEX_ENCODED_LEN};
+use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
 use crate::MarkedData;
-
-#[derive(Debug)]
-pub struct DraftMetadataHeader {
-    pub pallet_name: String,
-    pub call_ty_id: u32,
-    pub index: u8,
-}
 
 #[derive(Debug)]
 pub struct DraftRegistry {
@@ -323,7 +314,7 @@ pub fn pass_call<B, E, M>(
     ext_memory: &mut E,
     meta_v14: &M,
     draft_registry: &mut DraftRegistry,
-) -> Result<DraftMetadataHeader, MetaCutError<E>>
+) -> Result<(), MetaCutError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -332,15 +323,14 @@ where
     let data = marked_data.data_no_extensions();
     let mut position = marked_data.call_start();
 
-    let draft_metadata_header =
-        pass_call_unmarked(&data, &mut position, ext_memory, meta_v14, draft_registry)?;
+    pass_call_unmarked(&data, &mut position, ext_memory, meta_v14, draft_registry)?;
     if position != marked_data.extensions_start() {
         Err(MetaCutError::Signable(SignableError::SomeDataNotUsedCall {
             from: position,
             to: marked_data.extensions_start(),
         }))
     } else {
-        Ok(draft_metadata_header)
+        Ok(())
     }
 }
 
@@ -350,55 +340,111 @@ pub fn pass_call_unmarked<B, E, M>(
     ext_memory: &mut E,
     meta_v14: &M,
     draft_registry: &mut DraftRegistry,
-) -> Result<DraftMetadataHeader, MetaCutError<E>>
+) -> Result<(), MetaCutError<E>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let pallet_index = data
-        .read_byte(ext_memory, *position)
+    let extrinsic_type_params = extrinsic_type_params(ext_memory, meta_v14, draft_registry)?;
+
+    let mut found_all_calls_ty = None;
+
+    for param in extrinsic_type_params.iter() {
+        if param.name == CALL_INDICATOR {
+            found_all_calls_ty = param.ty
+        }
+    }
+
+    let all_calls_ty = found_all_calls_ty.ok_or(MetaCutError::Signable(SignableError::Parsing(
+        ParserError::ExtrinsicNoCallParam,
+    )))?;
+
+    pass_type::<B, E, M>(
+        &Ty::Symbol(&all_calls_ty),
+        data,
+        ext_memory,
+        position,
+        &meta_v14.types(),
+        Propagated::new(),
+        draft_registry,
+    )
+}
+
+/// Check that extrinsic type resolves into a SCALE-encoded opaque `Vec<u8>`,
+/// get associated `TypeParameter`s set.
+pub fn extrinsic_type_params<E, M>(
+    ext_memory: &mut E,
+    meta_v14: &M,
+    draft_registry: &mut DraftRegistry,
+) -> Result<Vec<TypeParameter<PortableForm>>, MetaCutError<E>>
+where
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
+    let extrinsic_ty_id = meta_v14.extrinsic().ty.id;
+    let meta_v14_types = meta_v14.types();
+    let extrinsic_ty = meta_v14_types
+        .resolve_ty(extrinsic_ty_id, ext_memory)
         .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
 
-    *position += ENUM_INDEX_ENCODED_LEN;
-
-    let pallet = meta_v14
-        .pallet_by_index(pallet_index)
-        .map_err(MetaCutError::Signable)?;
-    let types = meta_v14.types();
-    let call_ty_id = pallet.call_ty_id().map_err(MetaCutError::Signable)?;
-    let call_ty = M::call_ty(&pallet, &types, ext_memory).map_err(MetaCutError::Signable)?;
-
-    if let TypeDef::Variant(x) = &call_ty.type_def {
-        if let SpecialtyTypeHinted::PalletSpecific(PalletSpecificItem::Call) =
-            SpecialtyTypeHinted::from_type(&call_ty)
-        {
-            pass_variant::<B, E, M>(
-                &x.variants,
-                data,
-                ext_memory,
-                position,
-                &meta_v14.types(),
-                draft_registry,
-                &call_ty.path,
-                call_ty_id,
-            )?;
-
-            Ok(DraftMetadataHeader {
-                pallet_name: pallet.name(),
-                call_ty_id,
-                index: pallet_index,
-            })
-        } else {
-            Err(MetaCutError::Signable(SignableError::NotACall(
-                pallet.name(),
+    // check here that the underlying type is really `Vec<u8>`
+    let type_params = match extrinsic_ty.type_def {
+        TypeDef::Sequence(ref s) => {
+            let element_ty_id = s.type_param.id;
+            let element_ty = meta_v14_types
+                .resolve_ty(element_ty_id, ext_memory)
+                .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
+            if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
+                add_ty_as_regular(draft_registry, element_ty, element_ty_id)?;
+                extrinsic_ty.type_params.to_owned()
+            } else {
+                return Err(MetaCutError::Signable(SignableError::Parsing(
+                    ParserError::UnexpectedExtrinsicType { extrinsic_ty_id },
+                )));
+            }
+        }
+        TypeDef::Composite(ref c) => {
+            if c.fields.len() != 1 {
+                return Err(MetaCutError::Signable(SignableError::Parsing(
+                    ParserError::UnexpectedExtrinsicType { extrinsic_ty_id },
+                )));
+            } else {
+                let field_ty_id = c.fields[0].ty.id;
+                let field_ty = meta_v14_types
+                    .resolve_ty(field_ty_id, ext_memory)
+                    .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
+                match field_ty.type_def {
+                    TypeDef::Sequence(ref s) => {
+                        let element_ty_id = s.type_param.id;
+                        let element_ty = meta_v14_types
+                            .resolve_ty(element_ty_id, ext_memory)
+                            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
+                        if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
+                            add_ty_as_regular(draft_registry, field_ty, field_ty_id)?;
+                            extrinsic_ty.type_params.to_owned()
+                        } else {
+                            return Err(MetaCutError::Signable(SignableError::Parsing(
+                                ParserError::UnexpectedExtrinsicType { extrinsic_ty_id },
+                            )));
+                        }
+                    }
+                    _ => {
+                        return Err(MetaCutError::Signable(SignableError::Parsing(
+                            ParserError::UnexpectedExtrinsicType { extrinsic_ty_id },
+                        )))
+                    }
+                }
+            }
+        }
+        _ => {
+            return Err(MetaCutError::Signable(SignableError::Parsing(
+                ParserError::UnexpectedExtrinsicType { extrinsic_ty_id },
             )))
         }
-    } else {
-        Err(MetaCutError::Signable(SignableError::NotACall(
-            pallet.name(),
-        )))
-    }
+    };
+    add_ty_as_regular(draft_registry, extrinsic_ty, extrinsic_ty_id)?;
+    Ok(type_params)
 }
 
 pub fn pass_extensions<B, E, M>(
@@ -432,11 +478,8 @@ where
 {
     let meta_v14_types = meta_v14.types();
     for signed_extensions_metadata in meta_v14.extrinsic().signed_extensions.iter() {
-        let resolved_ty = meta_v14_types
-            .resolve_ty_external_id(signed_extensions_metadata.ty.id, ext_memory)
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
         pass_type::<B, E, M>(
-            &Ty::Resolved(resolved_ty),
+            &Ty::Symbol(&signed_extensions_metadata.ty),
             data,
             ext_memory,
             position,
@@ -446,11 +489,8 @@ where
         )?;
     }
     for signed_extensions_metadata in meta_v14.extrinsic().signed_extensions.iter() {
-        let resolved_ty = meta_v14_types
-            .resolve_ty_external_id(signed_extensions_metadata.additional_signed.id, ext_memory)
-            .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
         pass_type::<B, E, M>(
-            &Ty::Resolved(resolved_ty),
+            &Ty::Symbol(&signed_extensions_metadata.additional_signed),
             data,
             ext_memory,
             position,
@@ -473,9 +513,6 @@ where
 pub struct ShortMetadata {
     pub chain_version_printed: String, // restore later to set of chain name, encoded chain version, and chain version ty
     pub short_registry: ShortRegistry,
-    pub pallet_name: String,
-    pub pallet_call_ty_id: u32,
-    pub pallet_index: u8,
     pub extrinsic: ExtrinsicMetadata<PortableForm>,
 }
 
@@ -492,8 +529,7 @@ where
     let mut draft_registry = DraftRegistry::new();
 
     let marked_data = MarkedData::<B, E>::mark(data, ext_memory).map_err(MetaCutError::Signable)?;
-    let draft_metadata_header =
-        pass_call::<B, E, M>(&marked_data, ext_memory, meta_v14, &mut draft_registry)?;
+    pass_call::<B, E, M>(&marked_data, ext_memory, meta_v14, &mut draft_registry)?;
     pass_extensions::<B, E, M>(&marked_data, ext_memory, meta_v14, &mut draft_registry)?;
 
     Ok(ShortMetadata {
@@ -501,9 +537,6 @@ where
             .version_printed()
             .map_err(|e| MetaCutError::Signable(SignableError::MetaVersion(e)))?,
         short_registry: draft_registry.finalize(),
-        pallet_name: draft_metadata_header.pallet_name,
-        pallet_call_ty_id: draft_metadata_header.call_ty_id,
-        pallet_index: draft_metadata_header.index,
         extrinsic: meta_v14.extrinsic(),
     })
 }
@@ -521,7 +554,7 @@ where
     let mut draft_registry = DraftRegistry::new();
 
     let mut position = 0;
-    let draft_metadata_header = pass_call_unmarked::<B, E, M>(
+    pass_call_unmarked::<B, E, M>(
         data,
         &mut position,
         ext_memory,
@@ -541,9 +574,6 @@ where
             .version_printed()
             .map_err(|e| MetaCutError::Signable(SignableError::MetaVersion(e)))?,
         short_registry: draft_registry.finalize(),
-        pallet_name: draft_metadata_header.pallet_name,
-        pallet_call_ty_id: draft_metadata_header.call_ty_id,
-        pallet_index: draft_metadata_header.index,
         extrinsic: meta_v14.extrinsic(),
     })
 }

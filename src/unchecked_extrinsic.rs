@@ -48,13 +48,12 @@ use std::cmp::Ordering;
 #[cfg(not(feature = "std"))]
 use core::cmp::Ordering;
 
-use scale_info::{TypeDef, TypeDefPrimitive};
-
 use crate::cards::{Call, ExtendedData, ParsedData};
 use crate::compacts::get_compact;
 use crate::decode_as_type_at_position;
+use crate::decoding_sci::{extrinsic_type_params, CALL_INDICATOR};
 use crate::error::{ParserError, UncheckedExtrinsicError};
-use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
+use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory};
 
 /// Length of version indicator, 1 byte.
 const VERSION_LENGTH: usize = 1;
@@ -74,9 +73,6 @@ const SIGNATURE_INDICATOR: &str = "Signature";
 /// [`TypeParameter`](scale_info::TypeParameter) name for `extra`.
 const EXTRA_INDICATOR: &str = "Extra";
 
-/// [`TypeParameter`](scale_info::TypeParameter) name for `call`.
-const CALL_INDICATOR: &str = "Call";
-
 /// Decode an unchecked extrinsic.
 pub fn decode_as_unchecked_extrinsic<B, E, M>(
     input: &B,
@@ -88,51 +84,9 @@ where
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let extrinsic_ty_id = meta_v14.extrinsic().ty.id;
+    let extrinsic_type_params =
+        extrinsic_type_params(ext_memory, meta_v14).map_err(UncheckedExtrinsicError::Parser)?;
     let meta_v14_types = meta_v14.types();
-    let extrinsic_ty = meta_v14_types
-        .resolve_ty(extrinsic_ty_id, ext_memory)
-        .map_err(UncheckedExtrinsicError::Parser)?;
-
-    // check here that the underlying type is really `Vec<u8>`
-    match extrinsic_ty.type_def {
-        TypeDef::Sequence(s) => {
-            let element_ty_id = s.type_param.id;
-            let element_ty = meta_v14_types
-                .resolve_ty(element_ty_id, ext_memory)
-                .map_err(UncheckedExtrinsicError::Parser)?;
-            if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
-            } else {
-                return Err(UncheckedExtrinsicError::UnexpectedType { extrinsic_ty_id });
-            }
-        }
-        TypeDef::Composite(c) => {
-            if c.fields.len() != 1 {
-                return Err(UncheckedExtrinsicError::UnexpectedType { extrinsic_ty_id });
-            } else {
-                let field_ty_id = c.fields[0].ty.id;
-                let field_ty = meta_v14_types
-                    .resolve_ty(field_ty_id, ext_memory)
-                    .map_err(UncheckedExtrinsicError::Parser)?;
-                match field_ty.type_def {
-                    TypeDef::Sequence(s) => {
-                        let element_ty_id = s.type_param.id;
-                        let element_ty = meta_v14_types
-                            .resolve_ty(element_ty_id, ext_memory)
-                            .map_err(UncheckedExtrinsicError::Parser)?;
-                        if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
-                        } else {
-                            return Err(UncheckedExtrinsicError::UnexpectedType {
-                                extrinsic_ty_id,
-                            });
-                        }
-                    }
-                    _ => return Err(UncheckedExtrinsicError::UnexpectedType { extrinsic_ty_id }),
-                }
-            }
-        }
-        _ => return Err(UncheckedExtrinsicError::UnexpectedType { extrinsic_ty_id }),
-    }
 
     // This could have been just a single decode line.
     // Written this way to: (1) trace position from the start, (2) have descriptive errors
@@ -178,13 +132,15 @@ where
         let mut found_call = None;
 
         // Need the call parameter from unchecked extrinsic parameters.
-        for param in extrinsic_ty.type_params {
+        for param in extrinsic_type_params.iter() {
             if param.name == CALL_INDICATOR {
                 found_call = param.ty
             }
         }
 
-        let call_ty = found_call.ok_or(UncheckedExtrinsicError::NoCallParam)?;
+        let call_ty = found_call.ok_or(UncheckedExtrinsicError::Parser(
+            ParserError::ExtrinsicNoCallParam,
+        ))?;
         let call_extended_data = decode_as_type_at_position::<B, E, M>(
             &call_ty,
             input,
@@ -208,7 +164,7 @@ where
 
         // Unchecked extrinsic parameters typically contain address, signature,
         // and extensions. Expect to find all entries.
-        for param in extrinsic_ty.type_params {
+        for param in extrinsic_type_params.iter() {
             match param.name.as_str() {
                 ADDRESS_INDICATOR => found_address = param.ty,
                 SIGNATURE_INDICATOR => found_signature = param.ty,
