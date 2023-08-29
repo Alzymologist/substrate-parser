@@ -53,6 +53,7 @@ pub struct ShortRegistry {
 
 #[derive(Clone, Debug, Decode, Encode)]
 pub struct ShortRegistryEntry {
+    #[codec(compact)]
     pub id: u32,
     pub ty: Type<PortableForm>,
 }
