@@ -107,6 +107,9 @@ pub const SP_CORE_SR25519: &[&str] = &["sp_core", "sr25519"];
 /// [`Path`] `namespace` for `sp_core::ecdsa`.
 pub const SP_CORE_ECDSA: &[&str] = &["sp_core", "ecdsa"];
 
+/// [`Type`]-associated [`Path`] `ident` for [sp_runtime::generic::UncheckedExtrinsic].
+pub const UNCHECKED_EXTRINSIC: &str = "UncheckedExtrinsic";
+
 /// [`Variant`] name `None` that must be found for type to be processed as
 /// `Option`.
 pub const NONE: &str = "None";
@@ -337,6 +340,7 @@ pub enum SpecialtyTypeHinted {
     SignatureEd25519,
     SignatureSr25519,
     SignatureEcdsa,
+    UncheckedExtrinsic,
 }
 
 /// Specialty types that are associated with particular pallet. Currently `Call`
@@ -423,6 +427,7 @@ impl SpecialtyTypeHinted {
                     SP_CORE_ECDSA => Self::SignatureEcdsa,
                     _ => Self::None,
                 },
+                UNCHECKED_EXTRINSIC => Self::UncheckedExtrinsic,
                 _ => Self::None,
             },
             None => Self::None,
@@ -547,6 +552,7 @@ impl SpecialtyTypeChecked {
             SpecialtyTypeHinted::SignatureEd25519 => Self::SignatureEd25519,
             SpecialtyTypeHinted::SignatureSr25519 => Self::SignatureSr25519,
             SpecialtyTypeHinted::SignatureEcdsa => Self::SignatureEcdsa,
+            SpecialtyTypeHinted::UncheckedExtrinsic => Self::None,
         }
     }
 }

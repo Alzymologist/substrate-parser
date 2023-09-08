@@ -31,12 +31,30 @@ fn metadata(filename: &str) -> RuntimeMetadataV14 {
     RuntimeMetadataV14::decode(&mut &metadata_vec[..]).unwrap()
 }
 
-fn specs() -> ShortSpecs {
+fn specs_westend() -> ShortSpecs {
     ShortSpecs {
         base58prefix: 42,
         decimals: 12,
         name: "westend".to_string(),
         unit: "WND".to_string(),
+    }
+}
+
+fn specs_acala() -> ShortSpecs {
+    ShortSpecs {
+        base58prefix: 10,
+        decimals: 12,
+        name: "acala".to_string(),
+        unit: "ACA".to_string(),
+    }
+}
+
+fn specs_polkadot() -> ShortSpecs {
+    ShortSpecs {
+        base58prefix: 0,
+        decimals: 10,
+        name: "polkadot".to_string(),
+        unit: "DOT".to_string(),
     }
 }
 
@@ -93,7 +111,7 @@ fn tr_1() {
         ),
     )
     .unwrap()
-    .card(&specs());
+    .card(&specs_westend());
 
     let call_printed = format!(
         "\n{}\n",
@@ -172,7 +190,7 @@ fn tr_2() {
         ),
     )
     .unwrap()
-    .card(&specs());
+    .card(&specs_westend());
 
     let call_printed = format!(
         "\n{}\n",
@@ -283,7 +301,7 @@ fn tr_3() {
         ),
     )
     .unwrap()
-    .card(&specs());
+    .card(&specs_westend());
 
     let call_printed = format!(
         "\n{}\n",
@@ -342,7 +360,7 @@ fn tr_4() {
         ),
     )
     .unwrap()
-    .card(&specs());
+    .card(&specs_westend());
 
     let call_printed = format!(
         "\n{}\n",
@@ -385,12 +403,6 @@ Block Hash: 1b2b0a177ad4f3f93f9a56dae700e938a40201a5beabbda160a74c70e612c66a
 #[test]
 fn tr_5() {
     let data = hex::decode("a80a0000dc621b10081b4b51335553ef8df227feb0327649d00beab6e09c10a1dce973590b00407a10f35a24010000dc07000001000000fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c5cfeb3e46c080274613bdb80809a3e84fe782ac31ea91e2c778de996f738e620").unwrap();
-    let specs_acala = ShortSpecs {
-        base58prefix: 10,
-        decimals: 12,
-        name: "acala".to_string(),
-        unit: "ACA".to_string(),
-    };
     let reply = parse_transaction(
         &data.as_ref(),
         &mut (),
@@ -403,7 +415,7 @@ fn tr_5() {
         ),
     )
     .unwrap()
-    .card(&specs_acala);
+    .card(&specs_acala());
 
     let call_printed = format!(
         "\n{}\n",
@@ -1203,7 +1215,7 @@ fn short_metadata_2_decode() {
         ),
     )
     .unwrap()
-    .card(&specs());
+    .card(&specs_westend());
 
     let call_printed = format!(
         "\n{}\n",
@@ -1263,6 +1275,146 @@ Tip: 0 pWND
 Network: westend9111
 Tx Version: 7
 Block Hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff
+";
+    assert_eq!(extensions_known, extensions_printed);
+}
+
+#[test]
+fn short_metadata_3_decode() {
+    let data = hex::decode("a00a0304a84b841c4d9d1a179be03bb31131c14ebf6ce22233158139ae28a3dfaac5fe1560a5e9e05cd5038d248ed73e0d9808000003000000fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64cfc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c").unwrap();
+
+    let short_metadata =
+        cut_metadata(&data.as_ref(), &mut (), &metadata("for_tests/acala2200")).unwrap();
+
+    let reply = parse_transaction(
+        &data.as_ref(),
+        &mut (),
+        &short_metadata,
+        H256(
+            hex::decode("fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
+    )
+    .unwrap()
+    .card(&specs_acala());
+
+    let call_printed = format!(
+        "\n{}\n",
+        reply
+            .call_result
+            .unwrap()
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let call_known = "
+Pallet: Balances
+  Call: transfer_keep_alive
+    Field Name: dest
+      Enum
+        Enum Variant Name: Address20
+          Sequence u8: a84b841c4d9d1a179be03bb31131c14ebf6ce222
+    Field Name: value
+      Balance: 123456789012345.678901234567890123456789 TACA
+";
+    assert_eq!(call_known, call_printed);
+
+    let extensions_printed = format!(
+        "\n{}\n",
+        reply
+            .extensions
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let extensions_known = "
+Era: Mortal, phase: 61, period: 64
+Struct: 1 field(s)
+  Field Name: nonce
+    Nonce: 2339
+Tip: 55.555555 uACA
+Network: acala2200
+Tx Version: 3
+Block Hash: fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c
+";
+    assert_eq!(extensions_known, extensions_printed);
+}
+
+#[test]
+fn short_metadata_4_decode() {
+    let data = hex::decode("641a04100000083434000008383800000c31333200000c313736d503040b63ce64c10c05d62400001800000091b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c391b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3").unwrap();
+
+    let short_metadata =
+        cut_metadata(&data.as_ref(), &mut (), &metadata("for_tests/polkadot9430")).unwrap();
+
+    let reply = parse_transaction(
+        &data.as_ref(),
+        &mut (),
+        &short_metadata,
+        H256(
+            hex::decode("91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
+    )
+    .unwrap()
+    .card(&specs_polkadot());
+
+    let call_printed = format!(
+        "\n{}\n",
+        reply
+            .call_result
+            .unwrap()
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let call_known = "
+Pallet: Utility
+  Call: force_batch
+    Field Name: calls
+      Sequence: 4 element(s)
+        Pallet: System
+          Call: remark
+            Field Name: remark
+              Text: 44
+        Pallet: System
+          Call: remark
+            Field Name: remark
+              Text: 88
+        Pallet: System
+          Call: remark
+            Field Name: remark
+              Text: 132
+        Pallet: System
+          Call: remark
+            Field Name: remark
+              Text: 176
+";
+    assert_eq!(call_known, call_printed);
+
+    let extensions_printed = format!(
+        "\n{}\n",
+        reply
+            .extensions
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let extensions_known = "
+Era: Mortal, phase: 61, period: 64
+Nonce: 1
+Tip: 555.2342355555 DOT
+Network: polkadot9430
+Tx Version: 24
+Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 ";
     assert_eq!(extensions_known, extensions_printed);
 }

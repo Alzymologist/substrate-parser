@@ -243,24 +243,30 @@ where
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let extrinsic_ty_id = meta_v14.extrinsic().ty.id;
+    let extrinsic_ty = meta_v14.extrinsic().ty;
     let meta_v14_types = meta_v14.types();
-    let extrinsic_ty = meta_v14_types.resolve_ty(extrinsic_ty_id, ext_memory)?;
+
+    let husked_extrinsic_ty =
+        husk_type::<E, M>(&extrinsic_ty, &meta_v14_types, ext_memory, Checker::new())?;
 
     // check here that the underlying type is really `Vec<u8>`
-    match extrinsic_ty.type_def {
+    match husked_extrinsic_ty.ty.type_def {
         TypeDef::Sequence(s) => {
             let element_ty_id = s.type_param.id;
             let element_ty = meta_v14_types.resolve_ty(element_ty_id, ext_memory)?;
             if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
-                Ok(extrinsic_ty.type_params)
+                Ok(husked_extrinsic_ty.ty.type_params)
             } else {
-                Err(ParserError::UnexpectedExtrinsicType { extrinsic_ty_id })
+                Err(ParserError::UnexpectedExtrinsicType {
+                    extrinsic_ty_id: husked_extrinsic_ty.id,
+                })
             }
         }
         TypeDef::Composite(c) => {
             if c.fields.len() != 1 {
-                Err(ParserError::UnexpectedExtrinsicType { extrinsic_ty_id })
+                Err(ParserError::UnexpectedExtrinsicType {
+                    extrinsic_ty_id: husked_extrinsic_ty.id,
+                })
             } else {
                 let field_ty_id = c.fields[0].ty.id;
                 let field_ty = meta_v14_types.resolve_ty(field_ty_id, ext_memory)?;
@@ -269,16 +275,22 @@ where
                         let element_ty_id = s.type_param.id;
                         let element_ty = meta_v14_types.resolve_ty(element_ty_id, ext_memory)?;
                         if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
-                            Ok(extrinsic_ty.type_params)
+                            Ok(husked_extrinsic_ty.ty.type_params)
                         } else {
-                            Err(ParserError::UnexpectedExtrinsicType { extrinsic_ty_id })
+                            Err(ParserError::UnexpectedExtrinsicType {
+                                extrinsic_ty_id: husked_extrinsic_ty.id,
+                            })
                         }
                     }
-                    _ => Err(ParserError::UnexpectedExtrinsicType { extrinsic_ty_id }),
+                    _ => Err(ParserError::UnexpectedExtrinsicType {
+                        extrinsic_ty_id: husked_extrinsic_ty.id,
+                    }),
                 }
             }
         }
-        _ => Err(ParserError::UnexpectedExtrinsicType { extrinsic_ty_id }),
+        _ => Err(ParserError::UnexpectedExtrinsicType {
+            extrinsic_ty_id: husked_extrinsic_ty.id,
+        }),
     }
 }
 
