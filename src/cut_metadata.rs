@@ -383,14 +383,18 @@ where
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let extrinsic_ty_id = meta_v14.extrinsic().ty.id;
+    let extrinsic_ty = meta_v14.extrinsic().ty;
     let meta_v14_types = meta_v14.types();
-    let extrinsic_ty = meta_v14_types
-        .resolve_ty(extrinsic_ty_id, ext_memory)
+
+    let extrinsic_ty_resolved = meta_v14_types
+        .resolve_ty(extrinsic_ty.id, ext_memory)
         .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
 
+    add_ty_as_regular::<E>(draft_registry, extrinsic_ty_resolved, extrinsic_ty.id)?;
+    let husked_extrinsic_ty = husk_type_no_info::<E, M>(&extrinsic_ty, &meta_v14_types, ext_memory, Checker::new(), draft_registry)?;
+
     // check here that the underlying type is really `Vec<u8>`
-    let type_params = match extrinsic_ty.type_def {
+    let type_params = match husked_extrinsic_ty.ty.type_def {
         TypeDef::Sequence(ref s) => {
             let element_ty_id = s.type_param.id;
             let element_ty = meta_v14_types
@@ -398,17 +402,17 @@ where
                 .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
             if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
                 add_ty_as_regular(draft_registry, element_ty, element_ty_id)?;
-                extrinsic_ty.type_params.to_owned()
+                husked_extrinsic_ty.ty.type_params.to_owned()
             } else {
                 return Err(MetaCutError::Signable(SignableError::Parsing(
-                    ParserError::UnexpectedExtrinsicType { extrinsic_ty_id },
+                    ParserError::UnexpectedExtrinsicType { extrinsic_ty_id: husked_extrinsic_ty.id },
                 )));
             }
         }
         TypeDef::Composite(ref c) => {
             if c.fields.len() != 1 {
                 return Err(MetaCutError::Signable(SignableError::Parsing(
-                    ParserError::UnexpectedExtrinsicType { extrinsic_ty_id },
+                    ParserError::UnexpectedExtrinsicType { extrinsic_ty_id: husked_extrinsic_ty.id },
                 )));
             } else {
                 let field_ty_id = c.fields[0].ty.id;
@@ -423,16 +427,16 @@ where
                             .map_err(|e| MetaCutError::Signable(SignableError::Parsing(e)))?;
                         if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
                             add_ty_as_regular(draft_registry, field_ty, field_ty_id)?;
-                            extrinsic_ty.type_params.to_owned()
+                            husked_extrinsic_ty.ty.type_params.to_owned()
                         } else {
                             return Err(MetaCutError::Signable(SignableError::Parsing(
-                                ParserError::UnexpectedExtrinsicType { extrinsic_ty_id },
+                                ParserError::UnexpectedExtrinsicType { extrinsic_ty_id: husked_extrinsic_ty.id },
                             )));
                         }
                     }
                     _ => {
                         return Err(MetaCutError::Signable(SignableError::Parsing(
-                            ParserError::UnexpectedExtrinsicType { extrinsic_ty_id },
+                            ParserError::UnexpectedExtrinsicType { extrinsic_ty_id: husked_extrinsic_ty.id },
                         )))
                     }
                 }
@@ -440,11 +444,11 @@ where
         }
         _ => {
             return Err(MetaCutError::Signable(SignableError::Parsing(
-                ParserError::UnexpectedExtrinsicType { extrinsic_ty_id },
+                ParserError::UnexpectedExtrinsicType { extrinsic_ty_id: husked_extrinsic_ty.id },
             )))
         }
     };
-    add_ty_as_regular(draft_registry, extrinsic_ty, extrinsic_ty_id)?;
+    add_ty_as_regular(draft_registry, husked_extrinsic_ty.ty, husked_extrinsic_ty.id)?;
     Ok(type_params)
 }
 
