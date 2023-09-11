@@ -64,7 +64,9 @@ pub trait HashPrep {
 
 impl HashPrep for ShortRegistryEntry {
     fn hash_prep<E: ExternalMemory>(&self) -> Result<Vec<ShortRegistryEntry>, MetaCutError<E>> {
-        if let TypeDef::Variant(ref type_def_variant) = self.ty.type_def {
+        if let SpecialtyTypeHinted::Option(_) = SpecialtyTypeHinted::from_type(&self.ty) {
+            Ok(vec![self.to_owned()])
+        } else if let TypeDef::Variant(ref type_def_variant) = self.ty.type_def {
             let mut out: Vec<ShortRegistryEntry> = Vec::new();
             for variant in type_def_variant.variants.iter() {
                 let ty = Type {
@@ -105,31 +107,32 @@ impl ShortRegistry {
             let mut found_in_portable_registry: Option<usize> = None;
             for (index, whole_registry_entry) in out.iter().enumerate() {
                 if whole_registry_entry.id == short_registry_entry.id {
-                    match whole_registry_entry.ty.type_def {
-                        TypeDef::Variant(ref type_def_variant_whole) => {
-                            if let TypeDef::Variant(ref type_def_variant_short) =
-                                short_registry_entry.ty.type_def
-                            {
-                                if type_def_variant_whole == type_def_variant_short {
-                                    found_in_portable_registry = Some(index);
-                                    break;
-                                }
-                            } else {
-                                return Err(MetaCutError::IndexTwice {
-                                    id: short_registry_entry.id,
-                                });
-                            }
-                        }
-                        _ => {
-                            if whole_registry_entry.ty == short_registry_entry.ty {
+                    if let SpecialtyTypeHinted::Option(_) =
+                        SpecialtyTypeHinted::from_type(&whole_registry_entry.ty)
+                    {
+                        found_in_portable_registry = Some(index)
+                    } else if let TypeDef::Variant(ref type_def_variant_whole) =
+                        whole_registry_entry.ty.type_def
+                    {
+                        if let TypeDef::Variant(ref type_def_variant_short) =
+                            short_registry_entry.ty.type_def
+                        {
+                            if type_def_variant_whole == type_def_variant_short {
                                 found_in_portable_registry = Some(index);
                                 break;
-                            } else {
-                                return Err(MetaCutError::IndexTwice {
-                                    id: short_registry_entry.id,
-                                });
                             }
+                        } else {
+                            return Err(MetaCutError::IndexTwice {
+                                id: short_registry_entry.id,
+                            });
                         }
+                    } else if whole_registry_entry.ty == short_registry_entry.ty {
+                        found_in_portable_registry = Some(index);
+                        break;
+                    } else {
+                        return Err(MetaCutError::IndexTwice {
+                            id: short_registry_entry.id,
+                        });
                     }
                 }
             }
@@ -280,12 +283,12 @@ fn add_as_enum<E: ExternalMemory>(
                     ref mut variants,
                 } => {
                     if known_path == path {
+                        // remove variant docs in shortened metadata
+                        variant.docs.clear();
+                        for field in variant.fields.iter_mut() {
+                            field.docs.clear();
+                        }
                         if !variants.contains(&variant) {
-                            // remove variant docs in shortened metadata
-                            variant.docs.clear();
-                            for field in variant.fields.iter_mut() {
-                                field.docs.clear();
-                            }
                             variants.push(variant)
                         }
                         return Ok(());

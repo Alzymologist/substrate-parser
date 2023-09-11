@@ -17,13 +17,17 @@ use sp_runtime::generic::Era;
 use crate::cards::{
     ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
 };
-use crate::cut_metadata::{cut_metadata, pass_call, DraftRegistry};
+use crate::cut_metadata::{
+    cut_metadata, cut_metadata_transaction_unmarked, pass_call, DraftRegistry, HashPrep,
+};
 use crate::error::{ParserError, SignableError};
 use crate::special_indicators::SpecialtyPrimitive;
 use crate::storage_data::{decode_as_storage_entry, KeyData, KeyPart};
 #[cfg(feature = "std")]
 use crate::unchecked_extrinsic::{decode_as_unchecked_extrinsic, UncheckedExtrinsic};
-use crate::{decode_all_as_type, parse_transaction, MarkedData, ShortSpecs};
+use crate::{
+    decode_all_as_type, parse_transaction, parse_transaction_unmarked, MarkedData, ShortSpecs,
+};
 
 fn metadata(filename: &str) -> RuntimeMetadataV14 {
     let metadata_hex = std::fs::read_to_string(filename).unwrap();
@@ -1283,8 +1287,21 @@ Block Hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff
 fn short_metadata_3_decode() {
     let data = hex::decode("a00a0304a84b841c4d9d1a179be03bb31131c14ebf6ce22233158139ae28a3dfaac5fe1560a5e9e05cd5038d248ed73e0d9808000003000000fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64cfc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c").unwrap();
 
-    let short_metadata =
-        cut_metadata(&data.as_ref(), &mut (), &metadata("for_tests/acala2200")).unwrap();
+    let metadata_acala = metadata("for_tests/acala2200");
+
+    let short_metadata = cut_metadata(&data.as_ref(), &mut (), &metadata_acala).unwrap();
+
+    let hash_prep_whole_registry = metadata_acala.types.hash_prep::<()>().unwrap();
+    assert_eq!(2462, hash_prep_whole_registry.len());
+
+    let hash_prep_short_registry = short_metadata.short_registry.hash_prep::<()>().unwrap();
+    assert_eq!(25, hash_prep_short_registry.len());
+
+    let excluded = short_metadata
+        .short_registry
+        .exclude_from::<()>(&metadata_acala.types)
+        .unwrap();
+    assert_eq!(2437, excluded.len());
 
     let reply = parse_transaction(
         &data.as_ref(),
@@ -1348,8 +1365,21 @@ Block Hash: fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c
 fn short_metadata_4_decode() {
     let data = hex::decode("641a04100000083434000008383800000c31333200000c313736d503040b63ce64c10c05d62400001800000091b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c391b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3").unwrap();
 
-    let short_metadata =
-        cut_metadata(&data.as_ref(), &mut (), &metadata("for_tests/polkadot9430")).unwrap();
+    let metadata_polkadot = metadata("for_tests/polkadot9430");
+
+    let short_metadata = cut_metadata(&data.as_ref(), &mut (), &metadata_polkadot).unwrap();
+
+    let hash_prep_whole_registry = metadata_polkadot.types.hash_prep::<()>().unwrap();
+    assert_eq!(2705, hash_prep_whole_registry.len());
+
+    let hash_prep_short_registry = short_metadata.short_registry.hash_prep::<()>().unwrap();
+    assert_eq!(25, hash_prep_short_registry.len());
+
+    let excluded = short_metadata
+        .short_registry
+        .exclude_from::<()>(&metadata_polkadot.types)
+        .unwrap();
+    assert_eq!(2680, excluded.len());
 
     let reply = parse_transaction(
         &data.as_ref(),
@@ -1411,6 +1441,259 @@ Pallet: Utility
     let extensions_known = "
 Era: Mortal, phase: 61, period: 64
 Nonce: 1
+Tip: 555.2342355555 DOT
+Network: polkadot9430
+Tx Version: 24
+Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
+";
+    assert_eq!(extensions_known, extensions_printed);
+}
+
+#[test]
+fn short_metadata_5_decode() {
+    let data = hex::decode("6301039508080401380074063d03aeada02cc26977d0ab68927e12516a3287a3c72cc937981d1e7c9ade0cf91f0300eda947e425ea94b7642cc2d3939d30207e457a92049804580804044e7eca0311ba0594016808003d3d080701ada1020180d1043985798860eb63723790bda41de487e0730251717471e9660ab0aa5a6a65dde70807042c021673020808049d604a87138c0704aa060102ab90ebe5eeaf95088767ace3e78d04147180b016cf193a542fe5c9a4291e70784f6d64fb705349e4a361c453b28d18ba43b8e0bee72dad92845acbe281f21ea6c270f553481dc183b60ca8c1803544f33691adef9c5d4f807827e288143f4af2aa1c2c0b9e6087db1decedb85e2774f792c9bbc61ed85f031d11d175f93ecf7d030800a90307010107d5ebd78dfce4bdb789c0e310e2172b3f3a13ec09e39ba8b644e368816bd7acd57f10030025867d9fc900c0f7afe1ce1fc756f152b3f38e5a010001dec102c8abb0449d91dd617be6a7dc4d7ea0ae7f7cebaf1c9e4c9f0a64716c3d007800000000d50391010b63ce64c10c05d62400001800000091b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c391b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3").unwrap();
+
+    let metadata_polkadot = metadata("for_tests/polkadot9430");
+
+    let short_metadata =
+        cut_metadata_transaction_unmarked(&data.as_ref(), &mut (), &metadata_polkadot).unwrap();
+
+    let hash_prep_whole_registry = metadata_polkadot.types.hash_prep::<()>().unwrap();
+    assert_eq!(2705, hash_prep_whole_registry.len());
+
+    let hash_prep_short_registry = short_metadata.short_registry.hash_prep::<()>().unwrap();
+    assert_eq!(66, hash_prep_short_registry.len());
+
+    let excluded = short_metadata
+        .short_registry
+        .exclude_from::<()>(&metadata_polkadot.types)
+        .unwrap();
+    assert_eq!(2639, excluded.len());
+
+    let reply = parse_transaction_unmarked(
+        &data.as_ref(),
+        &mut (),
+        &short_metadata,
+        H256(
+            hex::decode("91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
+    )
+    .unwrap()
+    .card(&specs_polkadot());
+
+    let call_printed = format!(
+        "\n{}\n",
+        reply
+            .call
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let call_known = "
+Pallet: XcmPallet
+  Call: teleport_assets
+    Field Name: dest
+      Enum
+        Enum Variant Name: V3
+          Struct: 2 field(s)
+            Field Name: parents
+              u8: 149
+            Field Name: interior
+              Enum
+                Enum Variant Name: X8
+                  Field Number: 1
+                    Enum
+                      Enum Variant Name: Plurality
+                        Field Name: id
+                          Enum
+                            Enum Variant Name: Technical
+                        Field Name: part
+                          Enum
+                            Enum Variant Name: Members
+                              Field Name: count
+                                u32: 14
+                  Field Number: 2
+                    Enum
+                      Enum Variant Name: Parachain
+                        u32: 29
+                  Field Number: 3
+                    Enum
+                      Enum Variant Name: GeneralKey
+                        Field Name: length
+                          u8: 61
+                        Field Name: data
+                          Sequence u8: 03aeada02cc26977d0ab68927e12516a3287a3c72cc937981d1e7c9ade0cf91f
+                  Field Number: 4
+                    Enum
+                      Enum Variant Name: AccountKey20
+                        Field Name: network
+                          Option: None
+                        Field Name: key
+                          Sequence u8: eda947e425ea94b7642cc2d3939d30207e457a92
+                  Field Number: 5
+                    Enum
+                      Enum Variant Name: PalletInstance
+                        u8: 152
+                  Field Number: 6
+                    Enum
+                      Enum Variant Name: PalletInstance
+                        u8: 88
+                  Field Number: 7
+                    Enum
+                      Enum Variant Name: Plurality
+                        Field Name: id
+                          Enum
+                            Enum Variant Name: Technical
+                        Field Name: part
+                          Enum
+                            Enum Variant Name: MoreThanProportion
+                              Field Name: nom
+                                u32: 15900563
+                              Field Name: denom
+                                u32: 11908
+                  Field Number: 8
+                    Enum
+                      Enum Variant Name: GeneralIndex
+                        u128: 37
+    Field Name: beneficiary
+      Enum
+        Enum Variant Name: V2
+          Struct: 2 field(s)
+            Field Name: parents
+              u8: 104
+            Field Name: interior
+              Enum
+                Enum Variant Name: X8
+                  Field Number: 1
+                    Enum
+                      Enum Variant Name: Parachain
+                        u32: 3919
+                  Field Number: 2
+                    Enum
+                      Enum Variant Name: Plurality
+                        Field Name: id
+                          Enum
+                            Enum Variant Name: Defense
+                        Field Name: part
+                          Enum
+                            Enum Variant Name: Members
+                              Field Name: count
+                                u32: 10347
+                  Field Number: 3
+                    Enum
+                      Enum Variant Name: AccountIndex64
+                        Field Name: network
+                          Enum
+                            Enum Variant Name: Named
+                              Sequence u8: d1043985798860eb63723790bda41de487e0730251717471e9660ab0aa5a6a65
+                        Field Name: index
+                          u64: 14839
+                  Field Number: 4
+                    Enum
+                      Enum Variant Name: Plurality
+                        Field Name: id
+                          Enum
+                            Enum Variant Name: Defense
+                        Field Name: part
+                          Enum
+                            Enum Variant Name: MoreThanProportion
+                              Field Name: nom
+                                u32: 11
+                              Field Name: denom
+                                u32: 10274176
+                  Field Number: 5
+                    Enum
+                      Enum Variant Name: Plurality
+                        Field Name: id
+                          Enum
+                            Enum Variant Name: Administration
+                        Field Name: part
+                          Enum
+                            Enum Variant Name: MoreThanProportion
+                              Field Name: nom
+                                u32: 6183
+                              Field Name: denom
+                                u32: 587522514
+                  Field Number: 6
+                    Enum
+                      Enum Variant Name: OnlyChild
+                  Field Number: 7
+                    Enum
+                      Enum Variant Name: PalletInstance
+                        u8: 170
+                  Field Number: 8
+                    Enum
+                      Enum Variant Name: GeneralKey
+                        Sequence u8: ab90ebe5eeaf95088767ace3e78d04147180b016cf193a542fe5c9a4291e70784f6d64fb705349e4a361c453b28d18ba43b8e0bee72dad92845acbe281f21ea6c270f553481dc183b60ca8c1803544f33691adef9c5d4f807827e288143f4af2aa1c2c0b9e6087db1decedb85e2774f792c9bbc61ed85f031d11d175f93ecf7d
+    Field Name: assets
+      Enum
+        Enum Variant Name: V3
+          Sequence: 2 element(s)
+            Struct: 2 field(s)
+              Field Name: id
+                Enum
+                  Enum Variant Name: Concrete
+                    Struct: 2 field(s)
+                      Field Name: parents
+                        u8: 169
+                      Field Name: interior
+                        Enum
+                          Enum Variant Name: X3
+                            Field Number: 1
+                              Enum
+                                Enum Variant Name: OnlyChild
+                            Field Number: 2
+                              Enum
+                                Enum Variant Name: AccountId32
+                                  Field Name: network
+                                    Enum
+                                      Enum Variant Name: Ethereum
+                                        Field Name: chain_id
+                                          u64: 15093
+                                  Field Name: id
+                                    Sequence u8: d78dfce4bdb789c0e310e2172b3f3a13ec09e39ba8b644e368816bd7acd57f10
+                            Field Number: 3
+                              Enum
+                                Enum Variant Name: AccountKey20
+                                  Field Name: network
+                                    Option: None
+                                  Field Name: key
+                                    Sequence u8: 25867d9fc900c0f7afe1ce1fc756f152b3f38e5a
+              Field Name: fun
+                Enum
+                  Enum Variant Name: NonFungible
+                    Enum
+                      Enum Variant Name: Undefined
+            Struct: 2 field(s)
+              Field Name: id
+                Enum
+                  Enum Variant Name: Abstract
+                    Sequence u8: dec102c8abb0449d91dd617be6a7dc4d7ea0ae7f7cebaf1c9e4c9f0a64716c3d
+              Field Name: fun
+                Enum
+                  Enum Variant Name: Fungible
+                    u128: 30
+    Field Name: fee_asset_item
+      u32: 0
+";
+    assert_eq!(call_known, call_printed);
+
+    let extensions_printed = format!(
+        "\n{}\n",
+        reply
+            .extensions
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let extensions_known = "
+Era: Mortal, phase: 61, period: 64
+Nonce: 100
 Tip: 555.2342355555 DOT
 Network: polkadot9430
 Tx Version: 24
