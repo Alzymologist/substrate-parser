@@ -645,13 +645,37 @@ where
     })
 }
 
-/// Signable transaction parsing outcome.
-///
-/// Extensions must be decoded. Call decoding may be successful or not.
+/// Signable transaction parsing outcome, for unmarked transaction.
 #[derive(Debug)]
 pub struct TransactionUnmarkedParsed {
     pub call: Call,
     pub extensions: Vec<ExtendedData>,
+}
+
+/// Signable transaction parsing outcome represented as formatted flat cards,
+/// for unmarked transaction.
+#[derive(Debug)]
+pub struct TransactionUnmarkedCarded {
+    pub call: Vec<ExtendedCard>,
+    pub extensions: Vec<ExtendedCard>,
+}
+
+impl TransactionUnmarkedParsed {
+    /// Transform nested data from `TransactionUnmarkedParsed` into flat cards.
+    pub fn card(self, short_specs: &ShortSpecs) -> TransactionUnmarkedCarded {
+        let start_indent = 0;
+        let mut extensions: Vec<ExtendedCard> = Vec::new();
+        for ext in self.extensions.iter() {
+            let addition_set = ext.card(start_indent, true, short_specs);
+            if !addition_set.is_empty() {
+                extensions.extend_from_slice(&addition_set)
+            }
+        }
+        TransactionUnmarkedCarded {
+            call: self.call.card(start_indent, short_specs),
+            extensions,
+        }
+    }
 }
 
 /// Parse a signable transaction, Ledger format. Call is not prefixed with call length.
