@@ -131,7 +131,7 @@
 //!         Call, ExtendedData, FieldData, Info,
 //!         PalletSpecificData, ParsedData, VariantData,
 //!     },
-//!     special_indicators::SpecialtyPrimitive,
+//!     special_indicators::SpecialtyUnsignedInteger,
 //! };
 //!
 //! // A simple signable transaction: Alice sends some cash by `transfer_keep_alive` method
@@ -219,7 +219,7 @@
 //!         data: ExtendedData {
 //!             data: ParsedData::PrimitiveU128{
 //!                 value: 100000000,
-//!                 specialty: SpecialtyPrimitive::Balance,
+//!                 specialty: SpecialtyUnsignedInteger::Balance,
 //!             },
 //!             info: Vec::new()
 //!         }
@@ -324,7 +324,7 @@
 //!                 data: ExtendedData {
 //!                     data: ParsedData::PrimitiveU32 {
 //!                         value: 261,
-//!                         specialty: SpecialtyPrimitive::Nonce,
+//!                         specialty: SpecialtyUnsignedInteger::Nonce,
 //!                     },
 //!                     info: Vec::new()
 //!                 }
@@ -369,7 +369,7 @@
 //!                 data: ExtendedData {
 //!                     data: ParsedData::PrimitiveU128 {
 //!                         value: 10000000,
-//!                         specialty: SpecialtyPrimitive::Tip
+//!                         specialty: SpecialtyUnsignedInteger::Tip
 //!                     },
 //!                     info: Vec::new()
 //!                 }
@@ -390,14 +390,14 @@
 //!     ExtendedData {
 //!         data: ParsedData::PrimitiveU32 {
 //!             value: 9111,
-//!             specialty: SpecialtyPrimitive::SpecVersion
+//!             specialty: SpecialtyUnsignedInteger::SpecVersion
 //!         },
 //!         info: Vec::new()
 //!     },
 //!     ExtendedData {
 //!         data: ParsedData::PrimitiveU32 {
 //!             value: 7,
-//!             specialty: SpecialtyPrimitive::TxVersion
+//!             specialty: SpecialtyUnsignedInteger::TxVersion
 //!         },
 //!         info: Vec::new()
 //!     },
@@ -513,7 +513,6 @@ use propagated::Propagated;
 pub struct ShortSpecs {
     pub base58prefix: u16,
     pub decimals: u8,
-    pub name: String,
     pub unit: String,
 }
 
@@ -597,11 +596,11 @@ pub struct TransactionCarded<E: ExternalMemory> {
 
 impl<E: ExternalMemory> TransactionParsed<E> {
     /// Transform nested data from `TransactionParsed` into flat cards.
-    pub fn card(self, short_specs: &ShortSpecs) -> TransactionCarded<E> {
+    pub fn card(self, short_specs: &ShortSpecs, spec_name: &str) -> TransactionCarded<E> {
         let start_indent = 0;
         let mut extensions: Vec<ExtendedCard> = Vec::new();
         for ext in self.extensions.iter() {
-            let addition_set = ext.card(start_indent, true, short_specs);
+            let addition_set = ext.card(start_indent, true, short_specs, spec_name);
             if !addition_set.is_empty() {
                 extensions.extend_from_slice(&addition_set)
             }
@@ -609,7 +608,7 @@ impl<E: ExternalMemory> TransactionParsed<E> {
         TransactionCarded {
             call_result: self
                 .call_result
-                .map(|call| call.card(start_indent, short_specs)),
+                .map(|call| call.card(start_indent, short_specs, spec_name)),
             extensions,
         }
     }
@@ -662,17 +661,17 @@ pub struct TransactionUnmarkedCarded {
 
 impl TransactionUnmarkedParsed {
     /// Transform nested data from `TransactionUnmarkedParsed` into flat cards.
-    pub fn card(self, short_specs: &ShortSpecs) -> TransactionUnmarkedCarded {
+    pub fn card(self, short_specs: &ShortSpecs, spec_name: &str) -> TransactionUnmarkedCarded {
         let start_indent = 0;
         let mut extensions: Vec<ExtendedCard> = Vec::new();
         for ext in self.extensions.iter() {
-            let addition_set = ext.card(start_indent, true, short_specs);
+            let addition_set = ext.card(start_indent, true, short_specs, spec_name);
             if !addition_set.is_empty() {
                 extensions.extend_from_slice(&addition_set)
             }
         }
         TransactionUnmarkedCarded {
-            call: self.call.card(start_indent, short_specs),
+            call: self.call.card(start_indent, short_specs, spec_name),
             extensions,
         }
     }

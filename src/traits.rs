@@ -16,13 +16,14 @@ use crate::std::{
 };
 
 use frame_metadata::v14::{ExtrinsicMetadata, PalletMetadata, RuntimeMetadataV14};
+use parity_scale_codec::{Decode, Encode};
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, PortableRegistry, Type};
 
 use crate::cards::ParsedData;
 use crate::cut_metadata::{ShortMetadata, ShortRegistry};
 use crate::decode_all_as_type;
 use crate::error::{MetaVersionError, ParserError};
-use crate::special_indicators::SpecialtyPrimitive;
+use crate::special_indicators::{SpecialtyStr, SpecialtyUnsignedInteger};
 
 pub trait ExternalMemory: Debug {
     type ExternalMemoryError: Debug + Display + Eq + PartialEq;
@@ -96,8 +97,15 @@ impl<'a, E: ExternalMemory> AddressableBuffer<E> for &'a [u8] {
 pub trait AsMetadata<E: ExternalMemory> {
     type TypeRegistry: ResolveType<E>;
     fn types(&self) -> Self::TypeRegistry;
-    fn version_printed(&self) -> Result<String, MetaVersionError>;
+    fn spec_name_version(&self) -> Result<SpecNameVersion, MetaVersionError>;
     fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm>;
+}
+
+#[repr(C)]
+#[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
+pub struct SpecNameVersion {
+    pub printed_spec_version: String,
+    pub spec_name: String,
 }
 
 pub trait ResolveType<E: ExternalMemory> {
@@ -125,7 +133,7 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14 {
         self.types.to_owned()
     }
 
-    fn version_printed(&self) -> Result<String, MetaVersionError> {
+    fn spec_name_version(&self) -> Result<SpecNameVersion, MetaVersionError> {
         let (value, ty) = runtime_version_data_and_ty(&self.pallets)?;
         match decode_all_as_type::<&[u8], (), RuntimeMetadataV14>(
             &ty,
@@ -133,38 +141,13 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14 {
             &mut (),
             &self.types,
         ) {
-            Ok(extended_data) => find_version_in_parsed_data(extended_data.data),
+            Ok(extended_data) => spec_name_version_from_runtime_version_data(extended_data.data),
             Err(_) => Err(MetaVersionError::RuntimeVersionNotDecodeable),
         }
     }
 
     fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm> {
         self.extrinsic.to_owned()
-    }
-}
-
-/// Metadata with spec version.
-pub struct CheckedMetadata {
-    /// Runtime metadata.
-    pub meta_v14: RuntimeMetadataV14,
-
-    /// Metadata spec version, printed.
-    pub version: String,
-}
-
-impl<E: ExternalMemory> AsMetadata<E> for CheckedMetadata {
-    type TypeRegistry = PortableRegistry;
-
-    fn types(&self) -> Self::TypeRegistry {
-        self.meta_v14.types.to_owned()
-    }
-
-    fn version_printed(&self) -> Result<String, MetaVersionError> {
-        Ok(self.version.to_owned())
-    }
-
-    fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm> {
-        self.meta_v14.extrinsic.to_owned()
     }
 }
 
@@ -190,45 +173,74 @@ fn runtime_version_data_and_ty(
     runtime_version_data_and_ty.ok_or(MetaVersionError::NoVersionInConstants)
 }
 
-fn find_version_in_parsed_data(parsed_data: ParsedData) -> Result<String, MetaVersionError> {
-    let mut spec_version = None;
+fn spec_name_version_from_runtime_version_data(
+    parsed_data: ParsedData,
+) -> Result<SpecNameVersion, MetaVersionError> {
+    let mut printed_spec_version = None;
+    let mut spec_name = None;
+
     if let ParsedData::Composite(fields) = parsed_data {
         for field in fields.iter() {
-            match field.data.data {
+            match &field.data.data {
                 ParsedData::PrimitiveU8 {
                     value,
-                    specialty: SpecialtyPrimitive::SpecVersion,
+                    specialty: SpecialtyUnsignedInteger::SpecVersion,
                 } => {
-                    spec_version = Some(value.to_string());
-                    break;
+                    if printed_spec_version.is_none() {
+                        printed_spec_version = Some(value.to_string())
+                    } else {
+                        return Err(MetaVersionError::SpecVersionIdentifierTwice);
+                    }
                 }
                 ParsedData::PrimitiveU16 {
                     value,
-                    specialty: SpecialtyPrimitive::SpecVersion,
+                    specialty: SpecialtyUnsignedInteger::SpecVersion,
                 } => {
-                    spec_version = Some(value.to_string());
-                    break;
+                    if printed_spec_version.is_none() {
+                        printed_spec_version = Some(value.to_string())
+                    } else {
+                        return Err(MetaVersionError::SpecVersionIdentifierTwice);
+                    }
                 }
                 ParsedData::PrimitiveU32 {
                     value,
-                    specialty: SpecialtyPrimitive::SpecVersion,
+                    specialty: SpecialtyUnsignedInteger::SpecVersion,
                 } => {
-                    spec_version = Some(value.to_string());
-                    break;
+                    if printed_spec_version.is_none() {
+                        printed_spec_version = Some(value.to_string())
+                    } else {
+                        return Err(MetaVersionError::SpecVersionIdentifierTwice);
+                    }
                 }
                 ParsedData::PrimitiveU64 {
                     value,
-                    specialty: SpecialtyPrimitive::SpecVersion,
+                    specialty: SpecialtyUnsignedInteger::SpecVersion,
                 } => {
-                    spec_version = Some(value.to_string());
-                    break;
+                    if printed_spec_version.is_none() {
+                        printed_spec_version = Some(value.to_string())
+                    } else {
+                        return Err(MetaVersionError::SpecVersionIdentifierTwice);
+                    }
                 }
                 ParsedData::PrimitiveU128 {
                     value,
-                    specialty: SpecialtyPrimitive::SpecVersion,
+                    specialty: SpecialtyUnsignedInteger::SpecVersion,
                 } => {
-                    spec_version = Some(value.to_string());
-                    break;
+                    if printed_spec_version.is_none() {
+                        printed_spec_version = Some(value.to_string())
+                    } else {
+                        return Err(MetaVersionError::SpecVersionIdentifierTwice);
+                    }
+                }
+                ParsedData::Text {
+                    text,
+                    specialty: SpecialtyStr::SpecName,
+                } => {
+                    if spec_name.is_none() {
+                        spec_name = Some(text.to_owned())
+                    } else {
+                        return Err(MetaVersionError::SpecNameIdentifierTwice);
+                    }
                 }
                 _ => (),
             }
@@ -236,10 +248,18 @@ fn find_version_in_parsed_data(parsed_data: ParsedData) -> Result<String, MetaVe
     } else {
         return Err(MetaVersionError::UnexpectedRuntimeVersionFormat);
     }
-    match spec_version {
-        Some(a) => Ok(a),
-        None => Err(MetaVersionError::NoSpecVersionIdentifier),
-    }
+    let printed_spec_version = match printed_spec_version {
+        Some(a) => a,
+        None => return Err(MetaVersionError::NoSpecVersionIdentifier),
+    };
+    let spec_name = match spec_name {
+        Some(a) => a,
+        None => return Err(MetaVersionError::NoSpecNameIdentifier),
+    };
+    Ok(SpecNameVersion {
+        printed_spec_version,
+        spec_name,
+    })
 }
 
 impl<E: ExternalMemory> ResolveType<E> for ShortRegistry {
@@ -264,8 +284,8 @@ impl<E: ExternalMemory> AsMetadata<E> for ShortMetadata {
         self.short_registry.to_owned()
     }
 
-    fn version_printed(&self) -> Result<String, MetaVersionError> {
-        Ok(self.chain_version_printed.to_owned())
+    fn spec_name_version(&self) -> Result<SpecNameVersion, MetaVersionError> {
+        Ok(self.spec_name_version.to_owned())
     }
 
     fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm> {

@@ -222,16 +222,22 @@ impl ExtensionsError {
 /// Error in metadata version constant search.
 #[derive(Debug, Eq, PartialEq)]
 pub enum MetaVersionError {
+    NoSpecNameIdentifier,
     NoSpecVersionIdentifier,
     NoSystemPallet,
     NoVersionInConstants,
     RuntimeVersionNotDecodeable,
+    SpecNameIdentifierTwice,
+    SpecVersionIdentifierTwice,
     UnexpectedRuntimeVersionFormat,
 }
 
 impl MetaVersionError {
     fn error_text(&self) -> String {
         match &self {
+            MetaVersionError::NoSpecNameIdentifier => {
+                String::from("No spec name found in decoded `Version` constant.")
+            }
             MetaVersionError::NoSpecVersionIdentifier => {
                 String::from("No spec version found in decoded `Version` constant.")
             }
@@ -241,6 +247,12 @@ impl MetaVersionError {
             }
             MetaVersionError::RuntimeVersionNotDecodeable => String::from(
                 "`Version` constant from metadata `System` pallet could not be decoded.",
+            ),
+            MetaVersionError::SpecNameIdentifierTwice => String::from(
+                "Spec name associated identifier found twice when decoding `Version` constant.",
+            ),
+            MetaVersionError::SpecVersionIdentifierTwice => String::from(
+                "Spec version associated identifier found twice when decoding `Version` constant.",
             ),
             MetaVersionError::UnexpectedRuntimeVersionFormat => {
                 String::from("Decoded `Version` constant is not a composite.")

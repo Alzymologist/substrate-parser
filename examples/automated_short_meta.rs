@@ -9,7 +9,7 @@ use std::str::FromStr;
 #[cfg(feature = "std")]
 use substrate_parser::{
     cut_metadata::{cut_metadata, HashPrep, ShortMetadata},
-    parse_transaction,
+    parse_transaction, ShortSpecs,
 };
 
 #[cfg(feature = "std")]
@@ -19,9 +19,15 @@ fn main() {
     println!("length of basic meta: {}", meta.len());
     let meta_v14 = RuntimeMetadataV14::decode(&mut &meta[5..]).unwrap();
 
+    let specs_westend = ShortSpecs {
+        base58prefix: 42,
+        decimals: 12,
+        unit: "WND".to_string(),
+    };
+
     let data = hex::decode("c901100208060007001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d55000800d624000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
 
-    let short_metadata = cut_metadata(&data.as_ref(), &mut (), &meta_v14).unwrap();
+    let short_metadata = cut_metadata(&data.as_ref(), &mut (), &meta_v14, &specs_westend).unwrap();
     let short_meta_scaled = short_metadata.encode();
     println!("length of shortened meta: {}", short_meta_scaled.len());
     std::fs::write(

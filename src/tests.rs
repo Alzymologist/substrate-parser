@@ -21,8 +21,9 @@ use crate::cut_metadata::{
     cut_metadata, cut_metadata_transaction_unmarked, pass_call, DraftRegistry, HashPrep,
 };
 use crate::error::{ParserError, SignableError};
-use crate::special_indicators::SpecialtyPrimitive;
+use crate::special_indicators::SpecialtyUnsignedInteger;
 use crate::storage_data::{decode_as_storage_entry, KeyData, KeyPart};
+use crate::traits::AsMetadata;
 #[cfg(feature = "std")]
 use crate::unchecked_extrinsic::{decode_as_unchecked_extrinsic, UncheckedExtrinsic};
 use crate::{
@@ -39,7 +40,6 @@ fn specs_westend() -> ShortSpecs {
     ShortSpecs {
         base58prefix: 42,
         decimals: 12,
-        name: "westend".to_string(),
         unit: "WND".to_string(),
     }
 }
@@ -48,7 +48,6 @@ fn specs_acala() -> ShortSpecs {
     ShortSpecs {
         base58prefix: 10,
         decimals: 12,
-        name: "acala".to_string(),
         unit: "ACA".to_string(),
     }
 }
@@ -57,7 +56,6 @@ fn specs_polkadot() -> ShortSpecs {
     ShortSpecs {
         base58prefix: 0,
         decimals: 10,
-        name: "polkadot".to_string(),
         unit: "DOT".to_string(),
     }
 }
@@ -102,11 +100,14 @@ fn assets_metadata_storage_entry(
 
 #[test]
 fn tr_1() {
+    let metadata_westend = metadata("for_tests/westend9111");
+
     let data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
+
     let reply = parse_transaction(
         &data.as_ref(),
         &mut (),
-        &metadata("for_tests/westend9111"),
+        &metadata_westend,
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -115,7 +116,12 @@ fn tr_1() {
         ),
     )
     .unwrap()
-    .card(&specs_westend());
+    .card(
+        &specs_westend(),
+        &<RuntimeMetadataV14 as AsMetadata<()>>::spec_name_version(&metadata_westend)
+            .unwrap()
+            .spec_name,
+    );
 
     let call_printed = format!(
         "\n{}\n",
@@ -172,7 +178,7 @@ Pallet: Utility
 Era: Mortal, phase: 5, period: 64
 Nonce: 2
 Tip: 0 pWND
-Network: westend9111
+Chain: westend9111
 Tx Version: 7
 Block Hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff
 ";
@@ -181,11 +187,14 @@ Block Hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff
 
 #[test]
 fn tr_2() {
+    let metadata_westend = metadata("for_tests/westend9111");
+
     let data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
+
     let reply = parse_transaction(
         &data.as_ref(),
         &mut (),
-        &metadata("for_tests/westend9111"),
+        &metadata_westend,
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -194,7 +203,12 @@ fn tr_2() {
         ),
     )
     .unwrap()
-    .card(&specs_westend());
+    .card(
+        &specs_westend(),
+        &<RuntimeMetadataV14 as AsMetadata<()>>::spec_name_version(&metadata_westend)
+            .unwrap()
+            .spec_name,
+    );
 
     let call_printed = format!(
         "\n{}\n",
@@ -292,11 +306,14 @@ which is capped at CompactAssignments::LIMIT (MAX_NOMINATIONS).
 
 #[test]
 fn tr_3() {
+    let metadata_westend = metadata("for_tests/westend9111");
+
     let data = hex::decode("9c0403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480284d717d5031504025a62029723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84").unwrap();
+
     let reply = parse_transaction(
         &data.as_ref(),
         &mut (),
-        &metadata("for_tests/westend9111"),
+        &metadata_westend,
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -305,7 +322,12 @@ fn tr_3() {
         ),
     )
     .unwrap()
-    .card(&specs_westend());
+    .card(
+        &specs_westend(),
+        &<RuntimeMetadataV14 as AsMetadata<()>>::spec_name_version(&metadata_westend)
+            .unwrap()
+            .spec_name,
+    );
 
     let call_printed = format!(
         "\n{}\n",
@@ -342,7 +364,7 @@ Pallet: Balances
 Era: Mortal, phase: 61, period: 64
 Nonce: 261
 Tip: 10.000000 uWND
-Network: westend9111
+Chain: westend9111
 Tx Version: 7
 Block Hash: 98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84
 ";
@@ -351,11 +373,14 @@ Block Hash: 98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84
 
 #[test]
 fn tr_4() {
+    let metadata_westend = metadata("for_tests/westend9111");
+
     let data = hex::decode("2509000115094c6f72656d20697073756d20646f6c6f722073697420616d65742c20636f6e73656374657475722061646970697363696e6720656c69742c2073656420646f20656975736d6f642074656d706f7220696e6369646964756e74207574206c61626f726520657420646f6c6f7265206d61676e6120616c697175612e20436f6e67756520657520636f6e7365717561742061632066656c697320646f6e65632e20547572706973206567657374617320696e7465676572206567657420616c6971756574206e696268207072616573656e742e204e6571756520636f6e76616c6c6973206120637261732073656d70657220617563746f72206e657175652e204e65747573206574206d616c6573756164612066616d6573206163207475727069732065676573746173207365642074656d7075732e2050656c6c656e746573717565206861626974616e74206d6f726269207472697374697175652073656e6563747573206574206e657475732065742e205072657469756d2076756c7075746174652073617069656e206e656320736167697474697320616c697175616d2e20436f6e76616c6c69732061656e65616e20657420746f72746f7220617420726973757320766976657272612e20566976616d757320617263752066656c697320626962656e64756d207574207472697374697175652065742065676573746173207175697320697073756d2e204d616c6573756164612070726f696e206c696265726f206e756e6320636f6e73657175617420696e74657264756d207661726975732e2045022c009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e1b2b0a177ad4f3f93f9a56dae700e938a40201a5beabbda160a74c70e612c66a").unwrap();
+
     let reply = parse_transaction(
         &data.as_ref(),
         &mut (),
-        &metadata("for_tests/westend9111"),
+        &metadata_westend,
         H256(
             hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
                 .unwrap()
@@ -364,7 +389,12 @@ fn tr_4() {
         ),
     )
     .unwrap()
-    .card(&specs_westend());
+    .card(
+        &specs_westend(),
+        &<RuntimeMetadataV14 as AsMetadata<()>>::spec_name_version(&metadata_westend)
+            .unwrap()
+            .spec_name,
+    );
 
     let call_printed = format!(
         "\n{}\n",
@@ -397,7 +427,7 @@ Pallet: System
 Era: Mortal, phase: 36, period: 64
 Nonce: 11
 Tip: 0 pWND
-Network: westend9111
+Chain: westend9111
 Tx Version: 7
 Block Hash: 1b2b0a177ad4f3f93f9a56dae700e938a40201a5beabbda160a74c70e612c66a
 ";
@@ -406,11 +436,13 @@ Block Hash: 1b2b0a177ad4f3f93f9a56dae700e938a40201a5beabbda160a74c70e612c66a
 
 #[test]
 fn tr_5() {
+    let metadata_acala = metadata("for_tests/acala2012");
+
     let data = hex::decode("a80a0000dc621b10081b4b51335553ef8df227feb0327649d00beab6e09c10a1dce973590b00407a10f35a24010000dc07000001000000fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c5cfeb3e46c080274613bdb80809a3e84fe782ac31ea91e2c778de996f738e620").unwrap();
     let reply = parse_transaction(
         &data.as_ref(),
         &mut (),
-        &metadata("for_tests/acala2012"),
+        &metadata_acala,
         H256(
             hex::decode("fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c")
                 .unwrap()
@@ -419,7 +451,12 @@ fn tr_5() {
         ),
     )
     .unwrap()
-    .card(&specs_acala());
+    .card(
+        &specs_acala(),
+        &<RuntimeMetadataV14 as AsMetadata<()>>::spec_name_version(&metadata_acala)
+            .unwrap()
+            .spec_name,
+    );
 
     let call_printed = format!(
         "\n{}\n",
@@ -456,7 +493,7 @@ Pallet: Balances
 Era: Mortal, phase: 18, period: 32
 Nonce: 0
 Tip: 0 pACA
-Network: acala2012
+Chain: acala2012
 Tx Version: 1
 Block Hash: 5cfeb3e46c080274613bdb80809a3e84fe782ac31ea91e2c778de996f738e620
 ";
@@ -627,7 +664,7 @@ fn storage_3_assets_with_key() {
         content: KeyPart::Parsed(ExtendedData {
             data: ParsedData::PrimitiveU32 {
                 value: 0,
-                specialty: SpecialtyPrimitive::None,
+                specialty: SpecialtyUnsignedInteger::None,
             },
             info: Vec::new(),
         }),
@@ -644,7 +681,7 @@ fn storage_3_assets_with_key() {
                 data: ExtendedData {
                     data: ParsedData::PrimitiveU128 {
                         value: 100435000000,
-                        specialty: SpecialtyPrimitive::Balance,
+                        specialty: SpecialtyUnsignedInteger::Balance,
                     },
                     info: Vec::new(),
                 },
@@ -719,7 +756,7 @@ fn storage_3_assets_with_key() {
                 data: ExtendedData {
                     data: ParsedData::PrimitiveU8 {
                         value: 10,
-                        specialty: SpecialtyPrimitive::None,
+                        specialty: SpecialtyUnsignedInteger::None,
                     },
                     info: Vec::new(),
                 },
@@ -1060,7 +1097,7 @@ fn unchecked_extrinsic_1() {
                             data: ExtendedData {
                                 data: ParsedData::PrimitiveU32 {
                                     value: 1,
-                                    specialty: SpecialtyPrimitive::Nonce,
+                                    specialty: SpecialtyUnsignedInteger::Nonce,
                                 },
                                 info: vec![],
                             },
@@ -1099,7 +1136,7 @@ fn unchecked_extrinsic_1() {
                             data: ExtendedData {
                                 data: ParsedData::PrimitiveU128 {
                                     value: 0,
-                                    specialty: SpecialtyPrimitive::Tip,
+                                    specialty: SpecialtyUnsignedInteger::Tip,
                                 },
                                 info: vec![],
                             },
@@ -1170,7 +1207,7 @@ fn unchecked_extrinsic_1() {
                         type_name: Some("T::Balance".to_string()),
                         field_docs: "".to_string(),
                         data: ExtendedData {
-                            data: ParsedData::PrimitiveU128 { value: 100000000, specialty: SpecialtyPrimitive::Balance },
+                            data: ParsedData::PrimitiveU128 { value: 100000000, specialty: SpecialtyUnsignedInteger::Balance },
                             info: vec![]
                         }
                     }
@@ -1204,8 +1241,13 @@ fn short_metadata_1_call_only() {
 fn short_metadata_2_decode() {
     let data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
 
-    let short_metadata =
-        cut_metadata(&data.as_ref(), &mut (), &metadata("for_tests/westend9111")).unwrap();
+    let short_metadata = cut_metadata(
+        &data.as_ref(),
+        &mut (),
+        &metadata("for_tests/westend9111"),
+        &specs_westend(),
+    )
+    .unwrap();
 
     let reply = parse_transaction(
         &data.as_ref(),
@@ -1219,7 +1261,10 @@ fn short_metadata_2_decode() {
         ),
     )
     .unwrap()
-    .card(&specs_westend());
+    .card(
+        &short_metadata.to_specs(),
+        &short_metadata.spec_name_version.spec_name,
+    );
 
     let call_printed = format!(
         "\n{}\n",
@@ -1276,7 +1321,7 @@ Pallet: Utility
 Era: Mortal, phase: 5, period: 64
 Nonce: 2
 Tip: 0 pWND
-Network: westend9111
+Chain: westend9111
 Tx Version: 7
 Block Hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff
 ";
@@ -1289,7 +1334,8 @@ fn short_metadata_3_decode() {
 
     let metadata_acala = metadata("for_tests/acala2200");
 
-    let short_metadata = cut_metadata(&data.as_ref(), &mut (), &metadata_acala).unwrap();
+    let short_metadata =
+        cut_metadata(&data.as_ref(), &mut (), &metadata_acala, &specs_acala()).unwrap();
 
     let hash_prep_whole_registry = metadata_acala.types.hash_prep::<()>().unwrap();
     assert_eq!(2462, hash_prep_whole_registry.len());
@@ -1315,7 +1361,10 @@ fn short_metadata_3_decode() {
         ),
     )
     .unwrap()
-    .card(&specs_acala());
+    .card(
+        &short_metadata.to_specs(),
+        &short_metadata.spec_name_version.spec_name,
+    );
 
     let call_printed = format!(
         "\n{}\n",
@@ -1354,7 +1403,7 @@ Struct: 1 field(s)
   Field Name: nonce
     Nonce: 2339
 Tip: 55.555555 uACA
-Network: acala2200
+Chain: acala2200
 Tx Version: 3
 Block Hash: fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c
 ";
@@ -1367,7 +1416,13 @@ fn short_metadata_4_decode() {
 
     let metadata_polkadot = metadata("for_tests/polkadot9430");
 
-    let short_metadata = cut_metadata(&data.as_ref(), &mut (), &metadata_polkadot).unwrap();
+    let short_metadata = cut_metadata(
+        &data.as_ref(),
+        &mut (),
+        &metadata_polkadot,
+        &specs_polkadot(),
+    )
+    .unwrap();
 
     let hash_prep_whole_registry = metadata_polkadot.types.hash_prep::<()>().unwrap();
     assert_eq!(2705, hash_prep_whole_registry.len());
@@ -1393,7 +1448,10 @@ fn short_metadata_4_decode() {
         ),
     )
     .unwrap()
-    .card(&specs_polkadot());
+    .card(
+        &short_metadata.to_specs(),
+        &short_metadata.spec_name_version.spec_name,
+    );
 
     let call_printed = format!(
         "\n{}\n",
@@ -1442,7 +1500,7 @@ Pallet: Utility
 Era: Mortal, phase: 61, period: 64
 Nonce: 1
 Tip: 555.2342355555 DOT
-Network: polkadot9430
+Chain: polkadot9430
 Tx Version: 24
 Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 ";
@@ -1455,8 +1513,13 @@ fn short_metadata_5_decode() {
 
     let metadata_polkadot = metadata("for_tests/polkadot9430");
 
-    let short_metadata =
-        cut_metadata_transaction_unmarked(&data.as_ref(), &mut (), &metadata_polkadot).unwrap();
+    let short_metadata = cut_metadata_transaction_unmarked(
+        &data.as_ref(),
+        &mut (),
+        &metadata_polkadot,
+        &specs_polkadot(),
+    )
+    .unwrap();
 
     let hash_prep_whole_registry = metadata_polkadot.types.hash_prep::<()>().unwrap();
     assert_eq!(2705, hash_prep_whole_registry.len());
@@ -1482,7 +1545,10 @@ fn short_metadata_5_decode() {
         ),
     )
     .unwrap()
-    .card(&specs_polkadot());
+    .card(
+        &short_metadata.to_specs(),
+        &short_metadata.spec_name_version.spec_name,
+    );
 
     let call_printed = format!(
         "\n{}\n",
@@ -1695,7 +1761,7 @@ Pallet: XcmPallet
 Era: Mortal, phase: 61, period: 64
 Nonce: 100
 Tip: 555.2342355555 DOT
-Network: polkadot9430
+Chain: polkadot9430
 Tx Version: 24
 Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 ";

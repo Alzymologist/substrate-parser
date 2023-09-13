@@ -34,7 +34,7 @@ use crate::compacts::get_compact;
 use crate::error::ParserError;
 use crate::printing_balance::AsBalance;
 use crate::propagated::SpecialtySet;
-use crate::special_indicators::{SpecialtyH256, SpecialtyPrimitive};
+use crate::special_indicators::{SpecialtyH256, SpecialtyUnsignedInteger};
 use crate::traits::{AddressableBuffer, ExternalMemory};
 
 /// Stable length trait.
@@ -250,7 +250,7 @@ impl_stable_length_array_open!(
 );
 
 /// Unsigned integer trait. Compatible with compacts, uses the propagated
-/// [`SpecialtyPrimitive`].
+/// [`SpecialtyUnsignedInteger`].
 pub(crate) trait UnsignedInteger:
     StableLength + AsBalance + HasCompact + std::fmt::Display
 {
@@ -280,7 +280,7 @@ macro_rules! impl_unsigned_integer {
                         if specialty_set.compact_at.is_some() {get_compact::<Self, B, E>(data, ext_memory, position)?}
                         else {<Self>::cut_and_decode::<B, E>(data, ext_memory, position)?}
                     };
-                    Ok(ParsedData::$enum_variant{value, specialty: specialty_set.primitive()})
+                    Ok(ParsedData::$enum_variant{value, specialty: specialty_set.unsigned_integer()})
                 }
                 fn default_card_name() -> &'static str {
                     stringify!($ty)
@@ -396,7 +396,7 @@ macro_rules! impl_collect_vec {
                 fn husk_set(parsed_data_set: &[ParsedData]) -> Option<Sequence> {
                     let mut out: Vec<Self> = Vec::new();
                     for x in parsed_data_set.iter() {
-                        if let ParsedData::$enum_variant_input{value: a, specialty: SpecialtyPrimitive::None} = x {out.push(*a)}
+                        if let ParsedData::$enum_variant_input{value: a, specialty: SpecialtyUnsignedInteger::None} = x {out.push(*a)}
                         else {return None}
                     }
                     Some(Sequence::$enum_variant_output(out))
