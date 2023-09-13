@@ -71,7 +71,7 @@ where
         }
         TypeDefPrimitive::Str => {
             specialty_set.reject_compact()?;
-            decode_str::<B, E>(data, ext_memory, position)
+            decode_str::<B, E>(data, ext_memory, position, specialty_set.hint)
         }
         TypeDefPrimitive::U8 => {
             u8::parse_unsigned_integer::<B, E>(data, ext_memory, position, specialty_set)
@@ -124,10 +124,11 @@ where
 /// vector (compact of length precedes the data).
 ///
 /// Current parser position gets changed.
-pub(crate) fn decode_str<B, E>(
+fn decode_str<B, E>(
     data: &B,
     ext_memory: &mut E,
     position: &mut usize,
+    hint: Hint,
 ) -> Result<ParsedData, ParserError<E>>
 where
     B: AddressableBuffer<E>,
@@ -146,7 +147,8 @@ where
             })
         }
     };
-    let out = ParsedData::Text(text);
+    let specialty = hint.string();
+    let out = ParsedData::Text { text, specialty };
     *position = text_start + str_length;
     Ok(out)
 }

@@ -6,7 +6,7 @@ use crate::std::vec::Vec;
 
 use crate::cards::Info;
 use crate::error::ParserError;
-use crate::special_indicators::{Hint, SpecialtyH256, SpecialtyPrimitive};
+use crate::special_indicators::{Hint, SpecialtyH256, SpecialtyUnsignedInteger};
 use crate::traits::ExternalMemory;
 
 /// Type specialty data (type specialty [`Hint`] and compact info) that
@@ -74,8 +74,8 @@ impl SpecialtySet {
     }
 
     /// Apply `hint` field on unsigned integer decoding.
-    pub fn primitive(&self) -> SpecialtyPrimitive {
-        self.hint.primitive()
+    pub fn unsigned_integer(&self) -> SpecialtyUnsignedInteger {
+        self.hint.unsigned_integer()
     }
 
     /// Apply `hint` field on `H256` decoding.

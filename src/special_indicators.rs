@@ -48,6 +48,11 @@ pub const NONCE_ID_SET: &[&str] = &["nonce"];
 /// If the value is unsigned integer, it will be considered spec version.
 pub const SPEC_VERSION_ID_SET: &[&str] = &["spec_version"];
 
+/// [`Field`] `name` set indicating the value *may* be metadata spec name.
+///
+/// If the value is `str`, it will be considered spec name.
+pub const SPEC_NAME_ID_SET: &[&str] = &["spec_name"];
+
 /// [`Type`]-associated [`Path`] `ident` for
 /// [`sp_core::crypto::AccountId32`](https://docs.rs/sp-core/latest/sp_core/crypto/struct.AccountId32.html).
 pub const ACCOUNT_ID32: &str = "AccountId32";
@@ -174,13 +179,13 @@ pub const ENUM_INDEX_ENCODED_LEN: usize = 1;
 
 /// Specialty attributed to unsigned integer.
 ///
-/// `SpecialtyPrimitive` is stored in unsigned integer `ParsedData` and
+/// `SpecialtyUnsignedInteger` is stored in unsigned integer `ParsedData` and
 /// determines the card type.
 ///
 /// Is determined by propagating [`Hint`] from [`SignedExtensionMetadata`]
 /// identifier or from [`Field`] descriptor.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SpecialtyPrimitive {
+pub enum SpecialtyUnsignedInteger {
     /// Regular unsigned integer.
     None,
 
@@ -200,6 +205,13 @@ pub enum SpecialtyPrimitive {
 
     /// Value is tx version from signable transaction extensions.
     TxVersion,
+}
+
+/// Specialty attributed to `str` data.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SpecialtyStr {
+    None,
+    SpecName,
 }
 
 /// Specialty attributed to `H256` hashes.
@@ -235,6 +247,7 @@ pub enum Hint {
     ChargeTransactionPayment,
     FieldBalance,
     FieldNonce,
+    FieldSpecName,
     FieldSpecVersion,
 }
 
@@ -246,6 +259,7 @@ impl Hint {
             Some(name) => match name.as_str() {
                 a if NONCE_ID_SET.contains(&a) => Self::FieldNonce,
                 a if SPEC_VERSION_ID_SET.contains(&a) => Self::FieldSpecVersion,
+                a if SPEC_NAME_ID_SET.contains(&a) => Self::FieldSpecName,
                 _ => Self::None,
             },
             None => Self::None,
@@ -290,14 +304,24 @@ impl Hint {
     }
 
     /// Apply [`Hint`] on unsigned integer decoding.
-    pub fn primitive(&self) -> SpecialtyPrimitive {
+    pub fn unsigned_integer(&self) -> SpecialtyUnsignedInteger {
         match &self {
-            Hint::CheckSpecVersion | Hint::FieldSpecVersion => SpecialtyPrimitive::SpecVersion,
-            Hint::CheckTxVersion => SpecialtyPrimitive::TxVersion,
-            Hint::CheckNonce | Hint::FieldNonce => SpecialtyPrimitive::Nonce,
-            Hint::ChargeTransactionPayment => SpecialtyPrimitive::Tip,
-            Hint::FieldBalance => SpecialtyPrimitive::Balance,
-            _ => SpecialtyPrimitive::None,
+            Hint::CheckSpecVersion | Hint::FieldSpecVersion => {
+                SpecialtyUnsignedInteger::SpecVersion
+            }
+            Hint::CheckTxVersion => SpecialtyUnsignedInteger::TxVersion,
+            Hint::CheckNonce | Hint::FieldNonce => SpecialtyUnsignedInteger::Nonce,
+            Hint::ChargeTransactionPayment => SpecialtyUnsignedInteger::Tip,
+            Hint::FieldBalance => SpecialtyUnsignedInteger::Balance,
+            _ => SpecialtyUnsignedInteger::None,
+        }
+    }
+
+    /// Apply [`Hint`] on `str` decoding.
+    pub fn string(&self) -> SpecialtyStr {
+        match &self {
+            Hint::FieldSpecName => SpecialtyStr::SpecName,
+            _ => SpecialtyStr::None,
         }
     }
 

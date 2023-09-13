@@ -21,8 +21,8 @@ use crate::decoding_sci::{
 use crate::error::{MetaCutError, ParserError, SignableError};
 use crate::propagated::{Checker, Propagated, SpecialtySet};
 use crate::special_indicators::{Hint, SpecialtyTypeHinted, ENUM_INDEX_ENCODED_LEN};
-use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
-use crate::MarkedData;
+use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType, SpecNameVersion};
+use crate::{MarkedData, ShortSpecs};
 
 #[derive(Debug)]
 pub struct DraftRegistry {
@@ -537,17 +537,32 @@ where
     }
 }
 
+#[repr(C)]
 #[derive(Debug, Decode, Encode)]
 pub struct ShortMetadata {
-    pub chain_version_printed: String, // restore later to set of chain name, encoded chain version, and chain version ty
     pub short_registry: ShortRegistry,
     pub extrinsic: ExtrinsicMetadata<PortableForm>,
+    pub spec_name_version: SpecNameVersion, // restore later to set of chain name, encoded chain version, and chain version ty
+    pub base58prefix: u16, // could be in `System` pallet of metadata; add later checking that input matches;
+    pub decimals: u8,
+    pub unit: String,
+}
+
+impl ShortMetadata {
+    pub fn to_specs(&self) -> ShortSpecs {
+        ShortSpecs {
+            base58prefix: self.base58prefix,
+            decimals: self.decimals,
+            unit: self.unit.to_owned(),
+        }
+    }
 }
 
 pub fn cut_metadata<B, E, M>(
     data: &B,
     ext_memory: &mut E,
     meta_v14: &M,
+    short_specs: &ShortSpecs,
 ) -> Result<ShortMetadata, MetaCutError<E>>
 where
     B: AddressableBuffer<E>,
@@ -561,11 +576,14 @@ where
     pass_extensions::<B, E, M>(&marked_data, ext_memory, meta_v14, &mut draft_registry)?;
 
     Ok(ShortMetadata {
-        chain_version_printed: meta_v14
-            .version_printed()
-            .map_err(|e| MetaCutError::Signable(SignableError::MetaVersion(e)))?,
         short_registry: draft_registry.finalize(),
         extrinsic: meta_v14.extrinsic(),
+        spec_name_version: meta_v14
+            .spec_name_version()
+            .map_err(|e| MetaCutError::Signable(SignableError::MetaVersion(e)))?,
+        base58prefix: short_specs.base58prefix,
+        decimals: short_specs.decimals,
+        unit: short_specs.unit.to_owned(),
     })
 }
 
@@ -573,6 +591,7 @@ pub fn cut_metadata_transaction_unmarked<B, E, M>(
     data: &B,
     ext_memory: &mut E,
     meta_v14: &M,
+    short_specs: &ShortSpecs,
 ) -> Result<ShortMetadata, MetaCutError<E>>
 where
     B: AddressableBuffer<E>,
@@ -598,11 +617,14 @@ where
     )?;
 
     Ok(ShortMetadata {
-        chain_version_printed: meta_v14
-            .version_printed()
-            .map_err(|e| MetaCutError::Signable(SignableError::MetaVersion(e)))?,
         short_registry: draft_registry.finalize(),
         extrinsic: meta_v14.extrinsic(),
+        spec_name_version: meta_v14
+            .spec_name_version()
+            .map_err(|e| MetaCutError::Signable(SignableError::MetaVersion(e)))?,
+        base58prefix: short_specs.base58prefix,
+        decimals: short_specs.decimals,
+        unit: short_specs.unit.to_owned(),
     })
 }
 

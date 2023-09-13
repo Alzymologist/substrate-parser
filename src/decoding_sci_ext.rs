@@ -16,7 +16,7 @@ use crate::cards::{ExtendedData, ParsedData};
 use crate::decoding_sci::{decode_with_type, Ty};
 use crate::error::{ExtensionsError, SignableError};
 use crate::propagated::Propagated;
-use crate::special_indicators::SpecialtyPrimitive;
+use crate::special_indicators::SpecialtyUnsignedInteger;
 use crate::special_types::UnsignedInteger;
 use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory};
 use crate::MarkedData;
@@ -107,10 +107,14 @@ where
     if *position != data.total_len() {
         return Err(SignableError::SomeDataNotUsedExtensions { from: *position });
     }
-    let printed_version = meta_v14
-        .version_printed()
+    let spec_name_version = meta_v14
+        .spec_name_version()
         .map_err(SignableError::MetaVersion)?;
-    check_extensions::<E>(&extensions, &printed_version, genesis_hash)?;
+    check_extensions::<E>(
+        &extensions,
+        &spec_name_version.printed_spec_version,
+        genesis_hash,
+    )?;
     Ok(extensions)
 }
 
@@ -205,23 +209,23 @@ impl CollectedExt {
             ParsedData::BlockHash(h) => self.add_block_hash::<E>(*h),
             ParsedData::PrimitiveU8 {
                 value,
-                specialty: SpecialtyPrimitive::SpecVersion,
+                specialty: SpecialtyUnsignedInteger::SpecVersion,
             } => self.add_spec_version::<u8, E>(*value),
             ParsedData::PrimitiveU16 {
                 value,
-                specialty: SpecialtyPrimitive::SpecVersion,
+                specialty: SpecialtyUnsignedInteger::SpecVersion,
             } => self.add_spec_version::<u16, E>(*value),
             ParsedData::PrimitiveU32 {
                 value,
-                specialty: SpecialtyPrimitive::SpecVersion,
+                specialty: SpecialtyUnsignedInteger::SpecVersion,
             } => self.add_spec_version::<u32, E>(*value),
             ParsedData::PrimitiveU64 {
                 value,
-                specialty: SpecialtyPrimitive::SpecVersion,
+                specialty: SpecialtyUnsignedInteger::SpecVersion,
             } => self.add_spec_version::<u64, E>(*value),
             ParsedData::PrimitiveU128 {
                 value,
-                specialty: SpecialtyPrimitive::SpecVersion,
+                specialty: SpecialtyUnsignedInteger::SpecVersion,
             } => self.add_spec_version::<u128, E>(*value),
             _ => Ok(()),
         }
