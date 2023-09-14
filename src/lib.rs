@@ -455,6 +455,7 @@
 #![no_std]
 #![deny(unused_crate_dependencies)]
 
+use parity_scale_codec::{Decode, Encode};
 use primitive_types::H256;
 use scale_info::interner::UntrackedSymbol;
 
@@ -510,6 +511,7 @@ use propagated::Propagated;
 /// this must be done elsewhere.
 ///
 /// Using wrong specs may result in incorrectly displayed parsed information.
+#[derive(Clone, Debug, Decode, Encode)]
 pub struct ShortSpecs {
     pub base58prefix: u16,
     pub decimals: u8,
