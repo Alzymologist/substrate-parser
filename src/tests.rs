@@ -52,6 +52,14 @@ fn specs_acala() -> ShortSpecs {
     }
 }
 
+fn specs_astar() -> ShortSpecs {
+    ShortSpecs {
+        base58prefix: 5,
+        decimals: 18,
+        unit: "ASTR".to_string(),
+    }
+}
+
 fn specs_polkadot() -> ShortSpecs {
     ShortSpecs {
         base58prefix: 0,
@@ -1764,6 +1772,86 @@ Tip: 555.2342355555 DOT
 Chain: polkadot9430
 Tx Version: 24
 Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
+";
+    assert_eq!(extensions_known, extensions_printed);
+}
+
+#[test]
+fn short_metadata_6_decode() {
+    let data = hex::decode("1f00001b7a61c73f450f4518731981d9cdd99013cfe044294617b74f93ba4bba6090d00b63ce64c10c05d5030403d202964942000000020000009eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c69eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c6").unwrap();
+
+    let metadata_astar = metadata("for_tests/astar66");
+
+    let short_metadata =
+        cut_metadata_transaction_unmarked(&data.as_ref(), &mut (), &metadata_astar, &specs_astar())
+            .unwrap();
+
+    let hash_prep_whole_registry = metadata_astar.types.hash_prep::<()>().unwrap();
+    assert_eq!(1778, hash_prep_whole_registry.len());
+
+    let hash_prep_short_registry = short_metadata.short_registry.hash_prep::<()>().unwrap();
+    assert_eq!(23, hash_prep_short_registry.len());
+
+    let excluded = short_metadata
+        .short_registry
+        .exclude_from::<()>(&metadata_astar.types)
+        .unwrap();
+    assert_eq!(1755, excluded.len());
+
+    let reply = parse_transaction_unmarked(
+        &data.as_ref(),
+        &mut (),
+        &short_metadata,
+        H256(
+            hex::decode("9eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c6")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
+    )
+    .unwrap()
+    .card(
+        &short_metadata.to_specs(),
+        &short_metadata.spec_name_version.spec_name,
+    );
+
+    let call_printed = format!(
+        "\n{}\n",
+        reply
+            .call
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let call_known = "
+Pallet: Balances
+  Call: transfer_allow_death
+    Field Name: dest
+      Enum
+        Enum Variant Name: Id
+          Id: WZKwYJmVxzxqF9UbaATqjyYY2859mZEfcTAQEDaXipQYG5w
+    Field Name: value
+      Balance: 5.552342355555 uASTR
+";
+    assert_eq!(call_known, call_printed);
+
+    let extensions_printed = format!(
+        "\n{}\n",
+        reply
+            .extensions
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let extensions_known = "
+Era: Mortal, phase: 61, period: 64
+Nonce: 1
+Tip: 1.234567890 nASTR
+Chain: astar66
+Tx Version: 2
+Block Hash: 9eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c6
 ";
     assert_eq!(extensions_known, extensions_printed);
 }

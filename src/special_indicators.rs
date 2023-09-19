@@ -112,8 +112,12 @@ pub const SP_CORE_SR25519: &[&str] = &["sp_core", "sr25519"];
 /// [`Path`] `namespace` for `sp_core::ecdsa`.
 pub const SP_CORE_ECDSA: &[&str] = &["sp_core", "ecdsa"];
 
+/// [`Path`] `namespace` for [sp_runtime::generic::UncheckedExtrinsic].
+pub const UNCHECKED_EXTRINSIC_NAMESPACE: &[&str] =
+    &["sp_runtime", "generic", "unchecked_extrinsic"];
+
 /// [`Type`]-associated [`Path`] `ident` for [sp_runtime::generic::UncheckedExtrinsic].
-pub const UNCHECKED_EXTRINSIC: &str = "UncheckedExtrinsic";
+pub const UNCHECKED_EXTRINSIC_IDENT: &str = "UncheckedExtrinsic";
 
 /// [`Variant`] name `None` that must be found for type to be processed as
 /// `Option`.
@@ -451,7 +455,17 @@ impl SpecialtyTypeHinted {
                     SP_CORE_ECDSA => Self::SignatureEcdsa,
                     _ => Self::None,
                 },
-                UNCHECKED_EXTRINSIC => Self::UncheckedExtrinsic,
+                UNCHECKED_EXTRINSIC_IDENT => match ty
+                    .path
+                    .namespace()
+                    .iter()
+                    .map(|x| x.as_str())
+                    .collect::<Vec<&str>>()
+                    .as_ref()
+                {
+                    UNCHECKED_EXTRINSIC_NAMESPACE => Self::UncheckedExtrinsic,
+                    _ => Self::None,
+                },
                 _ => Self::None,
             },
             None => Self::None,
