@@ -36,7 +36,7 @@ use crate::std::{
 };
 
 use crate::printing_balance::{AsBalance, Currency};
-use crate::special_indicators::{PalletSpecificItem, SpecialtyPrimitive};
+use crate::special_indicators::{PalletSpecificItem, SpecialtyStr, SpecialtyUnsignedInteger};
 use crate::ShortSpecs;
 
 /// Type-associated information from the metadata.
@@ -57,7 +57,7 @@ impl Info {
     pub fn from_ty(ty: &Type<PortableForm>) -> Self {
         Self {
             docs: ty.collect_docs(),
-            path: ty.path().to_owned(),
+            path: ty.path.to_owned(),
         }
     }
 
@@ -83,7 +83,7 @@ impl Info {
             if self.path.is_empty() {
                 None
             } else {
-                Some(self.path.segments().join(" >> "))
+                Some(self.path.segments.join(" >> "))
             }
         };
         InfoFlat { docs, path_flat }
@@ -96,13 +96,13 @@ pub trait Documented {
 }
 
 /// Collect documentation from documented [`scale_info`] entity ([`Type`],
-/// [`Field`], [`Variant`]).
+/// [`Field`], [`Variant`], [`StorageEntryMetadata<PortableForm>`]).
 macro_rules! impl_documented {
     ($($ty: ty), *) => {
         $(
             impl Documented for $ty {
                 fn collect_docs(&self) -> String {
-                    self.docs().join("\n")
+                    self.docs.join("\n")
                 }
             }
         )*
@@ -112,14 +112,9 @@ macro_rules! impl_documented {
 impl_documented!(
     Type<PortableForm>,
     Field<PortableForm>,
-    Variant<PortableForm>
+    Variant<PortableForm>,
+    StorageEntryMetadata<PortableForm>
 );
-
-impl Documented for StorageEntryMetadata<PortableForm> {
-    fn collect_docs(&self) -> String {
-        self.docs.join("\n")
-    }
-}
 
 /// Parsed data and collected relevant type information.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -168,6 +163,7 @@ impl PalletSpecificData {
         &self,
         indent: u32,
         short_specs: &ShortSpecs,
+        spec_name: &str,
         item: PalletSpecificItem,
     ) -> Vec<ExtendedCard> {
         let mut out = vec![ExtendedCard {
@@ -194,6 +190,7 @@ impl PalletSpecificData {
                 indent + 2,
                 self.is_balance_display(),
                 short_specs,
+                spec_name,
             );
         } else {
             card_field_set(
@@ -202,6 +199,7 @@ impl PalletSpecificData {
                 indent + 2,
                 self.is_balance_display(),
                 short_specs,
+                spec_name,
             )
         }
         out
@@ -210,15 +208,27 @@ impl PalletSpecificData {
 
 impl Call {
     /// Transform `Call` into a set of flat formatted [`ExtendedCard`]s.
-    pub fn card(&self, indent: u32, short_specs: &ShortSpecs) -> Vec<ExtendedCard> {
-        self.0.card(indent, short_specs, PalletSpecificItem::Call)
+    pub fn card(
+        &self,
+        indent: u32,
+        short_specs: &ShortSpecs,
+        spec_name: &str,
+    ) -> Vec<ExtendedCard> {
+        self.0
+            .card(indent, short_specs, spec_name, PalletSpecificItem::Call)
     }
 }
 
 impl Event {
     /// Transform `Event` into a set of flat formatted [`ExtendedCard`]s.
-    pub fn card(&self, indent: u32, short_specs: &ShortSpecs) -> Vec<ExtendedCard> {
-        self.0.card(indent, short_specs, PalletSpecificItem::Event)
+    pub fn card(
+        &self,
+        indent: u32,
+        short_specs: &ShortSpecs,
+        spec_name: &str,
+    ) -> Vec<ExtendedCard> {
+        self.0
+            .card(indent, short_specs, spec_name, PalletSpecificItem::Event)
     }
 }
 
@@ -320,23 +330,23 @@ pub enum ParsedData {
     PrimitiveI256(BigInt),
     PrimitiveU8 {
         value: u8,
-        specialty: SpecialtyPrimitive,
+        specialty: SpecialtyUnsignedInteger,
     },
     PrimitiveU16 {
         value: u16,
-        specialty: SpecialtyPrimitive,
+        specialty: SpecialtyUnsignedInteger,
     },
     PrimitiveU32 {
         value: u32,
-        specialty: SpecialtyPrimitive,
+        specialty: SpecialtyUnsignedInteger,
     },
     PrimitiveU64 {
         value: u64,
-        specialty: SpecialtyPrimitive,
+        specialty: SpecialtyUnsignedInteger,
     },
     PrimitiveU128 {
         value: u128,
-        specialty: SpecialtyPrimitive,
+        specialty: SpecialtyUnsignedInteger,
     },
     PrimitiveU256(BigUint),
     PublicEd25519(PublicEd25519),
@@ -347,7 +357,10 @@ pub enum ParsedData {
     SignatureEd25519(SignatureEd25519),
     SignatureSr25519(SignatureSr25519),
     SignatureEcdsa(SignatureEcdsa),
-    Text(String),
+    Text {
+        text: String,
+        specialty: SpecialtyStr,
+    },
     Tuple(Vec<ExtendedData>),
     Variant(VariantData),
 }
@@ -364,13 +377,13 @@ macro_rules! single_card {
 }
 
 /// Transform [`ParsedData`] into single-element `Vec<ExtendedCard>` for types
-/// supporting [`SpecialtyPrimitive`].
+/// supporting [`SpecialtyUnsignedInteger`].
 macro_rules! specialty_card {
-    ($ty:ty, $variant:ident, $value:tt, $display_balance:tt, $indent:tt, $info_flat:tt, $short_specs:tt, $specialty:tt) => {
+    ($ty:ty, $variant:ident, $value:tt, $display_balance:tt, $indent:tt, $info_flat:tt, $short_specs:tt, $specialty:tt, $spec_name:tt) => {
         vec![ExtendedCard {
             parser_card: match $specialty {
-                SpecialtyPrimitive::None => ParserCard::$variant($value.to_owned()),
-                SpecialtyPrimitive::Balance => {
+                SpecialtyUnsignedInteger::None => ParserCard::$variant($value.to_owned()),
+                SpecialtyUnsignedInteger::Balance => {
                     if $display_balance {
                         let balance = <$ty>::convert_balance_pretty(
                             *$value,
@@ -382,7 +395,7 @@ macro_rules! specialty_card {
                         ParserCard::BalanceRaw($value.to_string())
                     }
                 }
-                SpecialtyPrimitive::Tip => {
+                SpecialtyUnsignedInteger::Tip => {
                     let tip = <$ty>::convert_balance_pretty(
                         *$value,
                         $short_specs.decimals,
@@ -390,12 +403,12 @@ macro_rules! specialty_card {
                     );
                     ParserCard::Tip(tip)
                 }
-                SpecialtyPrimitive::Nonce => ParserCard::Nonce($value.to_string()),
-                SpecialtyPrimitive::SpecVersion => ParserCard::NameSpecVersion {
-                    name: $short_specs.name.to_owned(),
+                SpecialtyUnsignedInteger::Nonce => ParserCard::Nonce($value.to_string()),
+                SpecialtyUnsignedInteger::SpecVersion => ParserCard::NameSpecVersion {
+                    name: $spec_name.to_owned(),
                     version: $value.to_string(),
                 },
-                SpecialtyPrimitive::TxVersion => ParserCard::TxVersion($value.to_string()),
+                SpecialtyUnsignedInteger::TxVersion => ParserCard::TxVersion($value.to_string()),
             },
             $indent,
             $info_flat,
@@ -446,6 +459,7 @@ impl ParsedData {
         indent: u32,
         display_balance: bool,
         short_specs: &ShortSpecs,
+        spec_name: &str,
     ) -> Vec<ExtendedCard> {
         match &self {
             ParsedData::BitVecU8Lsb0(value) => single_card!(BitVecU8Lsb0, value, indent, info_flat),
@@ -469,7 +483,7 @@ impl ParsedData {
                 single_card!(BitVecU64Msb0, value, indent, info_flat)
             }
             ParsedData::BlockHash(value) => single_card!(BlockHash, value, indent, info_flat),
-            ParsedData::Call(call) => call.card(indent, short_specs),
+            ParsedData::Call(call) => call.card(indent, short_specs, spec_name),
             ParsedData::Composite(field_data_set) => {
                 if field_data_set.is_empty() {
                     Vec::new()
@@ -482,6 +496,7 @@ impl ParsedData {
                         indent,
                         display_balance,
                         short_specs,
+                        spec_name,
                     );
                     out
                 } else {
@@ -496,12 +511,13 @@ impl ParsedData {
                         indent + 1,
                         display_balance,
                         short_specs,
+                        spec_name,
                     );
                     out
                 }
             }
             ParsedData::Era(value) => single_card!(Era, value, indent, info_flat),
-            ParsedData::Event(event) => event.card(indent, short_specs),
+            ParsedData::Event(event) => event.card(indent, short_specs, spec_name),
             ParsedData::GenesisHash(_) => Vec::new(),
             ParsedData::H160(value) => single_card!(H160, value, indent, info_flat),
             ParsedData::H256(value) => single_card!(H256, value, indent, info_flat),
@@ -523,7 +539,7 @@ impl ParsedData {
                     info_flat,
                 }],
                 Some(parsed_data) => {
-                    parsed_data.card(info_flat, indent, display_balance, short_specs)
+                    parsed_data.card(info_flat, indent, display_balance, short_specs, spec_name)
                 }
             },
             ParsedData::PerU16(value) => single_card!(PerU16, value, indent, info_flat),
@@ -555,7 +571,8 @@ impl ParsedData {
                 indent,
                 info_flat,
                 short_specs,
-                specialty
+                specialty,
+                spec_name
             ),
             ParsedData::PrimitiveU16 { value, specialty } => specialty_card!(
                 u16,
@@ -565,7 +582,8 @@ impl ParsedData {
                 indent,
                 info_flat,
                 short_specs,
-                specialty
+                specialty,
+                spec_name
             ),
             ParsedData::PrimitiveU32 { value, specialty } => specialty_card!(
                 u32,
@@ -575,7 +593,8 @@ impl ParsedData {
                 indent,
                 info_flat,
                 short_specs,
-                specialty
+                specialty,
+                spec_name
             ),
             ParsedData::PrimitiveU64 { value, specialty } => specialty_card!(
                 u64,
@@ -585,7 +604,8 @@ impl ParsedData {
                 indent,
                 info_flat,
                 short_specs,
-                specialty
+                specialty,
+                spec_name
             ),
             ParsedData::PrimitiveU128 { value, specialty } => specialty_card!(
                 u128,
@@ -595,7 +615,8 @@ impl ParsedData {
                 indent,
                 info_flat,
                 short_specs,
-                specialty
+                specialty,
+                spec_name
             ),
             ParsedData::PrimitiveU256(value) => {
                 single_card!(PrimitiveU256, value, indent, info_flat)
@@ -706,6 +727,7 @@ impl ParsedData {
                         indent + 1,
                         display_balance,
                         short_specs,
+                        spec_name,
                     ))
                 }
                 out
@@ -719,7 +741,10 @@ impl ParsedData {
             ParsedData::SignatureEcdsa(value) => {
                 single_card!(SignatureEcdsa, value, indent, info_flat)
             }
-            ParsedData::Text(value) => single_card!(Text, value, indent, info_flat),
+            ParsedData::Text { text, specialty } => match specialty {
+                SpecialtyStr::SpecName => single_card!(SpecName, text, indent, info_flat),
+                SpecialtyStr::None => single_card!(Text, text, indent, info_flat),
+            },
             ParsedData::Tuple(extended_data_set) => {
                 if extended_data_set.is_empty() {
                     Vec::new()
@@ -734,6 +759,7 @@ impl ParsedData {
                             indent + 1,
                             display_balance,
                             short_specs,
+                            spec_name,
                         ))
                     }
                     out
@@ -758,6 +784,7 @@ impl ParsedData {
                         indent + 2,
                         display_balance,
                         short_specs,
+                        spec_name,
                     );
                 } else {
                     card_field_set(
@@ -766,6 +793,7 @@ impl ParsedData {
                         indent + 2,
                         display_balance,
                         short_specs,
+                        spec_name,
                     )
                 }
                 out
@@ -785,6 +813,7 @@ fn card_unnamed_single_field(
     indent: u32,
     display_balance: bool,
     short_specs: &ShortSpecs,
+    spec_name: &str,
 ) {
     if !field_data.field_docs.is_empty() {
         new_info_flat.push(InfoFlat {
@@ -800,6 +829,7 @@ fn card_unnamed_single_field(
         indent,
         display_balance,
         short_specs,
+        spec_name,
     ));
 }
 
@@ -815,6 +845,7 @@ fn card_field_set(
     indent: u32,
     display_balance: bool,
     short_specs: &ShortSpecs,
+    spec_name: &str,
 ) {
     for (i, field_data) in fields.iter().enumerate() {
         let parser_card = match field_data.field_name {
@@ -826,11 +857,12 @@ fn card_field_set(
             indent,
             info_flat: info_with_docs_only(&field_data.field_docs),
         });
-        out.extend_from_slice(
-            &field_data
-                .data
-                .card(indent + 1, display_balance, short_specs),
-        );
+        out.extend_from_slice(&field_data.data.card(
+            indent + 1,
+            display_balance,
+            short_specs,
+            spec_name,
+        ));
     }
 }
 
@@ -1001,6 +1033,7 @@ pub enum ParserCard {
     SignatureEd25519(SignatureEd25519),
     SignatureSr25519(SignatureSr25519),
     SignatureEcdsa(SignatureEcdsa),
+    SpecName(String),
     Text(String),
     Tip(Currency),
     TupleAnnounced(usize),
@@ -1014,15 +1047,22 @@ impl ExtendedData {
         indent: u32,
         display_balance: bool,
         short_specs: &ShortSpecs,
+        spec_name: &str,
     ) -> Vec<ExtendedCard> {
         let info_flat = self.info.iter().map(|x| x.flatten()).collect();
         self.data
-            .card(info_flat, indent, display_balance, short_specs)
+            .card(info_flat, indent, display_balance, short_specs, spec_name)
     }
 
     /// Display without associated type info.
-    pub fn show(&self, indent: u32, display_balance: bool, short_specs: &ShortSpecs) -> String {
-        let cards = self.card(indent, display_balance, short_specs);
+    pub fn show(
+        &self,
+        indent: u32,
+        display_balance: bool,
+        short_specs: &ShortSpecs,
+        spec_name: &str,
+    ) -> String {
+        let cards = self.card(indent, display_balance, short_specs, spec_name);
         cards
             .iter()
             .map(|a| a.show())
@@ -1036,8 +1076,9 @@ impl ExtendedData {
         indent: u32,
         display_balance: bool,
         short_specs: &ShortSpecs,
+        spec_name: &str,
     ) -> String {
-        let cards = self.card(indent, display_balance, short_specs);
+        let cards = self.card(indent, display_balance, short_specs, spec_name);
         cards
             .iter()
             .map(|a| a.show_with_docs())
@@ -1104,7 +1145,7 @@ impl ExtendedCard {
             #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
             ParserCard::Id(a) => readable(self.indent, "Id", &a.hex),
             ParserCard::NameSpecVersion { name, version } => {
-                readable(self.indent, "Network", &format!("{name}{version}"))
+                readable(self.indent, "Chain", &format!("{name}{version}"))
             }
             ParserCard::Nonce(a) => readable(self.indent, "Nonce", a),
             ParserCard::None => readable(self.indent, "Option", "None"),
@@ -1169,6 +1210,7 @@ impl ExtendedCard {
             ParserCard::SignatureEcdsa(a) => {
                 readable(self.indent, "Signature Ecdsa", &hex::encode(a.0))
             }
+            ParserCard::SpecName(a) => readable(self.indent, "Spec Name", a),
             ParserCard::Text(a) => readable(self.indent, "Text", a),
             ParserCard::Tip(a) => {
                 readable(self.indent, "Tip", &format!("{} {}", a.number, a.units))

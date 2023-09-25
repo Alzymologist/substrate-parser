@@ -1,6 +1,6 @@
 //! Special decoding triggers and indicators.
 //!
-//! Although the [`PortableRegistry`] has all sufficient data to decode the
+//! Although the metadata has all sufficient information to decode the
 //! data for a known type, some types must be treated specially for displaying
 //! and/or further data handling.
 //!
@@ -9,8 +9,7 @@
 //! type and cast into custom type later on.
 use frame_metadata::v14::SignedExtensionMetadata;
 use scale_info::{
-    form::PortableForm, interner::UntrackedSymbol, Field, Path, PortableRegistry, Type, TypeDef,
-    Variant,
+    form::PortableForm, interner::UntrackedSymbol, Field, Path, Type, TypeDef, Variant,
 };
 
 use crate::std::{borrow::ToOwned, string::String, vec::Vec};
@@ -23,6 +22,7 @@ use core::any::TypeId;
 
 use crate::cards::Info;
 use crate::decoding_sci::pick_variant;
+use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
 
 /// [`Field`] `type_name` set indicating that the value *may* be
 /// currency-related.
@@ -47,6 +47,11 @@ pub const NONCE_ID_SET: &[&str] = &["nonce"];
 ///
 /// If the value is unsigned integer, it will be considered spec version.
 pub const SPEC_VERSION_ID_SET: &[&str] = &["spec_version"];
+
+/// [`Field`] `name` set indicating the value *may* be metadata spec name.
+///
+/// If the value is `str`, it will be considered spec name.
+pub const SPEC_NAME_ID_SET: &[&str] = &["spec_name"];
 
 /// [`Type`]-associated [`Path`] `ident` for
 /// [`sp_core::crypto::AccountId32`](https://docs.rs/sp-core/latest/sp_core/crypto/struct.AccountId32.html).
@@ -106,6 +111,13 @@ pub const SP_CORE_SR25519: &[&str] = &["sp_core", "sr25519"];
 
 /// [`Path`] `namespace` for `sp_core::ecdsa`.
 pub const SP_CORE_ECDSA: &[&str] = &["sp_core", "ecdsa"];
+
+/// [`Path`] `namespace` for [sp_runtime::generic::UncheckedExtrinsic].
+pub const UNCHECKED_EXTRINSIC_NAMESPACE: &[&str] =
+    &["sp_runtime", "generic", "unchecked_extrinsic"];
+
+/// [`Type`]-associated [`Path`] `ident` for [sp_runtime::generic::UncheckedExtrinsic].
+pub const UNCHECKED_EXTRINSIC_IDENT: &str = "UncheckedExtrinsic";
 
 /// [`Variant`] name `None` that must be found for type to be processed as
 /// `Option`.
@@ -171,13 +183,13 @@ pub const ENUM_INDEX_ENCODED_LEN: usize = 1;
 
 /// Specialty attributed to unsigned integer.
 ///
-/// `SpecialtyPrimitive` is stored in unsigned integer `ParsedData` and
+/// `SpecialtyUnsignedInteger` is stored in unsigned integer `ParsedData` and
 /// determines the card type.
 ///
 /// Is determined by propagating [`Hint`] from [`SignedExtensionMetadata`]
 /// identifier or from [`Field`] descriptor.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SpecialtyPrimitive {
+pub enum SpecialtyUnsignedInteger {
     /// Regular unsigned integer.
     None,
 
@@ -197,6 +209,13 @@ pub enum SpecialtyPrimitive {
 
     /// Value is tx version from signable transaction extensions.
     TxVersion,
+}
+
+/// Specialty attributed to `str` data.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SpecialtyStr {
+    None,
+    SpecName,
 }
 
 /// Specialty attributed to `H256` hashes.
@@ -232,6 +251,7 @@ pub enum Hint {
     ChargeTransactionPayment,
     FieldBalance,
     FieldNonce,
+    FieldSpecName,
     FieldSpecVersion,
 }
 
@@ -239,16 +259,17 @@ impl Hint {
     /// `Hint` for a [`Field`]. Both `name` and `type_name` are used, `name` is
     /// more reliable and gets checked first.
     pub fn from_field(field: &Field<PortableForm>) -> Self {
-        let mut out = match field.name() {
+        let mut out = match &field.name {
             Some(name) => match name.as_str() {
                 a if NONCE_ID_SET.contains(&a) => Self::FieldNonce,
                 a if SPEC_VERSION_ID_SET.contains(&a) => Self::FieldSpecVersion,
+                a if SPEC_NAME_ID_SET.contains(&a) => Self::FieldSpecName,
                 _ => Self::None,
             },
             None => Self::None,
         };
         if let Self::None = out {
-            if let Some(type_name) = field.type_name() {
+            if let Some(type_name) = &field.type_name {
                 out = match type_name.as_str() {
                     a if BALANCE_ID_SET.contains(&a) => Self::FieldBalance,
                     _ => Self::None,
@@ -287,14 +308,24 @@ impl Hint {
     }
 
     /// Apply [`Hint`] on unsigned integer decoding.
-    pub fn primitive(&self) -> SpecialtyPrimitive {
+    pub fn unsigned_integer(&self) -> SpecialtyUnsignedInteger {
         match &self {
-            Hint::CheckSpecVersion | Hint::FieldSpecVersion => SpecialtyPrimitive::SpecVersion,
-            Hint::CheckTxVersion => SpecialtyPrimitive::TxVersion,
-            Hint::CheckNonce | Hint::FieldNonce => SpecialtyPrimitive::Nonce,
-            Hint::ChargeTransactionPayment => SpecialtyPrimitive::Tip,
-            Hint::FieldBalance => SpecialtyPrimitive::Balance,
-            _ => SpecialtyPrimitive::None,
+            Hint::CheckSpecVersion | Hint::FieldSpecVersion => {
+                SpecialtyUnsignedInteger::SpecVersion
+            }
+            Hint::CheckTxVersion => SpecialtyUnsignedInteger::TxVersion,
+            Hint::CheckNonce | Hint::FieldNonce => SpecialtyUnsignedInteger::Nonce,
+            Hint::ChargeTransactionPayment => SpecialtyUnsignedInteger::Tip,
+            Hint::FieldBalance => SpecialtyUnsignedInteger::Balance,
+            _ => SpecialtyUnsignedInteger::None,
+        }
+    }
+
+    /// Apply [`Hint`] on `str` decoding.
+    pub fn string(&self) -> SpecialtyStr {
+        match &self {
+            Hint::FieldSpecName => SpecialtyStr::SpecName,
+            _ => SpecialtyStr::None,
         }
     }
 
@@ -308,12 +339,14 @@ impl Hint {
     }
 }
 
-/// Unconfirmed specialty for a [`Type`], based only on its [`Path`].
+/// Unconfirmed specialty for a [`Type`].
 ///
 /// Does not propagate.
 ///
-/// Type internal structure must be additionally confirmed for `Call`, `Event`
-/// and `Option` before transforming into [`SpecialtyTypeChecked`], the type
+/// Checks type internal structure for `Option`.
+///
+/// Type internal structure must be additionally confirmed for `Call` and
+/// `Event` before transforming into [`SpecialtyTypeChecked`], the type
 /// specialty that causes parser action.
 pub enum SpecialtyTypeHinted {
     None,
@@ -322,7 +355,7 @@ pub enum SpecialtyTypeHinted {
     H160,
     H256,
     H512,
-    Option,
+    Option(UntrackedSymbol<TypeId>),
     PalletSpecific(PalletSpecificItem),
     Perbill,
     Percent,
@@ -335,6 +368,7 @@ pub enum SpecialtyTypeHinted {
     SignatureEd25519,
     SignatureSr25519,
     SignatureEcdsa,
+    UncheckedExtrinsic,
 }
 
 /// Specialty types that are associated with particular pallet. Currently `Call`
@@ -351,8 +385,8 @@ pub enum PalletSpecificItem {
 
 impl SpecialtyTypeHinted {
     /// Get `SpecialtyTypeHinted` from type-associated [`Path`].
-    pub fn from_path(path: &Path<PortableForm>) -> Self {
-        match path.ident() {
+    pub fn from_type(ty: &Type<PortableForm>) -> Self {
+        match ty.path.ident() {
             Some(a) => match a.as_str() {
                 ACCOUNT_ID32 => Self::AccountId32,
                 a if CALL.contains(&a) => Self::PalletSpecific(PalletSpecificItem::Call),
@@ -361,13 +395,42 @@ impl SpecialtyTypeHinted {
                 a if H160.contains(&a) => Self::H160,
                 H256 => Self::H256,
                 H512 => Self::H512,
-                OPTION => Self::Option,
+                OPTION => {
+                    if let TypeDef::Variant(x) = &ty.type_def {
+                        if ty.type_params.len() == 1 {
+                            if let Some(ty_symbol) = ty.type_params[0].ty {
+                                let mut has_none = false;
+                                let mut has_some = false;
+                                for variant in x.variants.iter() {
+                                    if variant.index == 0 && variant.name == NONE {
+                                        has_none = true
+                                    }
+                                    if variant.index == 1 && variant.name == SOME {
+                                        has_some = true
+                                    }
+                                }
+                                if has_none && has_some && (x.variants.len() == 2) {
+                                    Self::Option(ty_symbol)
+                                } else {
+                                    Self::None
+                                }
+                            } else {
+                                Self::None
+                            }
+                        } else {
+                            Self::None
+                        }
+                    } else {
+                        Self::None
+                    }
+                }
                 PERBILL => Self::Perbill,
                 PERCENT => Self::Percent,
                 PERMILL => Self::Permill,
                 PERQUINTILL => Self::Perquintill,
                 PERU16 => Self::PerU16,
-                PUBLIC => match path
+                PUBLIC => match ty
+                    .path
                     .namespace()
                     .iter()
                     .map(|x| x.as_str())
@@ -379,7 +442,8 @@ impl SpecialtyTypeHinted {
                     SP_CORE_ECDSA => Self::PublicEcdsa,
                     _ => Self::None,
                 },
-                SIGNATURE => match path
+                SIGNATURE => match ty
+                    .path
                     .namespace()
                     .iter()
                     .map(|x| x.as_str())
@@ -389,6 +453,17 @@ impl SpecialtyTypeHinted {
                     SP_CORE_ED25519 => Self::SignatureEd25519,
                     SP_CORE_SR25519 => Self::SignatureSr25519,
                     SP_CORE_ECDSA => Self::SignatureEcdsa,
+                    _ => Self::None,
+                },
+                UNCHECKED_EXTRINSIC_IDENT => match ty
+                    .path
+                    .namespace()
+                    .iter()
+                    .map(|x| x.as_str())
+                    .collect::<Vec<&str>>()
+                    .as_ref()
+                {
+                    UNCHECKED_EXTRINSIC_NAMESPACE => Self::UncheckedExtrinsic,
                     _ => Self::None,
                 },
                 _ => Self::None,
@@ -402,18 +477,20 @@ impl SpecialtyTypeHinted {
 ///
 /// Does not propagate. If found, causes parser to decode through special route.
 /// If decoding through special route fails, it is considered parser error.
-pub enum SpecialtyTypeChecked<'a> {
+pub enum SpecialtyTypeChecked {
     None,
     AccountId32,
     Era,
     H160,
     H256,
     H512,
-    Option(&'a UntrackedSymbol<TypeId>),
+    Option(UntrackedSymbol<TypeId>),
     PalletSpecific {
         pallet_name: String,
         pallet_info: Info,
-        variants: &'a [Variant<PortableForm>],
+        pallet_variant: Variant<PortableForm>,
+        item_ty_id: u32,
+        variants: Vec<Variant<PortableForm>>,
         item: PalletSpecificItem,
     },
     Perbill,
@@ -429,81 +506,58 @@ pub enum SpecialtyTypeChecked<'a> {
     SignatureEcdsa,
 }
 
-impl<'a> SpecialtyTypeChecked<'a> {
+impl SpecialtyTypeChecked {
     /// Get `SpecialtyTypeChecked` for a [`Type`].
-    ///
-    /// Checks type internal structure for `Option`.
     ///
     /// Checks type internal structure and uses input data for
     /// [`PalletSpecificItem`].
-    pub fn from_type(
-        ty: &'a Type<PortableForm>,
-        data: &[u8],
+    pub fn from_type<B, E, M>(
+        ty: &Type<PortableForm>,
+        data: &B,
+        ext_memory: &mut E,
         position: &mut usize,
-        registry: &'a PortableRegistry,
-    ) -> Self {
-        match SpecialtyTypeHinted::from_path(ty.path()) {
+        registry: &M::TypeRegistry,
+    ) -> Self
+    where
+        B: AddressableBuffer<E>,
+        E: ExternalMemory,
+        M: AsMetadata<E>,
+    {
+        match SpecialtyTypeHinted::from_type(ty) {
             SpecialtyTypeHinted::None => Self::None,
             SpecialtyTypeHinted::AccountId32 => Self::AccountId32,
             SpecialtyTypeHinted::Era => Self::Era,
             SpecialtyTypeHinted::H160 => Self::H160,
             SpecialtyTypeHinted::H256 => Self::H256,
             SpecialtyTypeHinted::H512 => Self::H512,
-            SpecialtyTypeHinted::Option => {
-                if let TypeDef::Variant(x) = ty.type_def() {
-                    let params = ty.type_params();
-                    if params.len() == 1 {
-                        if let Some(ty_symbol) = params[0].ty() {
-                            let mut has_none = false;
-                            let mut has_some = false;
-                            for variant in x.variants() {
-                                if variant.index() == 0 && variant.name() == NONE {
-                                    has_none = true
-                                }
-                                if variant.index() == 1 && variant.name() == SOME {
-                                    has_some = true
-                                }
-                            }
-                            if has_none && has_some && (x.variants().len() == 2) {
-                                Self::Option(ty_symbol)
-                            } else {
-                                Self::None
-                            }
-                        } else {
-                            Self::None
-                        }
-                    } else {
-                        Self::None
-                    }
-                } else {
-                    Self::None
-                }
-            }
+            SpecialtyTypeHinted::Option(x) => Self::Option(x),
             SpecialtyTypeHinted::PalletSpecific(item) => {
-                if let TypeDef::Variant(x) = ty.type_def() {
+                if let TypeDef::Variant(x) = &ty.type_def {
                     // found specific variant corresponding to pallet,
                     // get pallet name from here
-                    match pick_variant(x.variants(), data, *position) {
+                    match pick_variant::<B, E>(&x.variants, data, ext_memory, *position) {
                         Ok(pallet_variant) => {
-                            let pallet_name = pallet_variant.name().to_owned();
-                            let pallet_fields = pallet_variant.fields();
-                            if pallet_fields.len() == 1 {
-                                match registry.resolve(pallet_fields[0].ty().id()) {
-                                    Some(variants_ty) => {
+                            let pallet_name = pallet_variant.name.to_owned();
+                            if pallet_variant.fields.len() == 1 {
+                                let item_ty_id = pallet_variant.fields[0].ty.id;
+                                match registry.resolve_ty(item_ty_id, ext_memory) {
+                                    Ok(variants_ty) => {
                                         if let SpecialtyTypeHinted::PalletSpecific(item_repeated) =
-                                            SpecialtyTypeHinted::from_path(variants_ty.path())
+                                            SpecialtyTypeHinted::from_type(&variants_ty)
                                         {
                                             if item != item_repeated {
                                                 Self::None
-                                            } else if let TypeDef::Variant(var) =
-                                                variants_ty.type_def()
+                                            } else if let TypeDef::Variant(ref var) =
+                                                variants_ty.type_def
                                             {
-                                                let pallet_info = Info::from_ty(variants_ty);
+                                                let pallet_info = Info::from_ty(&variants_ty);
                                                 *position += ENUM_INDEX_ENCODED_LEN;
                                                 Self::PalletSpecific {
                                                     pallet_name,
                                                     pallet_info,
-                                                    variants: var.variants(),
+                                                    pallet_variant: pallet_variant.to_owned(),
+                                                    item_ty_id,
+                                                    variants: var.variants.to_vec(),
                                                     item,
                                                 }
                                             } else {
@@ -513,7 +567,7 @@ impl<'a> SpecialtyTypeChecked<'a> {
                                             Self::None
                                         }
                                     }
-                                    None => Self::None,
+                                    Err(_) => Self::None,
                                 }
                             } else {
                                 Self::None
@@ -536,6 +590,7 @@ impl<'a> SpecialtyTypeChecked<'a> {
             SpecialtyTypeHinted::SignatureEd25519 => Self::SignatureEd25519,
             SpecialtyTypeHinted::SignatureSr25519 => Self::SignatureSr25519,
             SpecialtyTypeHinted::SignatureEcdsa => Self::SignatureEcdsa,
+            SpecialtyTypeHinted::UncheckedExtrinsic => Self::None,
         }
     }
 }

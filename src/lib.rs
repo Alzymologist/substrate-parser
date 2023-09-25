@@ -116,7 +116,7 @@
 //!```
 //! #[cfg(feature = "std")]
 //! # {
-//! use frame_metadata::RuntimeMetadataV14;
+//! use frame_metadata::v14::RuntimeMetadataV14;
 //! use parity_scale_codec::Decode;
 //! use primitive_types::H256;
 //! use scale_info::{IntoPortable, Path, Registry};
@@ -125,16 +125,17 @@
 //! use std::str::FromStr;
 //! use substrate_parser::{
 //!     parse_transaction,
-//!     MetaInput,
+//!     AddressableBuffer,
+//!     AsMetadata,
 //!     cards::{
 //!         Call, ExtendedData, FieldData, Info,
 //!         PalletSpecificData, ParsedData, VariantData,
 //!     },
-//!     special_indicators::SpecialtyPrimitive,
+//!     special_indicators::SpecialtyUnsignedInteger,
 //! };
 //!
 //! // A simple signable transaction: Alice sends some cash by `transfer_keep_alive` method
-//! let mut signable_data = hex::decode("9c0403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480284d717d5031504025a62029723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84").unwrap();
+//! let signable_data = hex::decode("9c0403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480284d717d5031504025a62029723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84").unwrap();
 //!
 //! // Hexadecimal metadata, such as one fetched through rpc query
 //! let metadata_westend9111_hex = std::fs::read_to_string("for_tests/westend9111").unwrap();
@@ -150,8 +151,9 @@
 //! let westend_genesis_hash = H256::from_str("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e").unwrap();
 //!
 //! let parsed = parse_transaction(
-//!     &mut signable_data.clone(),
-//!     MetaInput::Raw(metadata_westend9111),
+//!     &signable_data.as_ref(),
+//!     &mut (),
+//!     &metadata_westend9111,
 //!     westend_genesis_hash,
 //! ).unwrap();
 //!
@@ -217,7 +219,7 @@
 //!         data: ExtendedData {
 //!             data: ParsedData::PrimitiveU128{
 //!                 value: 100000000,
-//!                 specialty: SpecialtyPrimitive::Balance,
+//!                 specialty: SpecialtyUnsignedInteger::Balance,
 //!             },
 //!             info: Vec::new()
 //!         }
@@ -308,8 +310,8 @@
 //!                     "check_mortality",
 //!                     "CheckMortality",
 //!                 ])
-//!                     .unwrap()
-//!                     .into_portable(&mut Registry::new()),
+//!                 .unwrap()
+//!                 .into_portable(&mut Registry::new()),
 //!             }
 //!         ]
 //!     },
@@ -322,7 +324,7 @@
 //!                 data: ExtendedData {
 //!                     data: ParsedData::PrimitiveU32 {
 //!                         value: 261,
-//!                         specialty: SpecialtyPrimitive::Nonce,
+//!                         specialty: SpecialtyUnsignedInteger::Nonce,
 //!                     },
 //!                     info: Vec::new()
 //!                 }
@@ -367,7 +369,7 @@
 //!                 data: ExtendedData {
 //!                     data: ParsedData::PrimitiveU128 {
 //!                         value: 10000000,
-//!                         specialty: SpecialtyPrimitive::Tip
+//!                         specialty: SpecialtyUnsignedInteger::Tip
 //!                     },
 //!                     info: Vec::new()
 //!                 }
@@ -388,14 +390,14 @@
 //!     ExtendedData {
 //!         data: ParsedData::PrimitiveU32 {
 //!             value: 9111,
-//!             specialty: SpecialtyPrimitive::SpecVersion
+//!             specialty: SpecialtyUnsignedInteger::SpecVersion
 //!         },
 //!         info: Vec::new()
 //!     },
 //!     ExtendedData {
 //!         data: ParsedData::PrimitiveU32 {
 //!             value: 7,
-//!             specialty: SpecialtyPrimitive::TxVersion
+//!             specialty: SpecialtyUnsignedInteger::TxVersion
 //!         },
 //!         info: Vec::new()
 //!     },
@@ -453,30 +455,24 @@
 #![no_std]
 #![deny(unused_crate_dependencies)]
 
+use parity_scale_codec::{Decode, Encode};
 use primitive_types::H256;
-use scale_info::{interner::UntrackedSymbol, PortableRegistry};
+use scale_info::interner::UntrackedSymbol;
 
 #[cfg(not(feature = "std"))]
 pub mod additional_types;
 pub mod cards;
-use cards::{Call, ExtendedCard, ExtendedData};
 pub mod compacts;
-use compacts::get_compact;
+pub mod cut_metadata;
 mod decoding_sci;
-pub use decoding_sci::decode_as_call;
-use decoding_sci::{decode_with_type, Ty};
 mod decoding_sci_ext;
-pub use decoding_sci_ext::decode_extensions;
 pub mod error;
-use error::{ParserError, SignableError};
-mod metadata_check;
-pub use metadata_check::{CheckedMetadata, MetaInput};
 pub mod printing_balance;
 mod propagated;
-use propagated::Propagated;
 pub mod special_indicators;
 mod special_types;
 pub mod storage_data;
+pub mod traits;
 pub mod unchecked_extrinsic;
 
 #[cfg(any(feature = "std", feature = "embed-display"))]
@@ -494,10 +490,20 @@ extern crate alloc as std;
 use crate::std::{string::String, vec::Vec};
 
 #[cfg(feature = "std")]
-use std::any::TypeId;
+use std::{any::TypeId, marker::PhantomData};
 
 #[cfg(not(feature = "std"))]
-use core::any::TypeId;
+use core::{any::TypeId, marker::PhantomData};
+
+pub use decoding_sci::{decode_as_call, decode_as_call_unmarked, ResolvedTy};
+pub use decoding_sci_ext::{decode_extensions, decode_extensions_unmarked};
+pub use traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
+
+use cards::{Call, ExtendedCard, ExtendedData};
+use compacts::get_compact;
+use decoding_sci::{decode_with_type, Ty};
+use error::{ParserError, SignableError};
+use propagated::Propagated;
 
 /// Chain data necessary to display decoded data correctly.
 ///
@@ -505,40 +511,50 @@ use core::any::TypeId;
 /// this must be done elsewhere.
 ///
 /// Using wrong specs may result in incorrectly displayed parsed information.
+#[derive(Clone, Debug, Decode, Encode)]
 pub struct ShortSpecs {
     pub base58prefix: u16,
     pub decimals: u8,
-    pub name: String,
     pub unit: String,
 }
 
 /// Marked signable transaction data, with associated start positions for call
 /// and extensions data.
-pub struct MarkedData<'a> {
-    data: &'a [u8],
+pub struct MarkedData<'a, B, E>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+{
+    data: &'a B,
     call_start: usize,
     extensions_start: usize,
+    ext_memory_type: PhantomData<E>,
 }
 
-impl<'a> MarkedData<'a> {
+impl<'a, B, E> MarkedData<'a, B, E>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+{
     /// Make `MarkedData` from a signable transaction data slice.
-    pub fn mark(data: &'a [u8]) -> Result<Self, SignableError> {
+    pub fn mark(data: &'a B, ext_memory: &mut E) -> Result<Self, SignableError<E>> {
         let mut call_start: usize = 0;
-        let call_length = get_compact::<u32>(data, &mut call_start)
+        let call_length = get_compact::<u32, B, E>(data, ext_memory, &mut call_start)
             .map_err(|_| SignableError::CutSignable)? as usize;
         let extensions_start = call_start + call_length;
-        match data.get(call_start..extensions_start) {
-            Some(_) => Ok(Self {
+        match data.read_slice(ext_memory, call_start, call_length) {
+            Ok(_) => Ok(Self {
                 data,
                 call_start,
                 extensions_start,
+                ext_memory_type: PhantomData,
             }),
-            None => Err(SignableError::CutSignable),
+            Err(_) => Err(SignableError::CutSignable),
         }
     }
 
     /// Whole signable transaction data.
-    pub fn data(&self) -> &[u8] {
+    pub fn data(&self) -> &B {
         self.data
     }
 
@@ -549,8 +565,8 @@ impl<'a> MarkedData<'a> {
     ///
     /// Extensions are cut to ensure the call decoding never gets outside the
     /// call data.
-    pub(crate) fn data_no_extensions(&self) -> &[u8] {
-        &self.data[..self.extensions_start()]
+    pub(crate) fn data_no_extensions(&self) -> B {
+        self.data.limit_length(self.extensions_start())
     }
 
     /// Start positions for call data.
@@ -568,25 +584,25 @@ impl<'a> MarkedData<'a> {
 ///
 /// Extensions must be decoded. Call decoding may be successful or not.
 #[derive(Debug)]
-pub struct TransactionParsed {
-    pub call_result: Result<Call, SignableError>,
+pub struct TransactionParsed<E: ExternalMemory> {
+    pub call_result: Result<Call, SignableError<E>>,
     pub extensions: Vec<ExtendedData>,
 }
 
 /// Signable transaction parsing outcome represented as formatted flat cards.
 #[derive(Debug)]
-pub struct TransactionCarded {
-    pub call_result: Result<Vec<ExtendedCard>, SignableError>,
+pub struct TransactionCarded<E: ExternalMemory> {
+    pub call_result: Result<Vec<ExtendedCard>, SignableError<E>>,
     pub extensions: Vec<ExtendedCard>,
 }
 
-impl TransactionParsed {
+impl<E: ExternalMemory> TransactionParsed<E> {
     /// Transform nested data from `TransactionParsed` into flat cards.
-    pub fn card(self, short_specs: &ShortSpecs) -> TransactionCarded {
+    pub fn card(self, short_specs: &ShortSpecs, spec_name: &str) -> TransactionCarded<E> {
         let start_indent = 0;
         let mut extensions: Vec<ExtendedCard> = Vec::new();
         for ext in self.extensions.iter() {
-            let addition_set = ext.card(start_indent, true, short_specs);
+            let addition_set = ext.card(start_indent, true, short_specs, spec_name);
             if !addition_set.is_empty() {
                 extensions.extend_from_slice(&addition_set)
             }
@@ -594,35 +610,103 @@ impl TransactionParsed {
         TransactionCarded {
             call_result: self
                 .call_result
-                .map(|call| call.card(start_indent, short_specs)),
+                .map(|call| call.card(start_indent, short_specs, spec_name)),
             extensions,
         }
     }
 }
 
 /// Parse a signable transaction.
-pub fn parse_transaction(
-    data: &[u8],
-    meta_input: MetaInput,
+pub fn parse_transaction<B, E, M>(
+    data: &B,
+    ext_memory: &mut E,
+    meta_v14: &M,
     genesis_hash: H256,
-) -> Result<TransactionParsed, SignableError> {
-    let checked_metadata = meta_input.checked().map_err(SignableError::MetaVersion)?;
-
+) -> Result<TransactionParsed<E>, SignableError<E>>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
     // unable to separate call date and extensions,
     // some fundamental flaw is in transaction itself
-    let marked_data = MarkedData::mark(data)?;
+    let marked_data = MarkedData::<B, E>::mark(data, ext_memory)?;
 
     // try parsing extensions, check that spec version and genesis hash are
     // correct
-    let extensions = decode_extensions(&marked_data, &checked_metadata, genesis_hash)?;
+    let extensions =
+        decode_extensions::<B, E, M>(&marked_data, ext_memory, meta_v14, genesis_hash)?;
 
     // try parsing call data
-    let call_result = decode_as_call(&marked_data, &checked_metadata.meta_v14);
+    let call_result = decode_as_call::<B, E, M>(&marked_data, ext_memory, meta_v14);
 
-    Ok(TransactionParsed {
+    Ok(TransactionParsed::<E> {
         call_result,
         extensions,
     })
+}
+
+/// Signable transaction parsing outcome, for unmarked transaction.
+#[derive(Debug)]
+pub struct TransactionUnmarkedParsed {
+    pub call: Call,
+    pub extensions: Vec<ExtendedData>,
+}
+
+/// Signable transaction parsing outcome represented as formatted flat cards,
+/// for unmarked transaction.
+#[derive(Debug)]
+pub struct TransactionUnmarkedCarded {
+    pub call: Vec<ExtendedCard>,
+    pub extensions: Vec<ExtendedCard>,
+}
+
+impl TransactionUnmarkedParsed {
+    /// Transform nested data from `TransactionUnmarkedParsed` into flat cards.
+    pub fn card(self, short_specs: &ShortSpecs, spec_name: &str) -> TransactionUnmarkedCarded {
+        let start_indent = 0;
+        let mut extensions: Vec<ExtendedCard> = Vec::new();
+        for ext in self.extensions.iter() {
+            let addition_set = ext.card(start_indent, true, short_specs, spec_name);
+            if !addition_set.is_empty() {
+                extensions.extend_from_slice(&addition_set)
+            }
+        }
+        TransactionUnmarkedCarded {
+            call: self.call.card(start_indent, short_specs, spec_name),
+            extensions,
+        }
+    }
+}
+
+/// Parse a signable transaction, Ledger format. Call is not prefixed with call length.
+pub fn parse_transaction_unmarked<B, E, M>(
+    data: &B,
+    ext_memory: &mut E,
+    meta_v14: &M,
+    genesis_hash: H256,
+) -> Result<TransactionUnmarkedParsed, SignableError<E>>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
+    let mut position = 0;
+
+    // try parsing call data
+    let call = decode_as_call_unmarked::<B, E, M>(data, &mut position, ext_memory, meta_v14)?;
+
+    // try parsing extensions, check that spec version and genesis hash are
+    // correct
+    let extensions = decode_extensions_unmarked::<B, E, M>(
+        data,
+        &mut position,
+        ext_memory,
+        meta_v14,
+        genesis_hash,
+    )?;
+
+    Ok(TransactionUnmarkedParsed { call, extensions })
 }
 
 /// Decode part of `&[u8]` slice as a known type using `V14` metadata.
@@ -634,15 +718,22 @@ pub fn parse_transaction(
 ///
 /// [`decode_all_as_type`] is suggested instead if all input is expected to be
 /// used.
-pub fn decode_as_type_at_position(
+pub fn decode_as_type_at_position<B, E, M>(
     ty_symbol: &UntrackedSymbol<TypeId>,
-    data: &[u8],
-    registry: &PortableRegistry,
+    data: &B,
+    ext_memory: &mut E,
+    registry: &M::TypeRegistry,
     position: &mut usize,
-) -> Result<ExtendedData, ParserError> {
-    decode_with_type(
+) -> Result<ExtendedData, ParserError<E>>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
+    decode_with_type::<B, E, M>(
         &Ty::Symbol(ty_symbol),
         data,
+        ext_memory,
         position,
         registry,
         Propagated::new(),
@@ -652,14 +743,26 @@ pub fn decode_as_type_at_position(
 /// Decode whole `&[u8]` slice as a known type using `V14` metadata.
 ///
 /// All data is expected to be used for the decoding.
-pub fn decode_all_as_type(
+pub fn decode_all_as_type<B, E, M>(
     ty_symbol: &UntrackedSymbol<TypeId>,
-    data: &[u8],
-    registry: &PortableRegistry,
-) -> Result<ExtendedData, ParserError> {
+    data: &B,
+    ext_memory: &mut E,
+    registry: &M::TypeRegistry,
+) -> Result<ExtendedData, ParserError<E>>
+where
+    B: AddressableBuffer<E>,
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
     let mut position: usize = 0;
-    let out = decode_as_type_at_position(ty_symbol, data, registry, &mut position)?;
-    if position != data.len() {
+    let out = decode_as_type_at_position::<B, E, M>(
+        ty_symbol,
+        data,
+        ext_memory,
+        registry,
+        &mut position,
+    )?;
+    if position != data.total_len() {
         Err(ParserError::SomeDataNotUsedBlob { from: position })
     } else {
         Ok(out)
