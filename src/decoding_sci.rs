@@ -51,7 +51,7 @@ use crate::MarkedData;
 ///
 /// Current parser position gets changed. Propagated to this point
 /// [`SpecialtySet`] is used.
-pub(crate) fn decode_type_def_primitive<B, E>(
+pub fn decode_type_def_primitive<B, E>(
     found_ty: &TypeDefPrimitive,
     data: &B,
     ext_memory: &mut E,
@@ -297,7 +297,7 @@ where
 }
 
 /// [`TypeParameter`](scale_info::TypeParameter) name for `call`.
-pub(crate) const CALL_INDICATOR: &str = "Call";
+pub const CALL_INDICATOR: &str = "Call";
 
 /// General decoder function. Parse part of data as [`Ty`].
 ///
@@ -809,7 +809,7 @@ where
 /// First data `u8` element is `index` of [`Variant`].
 ///
 /// Does not modify the input.
-pub(crate) fn pick_variant<'a, B, E>(
+pub fn pick_variant<'a, B, E>(
     variants: &'a [Variant<PortableForm>],
     data: &B,
     ext_memory: &mut E,
@@ -998,7 +998,7 @@ where
 }
 
 /// Positions and related values for decoding `BitVec`.
-pub(crate) struct BitVecPositions {
+pub struct BitVecPositions {
     /// Encoded `BitVec` start position, includes bit length compact.
     bitvec_start: usize,
 
@@ -1007,7 +1007,7 @@ pub(crate) struct BitVecPositions {
     data_start: usize,
 
     /// Encoded `BitVec` end position.
-    pub(crate) bitvec_end: usize,
+    pub bitvec_end: usize,
 
     /// Number of bits in `BitVec`, for patch only.
     #[cfg(any(target_pointer_width = "32", test))]
@@ -1025,7 +1025,7 @@ impl BitVecPositions {
     /// New `BitVecPositions` for given input data and position.
     ///
     /// `T` is corresponding `BitStore`.
-    pub(crate) fn new<T, B, E>(
+    pub fn new<T, B, E>(
         data: &B,
         ext_memory: &mut E,
         position: usize,

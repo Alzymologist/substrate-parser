@@ -189,12 +189,12 @@ impl Default for Checker {
 #[derive(Clone, Debug)]
 pub struct Propagated {
     /// Type data that is collected and checked during parsing.
-    pub(crate) checker: Checker,
+    pub checker: Checker,
 
     /// Set of [`Info`] collected while resolving the type.
     ///
     /// Only non-empty [`Info`] entries are added.
-    pub(crate) info: Vec<Info>,
+    pub info: Vec<Info>,
 }
 
 impl Propagated {
@@ -207,7 +207,7 @@ impl Propagated {
     }
 
     /// Initiate new `Propagated` for signed extensions instance.
-    pub(crate) fn from_ext_meta(signed_ext_meta: &SignedExtensionMetadata<PortableForm>) -> Self {
+    pub fn from_ext_meta(signed_ext_meta: &SignedExtensionMetadata<PortableForm>) -> Self {
         Self {
             checker: Checker {
                 specialty_set: SpecialtySet {
@@ -221,7 +221,7 @@ impl Propagated {
     }
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`.
-    pub(crate) fn with_checker(checker: Checker) -> Self {
+    pub fn with_checker(checker: Checker) -> Self {
         Self {
             checker,
             info: Vec::new(),
@@ -230,7 +230,7 @@ impl Propagated {
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`
     /// for an individual [`Field`].
-    pub(crate) fn for_field<E: ExternalMemory>(
+    pub fn for_field<E: ExternalMemory>(
         checker: &Checker,
         field: &Field<PortableForm>,
     ) -> Result<Self, ParserError<E>> {
@@ -242,7 +242,7 @@ impl Propagated {
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`
     /// for a [`Type`].
-    pub(crate) fn for_ty<E: ExternalMemory>(
+    pub fn for_ty<E: ExternalMemory>(
         checker: &Checker,
         ty: &Type<PortableForm>,
         id: u32,
@@ -254,30 +254,30 @@ impl Propagated {
     }
 
     /// Get associated `compact_at`
-    pub(crate) fn compact_at(&self) -> Option<u32> {
+    pub fn compact_at(&self) -> Option<u32> {
         self.checker.specialty_set.compact_at
     }
 
     /// Check that `compact_at` field in associated [`SpecialtySet`] is not
     /// `Some(_)`, i.e. there was no compact type encountered.
-    pub(crate) fn reject_compact<E: ExternalMemory>(&self) -> Result<(), ParserError<E>> {
+    pub fn reject_compact<E: ExternalMemory>(&self) -> Result<(), ParserError<E>> {
         self.checker.specialty_set.reject_compact::<E>()
     }
 
     /// Discard previously found [`Hint`].
-    pub(crate) fn forget_hint(&mut self) {
+    pub fn forget_hint(&mut self) {
         self.checker.forget_hint()
     }
 
     /// Add [`Info`] entry (if non-empty) to `info` set.
-    pub(crate) fn add_info(&mut self, info_update: &Info) {
+    pub fn add_info(&mut self, info_update: &Info) {
         if !info_update.is_empty() {
             self.info.push(info_update.clone())
         }
     }
 
     /// Add `&[Info]` to `info` set.
-    pub(crate) fn add_info_slice(&mut self, info_update_slice: &[Info]) {
+    pub fn add_info_slice(&mut self, info_update_slice: &[Info]) {
         self.info.extend_from_slice(info_update_slice)
     }
 }
