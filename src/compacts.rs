@@ -70,7 +70,7 @@ where
 }
 
 /// Find compact and move current parser position accordingly.
-pub(crate) fn get_compact<T, B, E>(
+pub fn get_compact<T, B, E>(
     data: &B,
     ext_memory: &mut E,
     position: &mut usize,

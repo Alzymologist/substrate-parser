@@ -464,11 +464,11 @@ pub mod additional_types;
 pub mod cards;
 pub mod compacts;
 pub mod cut_metadata;
-mod decoding_sci;
+pub mod decoding_sci;
 mod decoding_sci_ext;
 pub mod error;
 pub mod printing_balance;
-mod propagated;
+pub mod propagated;
 pub mod special_indicators;
 mod special_types;
 pub mod storage_data;
@@ -565,7 +565,7 @@ where
     ///
     /// Extensions are cut to ensure the call decoding never gets outside the
     /// call data.
-    pub(crate) fn data_no_extensions(&self) -> B {
+    pub fn data_no_extensions(&self) -> B {
         self.data.limit_length(self.extensions_start())
     }
 
