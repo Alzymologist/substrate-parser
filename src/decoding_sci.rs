@@ -383,7 +383,7 @@ where
                     })
                 } else {
                     Ok(ExtendedData {
-                        data: ParsedData::EmptyVariant,
+                        data: ParsedData::EmptyEnum,
                         info: propagated.info,
                     })
                 }

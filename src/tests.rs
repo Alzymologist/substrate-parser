@@ -1896,6 +1896,7 @@ Pallet: Referenda
     Field Name: proposal_origin
       Enum
         Enum Variant Name: Void
+          Enum With No Variants
     Field Name: proposal
       Enum
         Enum Variant Name: Legacy
