@@ -322,6 +322,8 @@ pub const CALL_INDICATOR: &str = "Call";
 /// - vectors (compact vector length indicator is passed)
 /// - calls and events, options (also variant index is passed)
 ///
+/// In empty enums there are no inner types, therefore cycling is impossible.
+///
 /// Thus the potential endless cycling could happen for structs, arrays, tuples,
 /// and compacts. Notably, this *should not* happen in good metadata.
 ///
@@ -367,12 +369,24 @@ where
             }
             TypeDef::Variant(x) => {
                 propagated.reject_compact()?;
-                let variant_data =
-                    decode_variant::<B, E, M>(&x.variants, data, ext_memory, position, registry)?;
-                Ok(ExtendedData {
-                    data: ParsedData::Variant(variant_data),
-                    info: propagated.info,
-                })
+                if !x.variants.is_empty() {
+                    let variant_data = decode_variant::<B, E, M>(
+                        &x.variants,
+                        data,
+                        ext_memory,
+                        position,
+                        registry,
+                    )?;
+                    Ok(ExtendedData {
+                        data: ParsedData::Variant(variant_data),
+                        info: propagated.info,
+                    })
+                } else {
+                    Ok(ExtendedData {
+                        data: ParsedData::EmptyVariant,
+                        info: propagated.info,
+                    })
+                }
             }
             TypeDef::Sequence(x) => {
                 let number_of_elements = get_compact::<u32, B, E>(data, ext_memory, position)?;

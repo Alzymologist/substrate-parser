@@ -307,6 +307,7 @@ pub enum ParsedData {
     BlockHash(H256),
     Call(Call),
     Composite(Vec<FieldData>),
+    EmptyVariant,
     Era(Era),
     Event(Event),
     GenesisHash(H256),
@@ -516,6 +517,7 @@ impl ParsedData {
                     out
                 }
             }
+            ParsedData::EmptyVariant => Vec::new(),
             ParsedData::Era(value) => single_card!(Era, value, indent, info_flat),
             ParsedData::Event(event) => event.card(indent, short_specs, spec_name),
             ParsedData::GenesisHash(_) => Vec::new(),
