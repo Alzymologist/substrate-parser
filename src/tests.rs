@@ -1855,3 +1855,76 @@ Block Hash: 9eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c6
 ";
     assert_eq!(extensions_known, extensions_printed);
 }
+
+#[test]
+fn tr_6() {
+    let metadata_polkadot = metadata("for_tests/polkadot9430");
+
+    let data = hex::decode("15000600a9569408db2bf9dd45318e13074b02ffce42dcf91b89cbef0fbe92191eb9627f019b02f1160003792192b533ff24d1ac92297d3905d02aac6dc63c10d62400001800000091b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c391b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3").unwrap();
+
+    let reply = parse_transaction_unmarked(
+        &data.as_ref(),
+        &mut (),
+        &metadata_polkadot,
+        H256(
+            hex::decode("91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
+    )
+    .unwrap()
+    .card(
+        &specs_polkadot(),
+        &<RuntimeMetadataV14 as AsMetadata<()>>::spec_name_version(&metadata_polkadot)
+            .unwrap()
+            .spec_name,
+    );
+
+    let call_printed = format!(
+        "\n{}\n",
+        reply
+            .call
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let call_known = "
+Pallet: Referenda
+  Call: submit
+    Field Name: proposal_origin
+      Enum
+        Enum Variant Name: Void
+          Enum With No Variants
+    Field Name: proposal
+      Enum
+        Enum Variant Name: Legacy
+          Field Name: hash
+            H256: a9569408db2bf9dd45318e13074b02ffce42dcf91b89cbef0fbe92191eb9627f
+    Field Name: enactment_moment
+      Enum
+        Enum Variant Name: After
+          u32: 384893595
+";
+    assert_eq!(call_known, call_printed);
+
+    let extensions_printed = format!(
+        "\n{}\n",
+        reply
+            .extensions
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let extensions_known = "
+Era: Immortal
+Nonce: 3046252921
+Tip: 2158321035032515.9632029318439228220671 TDOT
+Chain: polkadot9430
+Tx Version: 24
+Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
+";
+    assert_eq!(extensions_known, extensions_printed);
+}

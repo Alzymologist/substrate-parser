@@ -307,6 +307,7 @@ pub enum ParsedData {
     BlockHash(H256),
     Call(Call),
     Composite(Vec<FieldData>),
+    EmptyEnum,
     Era(Era),
     Event(Event),
     GenesisHash(H256),
@@ -516,6 +517,11 @@ impl ParsedData {
                     out
                 }
             }
+            ParsedData::EmptyEnum => vec![ExtendedCard {
+                parser_card: ParserCard::EmptyEnum,
+                indent,
+                info_flat,
+            }],
             ParsedData::Era(value) => single_card!(Era, value, indent, info_flat),
             ParsedData::Event(event) => event.card(indent, short_specs, spec_name),
             ParsedData::GenesisHash(_) => Vec::new(),
@@ -982,6 +988,7 @@ pub enum ParserCard {
     BlockHash(H256),
     CallName(String),
     CompositeAnnounced(usize),
+    EmptyEnum,
     EnumAnnounced,
     EnumVariantName(String),
     Era(Era),
@@ -1123,6 +1130,9 @@ impl ExtendedCard {
             ParserCard::CallName(a) => readable(self.indent, "Call", a),
             ParserCard::CompositeAnnounced(a) => {
                 readable(self.indent, "Struct", &format!("{a} field(s)"))
+            }
+            ParserCard::EmptyEnum => {
+                format!("{}Enum With No Variants", "  ".repeat(self.indent as usize))
             }
             ParserCard::EnumAnnounced => format!("{}Enum", "  ".repeat(self.indent as usize)),
             ParserCard::EnumVariantName(a) => readable(self.indent, "Enum Variant Name", a),
