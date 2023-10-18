@@ -17,18 +17,13 @@ use sp_runtime::generic::Era;
 use crate::cards::{
     ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
 };
-use crate::cut_metadata::{
-    cut_metadata, cut_metadata_transaction_unmarked, pass_call, DraftRegistry, HashPrep,
-};
 use crate::error::{ParserError, SignableError};
 use crate::special_indicators::SpecialtyUnsignedInteger;
 use crate::storage_data::{decode_as_storage_entry, KeyData, KeyPart};
 use crate::traits::AsMetadata;
 #[cfg(feature = "std")]
 use crate::unchecked_extrinsic::{decode_as_unchecked_extrinsic, UncheckedExtrinsic};
-use crate::{
-    decode_all_as_type, parse_transaction, parse_transaction_unmarked, MarkedData, ShortSpecs,
-};
+use crate::{decode_all_as_type, parse_transaction, parse_transaction_unmarked, ShortSpecs};
 
 fn metadata(filename: &str) -> RuntimeMetadataV14 {
     let metadata_hex = std::fs::read_to_string(filename).unwrap();
@@ -1227,140 +1222,15 @@ fn unchecked_extrinsic_1() {
 }
 
 #[test]
-fn short_metadata_1_call_only() {
-    let data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
-    let binding = data.as_ref();
-    let marked_data = MarkedData::mark(&binding, &mut ()).unwrap();
-    let mut draft_registry = DraftRegistry { types: Vec::new() };
-
-    pass_call(
-        &marked_data,
-        &mut (),
-        &metadata("for_tests/westend9111"),
-        &mut draft_registry,
-    )
-    .unwrap();
-
-    let short_registry = draft_registry.finalize();
-    assert_eq!(short_registry.types.len(), 14);
-}
-
-#[test]
-fn short_metadata_2_decode() {
-    let data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
-
-    let short_metadata = cut_metadata(
-        &data.as_ref(),
-        &mut (),
-        &metadata("for_tests/westend9111"),
-        &specs_westend(),
-    )
-    .unwrap();
-
-    let reply = parse_transaction(
-        &data.as_ref(),
-        &mut (),
-        &short_metadata,
-        H256(
-            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
-    )
-    .unwrap()
-    .card(
-        &short_metadata.to_specs(),
-        &short_metadata.spec_name_version.spec_name,
-    );
-
-    let call_printed = format!(
-        "\n{}\n",
-        reply
-            .call_result
-            .unwrap()
-            .iter()
-            .map(|card| card.show())
-            .collect::<Vec<String>>()
-            .join("\n")
-    );
-    let call_known = "
-Pallet: Utility
-  Call: batch_all
-    Field Name: calls
-      Sequence: 2 element(s)
-        Pallet: Staking
-          Call: bond
-            Field Name: controller
-              Enum
-                Enum Variant Name: Id
-                  Id: 5DfhGyQdFobKM8NsWvEeAKk5EQQgYe9AydgJ7rMB6E1EqRzV
-            Field Name: value
-              Balance: 1.061900000000 WND
-            Field Name: payee
-              Enum
-                Enum Variant Name: Staked
-        Pallet: Staking
-          Call: nominate
-            Field Name: targets
-              Sequence: 3 element(s)
-                Enum
-                  Enum Variant Name: Id
-                    Id: 5CFPcUJgYgWryPaV1aYjSbTpbTLu42V32Ytw1L9rfoMAsfGh
-                Enum
-                  Enum Variant Name: Id
-                    Id: 5G1ojzh47Yt8KoYhuAjXpHcazvsoCXe3G8LZchKDvumozJJJ
-                Enum
-                  Enum Variant Name: Id
-                    Id: 5FZoQhgUCmqBxnkHX7jCqThScS2xQWiwiF61msg63CFL3Y8f
-";
-    assert_eq!(call_known, call_printed);
-
-    let extensions_printed = format!(
-        "\n{}\n",
-        reply
-            .extensions
-            .iter()
-            .map(|card| card.show())
-            .collect::<Vec<String>>()
-            .join("\n")
-    );
-    let extensions_known = "
-Era: Mortal, phase: 5, period: 64
-Nonce: 2
-Tip: 0 pWND
-Chain: westend9111
-Tx Version: 7
-Block Hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff
-";
-    assert_eq!(extensions_known, extensions_printed);
-}
-
-#[test]
-fn short_metadata_3_decode() {
+fn tr_7() {
     let data = hex::decode("a00a0304a84b841c4d9d1a179be03bb31131c14ebf6ce22233158139ae28a3dfaac5fe1560a5e9e05cd5038d248ed73e0d9808000003000000fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64cfc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c").unwrap();
 
     let metadata_acala = metadata("for_tests/acala2200");
 
-    let short_metadata =
-        cut_metadata(&data.as_ref(), &mut (), &metadata_acala, &specs_acala()).unwrap();
-
-    let hash_prep_whole_registry = metadata_acala.types.hash_prep::<()>().unwrap();
-    assert_eq!(2462, hash_prep_whole_registry.len());
-
-    let hash_prep_short_registry = short_metadata.short_registry.hash_prep::<()>().unwrap();
-    assert_eq!(25, hash_prep_short_registry.len());
-
-    let excluded = short_metadata
-        .short_registry
-        .exclude_from::<()>(&metadata_acala.types)
-        .unwrap();
-    assert_eq!(2437, excluded.len());
-
     let reply = parse_transaction(
         &data.as_ref(),
         &mut (),
-        &short_metadata,
+        &metadata_acala,
         H256(
             hex::decode("fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c")
                 .unwrap()
@@ -1370,8 +1240,10 @@ fn short_metadata_3_decode() {
     )
     .unwrap()
     .card(
-        &short_metadata.to_specs(),
-        &short_metadata.spec_name_version.spec_name,
+        &specs_acala(),
+        &<RuntimeMetadataV14 as AsMetadata<()>>::spec_name_version(&metadata_acala)
+            .unwrap()
+            .spec_name,
     );
 
     let call_printed = format!(
@@ -1419,35 +1291,15 @@ Block Hash: fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c
 }
 
 #[test]
-fn short_metadata_4_decode() {
+fn tr_8() {
     let data = hex::decode("641a04100000083434000008383800000c31333200000c313736d503040b63ce64c10c05d62400001800000091b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c391b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3").unwrap();
 
     let metadata_polkadot = metadata("for_tests/polkadot9430");
 
-    let short_metadata = cut_metadata(
-        &data.as_ref(),
-        &mut (),
-        &metadata_polkadot,
-        &specs_polkadot(),
-    )
-    .unwrap();
-
-    let hash_prep_whole_registry = metadata_polkadot.types.hash_prep::<()>().unwrap();
-    assert_eq!(2705, hash_prep_whole_registry.len());
-
-    let hash_prep_short_registry = short_metadata.short_registry.hash_prep::<()>().unwrap();
-    assert_eq!(25, hash_prep_short_registry.len());
-
-    let excluded = short_metadata
-        .short_registry
-        .exclude_from::<()>(&metadata_polkadot.types)
-        .unwrap();
-    assert_eq!(2680, excluded.len());
-
     let reply = parse_transaction(
         &data.as_ref(),
         &mut (),
-        &short_metadata,
+        &metadata_polkadot,
         H256(
             hex::decode("91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3")
                 .unwrap()
@@ -1457,8 +1309,10 @@ fn short_metadata_4_decode() {
     )
     .unwrap()
     .card(
-        &short_metadata.to_specs(),
-        &short_metadata.spec_name_version.spec_name,
+        &specs_polkadot(),
+        &<RuntimeMetadataV14 as AsMetadata<()>>::spec_name_version(&metadata_polkadot)
+            .unwrap()
+            .spec_name,
     );
 
     let call_printed = format!(
@@ -1516,35 +1370,15 @@ Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 }
 
 #[test]
-fn short_metadata_5_decode() {
+fn tr_9() {
     let data = hex::decode("6301039508080401380074063d03aeada02cc26977d0ab68927e12516a3287a3c72cc937981d1e7c9ade0cf91f0300eda947e425ea94b7642cc2d3939d30207e457a92049804580804044e7eca0311ba0594016808003d3d080701ada1020180d1043985798860eb63723790bda41de487e0730251717471e9660ab0aa5a6a65dde70807042c021673020808049d604a87138c0704aa060102ab90ebe5eeaf95088767ace3e78d04147180b016cf193a542fe5c9a4291e70784f6d64fb705349e4a361c453b28d18ba43b8e0bee72dad92845acbe281f21ea6c270f553481dc183b60ca8c1803544f33691adef9c5d4f807827e288143f4af2aa1c2c0b9e6087db1decedb85e2774f792c9bbc61ed85f031d11d175f93ecf7d030800a90307010107d5ebd78dfce4bdb789c0e310e2172b3f3a13ec09e39ba8b644e368816bd7acd57f10030025867d9fc900c0f7afe1ce1fc756f152b3f38e5a010001dec102c8abb0449d91dd617be6a7dc4d7ea0ae7f7cebaf1c9e4c9f0a64716c3d007800000000d50391010b63ce64c10c05d62400001800000091b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c391b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3").unwrap();
 
     let metadata_polkadot = metadata("for_tests/polkadot9430");
 
-    let short_metadata = cut_metadata_transaction_unmarked(
-        &data.as_ref(),
-        &mut (),
-        &metadata_polkadot,
-        &specs_polkadot(),
-    )
-    .unwrap();
-
-    let hash_prep_whole_registry = metadata_polkadot.types.hash_prep::<()>().unwrap();
-    assert_eq!(2705, hash_prep_whole_registry.len());
-
-    let hash_prep_short_registry = short_metadata.short_registry.hash_prep::<()>().unwrap();
-    assert_eq!(66, hash_prep_short_registry.len());
-
-    let excluded = short_metadata
-        .short_registry
-        .exclude_from::<()>(&metadata_polkadot.types)
-        .unwrap();
-    assert_eq!(2639, excluded.len());
-
     let reply = parse_transaction_unmarked(
         &data.as_ref(),
         &mut (),
-        &short_metadata,
+        &metadata_polkadot,
         H256(
             hex::decode("91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3")
                 .unwrap()
@@ -1554,8 +1388,10 @@ fn short_metadata_5_decode() {
     )
     .unwrap()
     .card(
-        &short_metadata.to_specs(),
-        &short_metadata.spec_name_version.spec_name,
+        &specs_polkadot(),
+        &<RuntimeMetadataV14 as AsMetadata<()>>::spec_name_version(&metadata_polkadot)
+            .unwrap()
+            .spec_name,
     );
 
     let call_printed = format!(
@@ -1777,31 +1613,15 @@ Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 }
 
 #[test]
-fn short_metadata_6_decode() {
+fn tr_10() {
     let data = hex::decode("1f00001b7a61c73f450f4518731981d9cdd99013cfe044294617b74f93ba4bba6090d00b63ce64c10c05d5030403d202964942000000020000009eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c69eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c6").unwrap();
 
     let metadata_astar = metadata("for_tests/astar66");
 
-    let short_metadata =
-        cut_metadata_transaction_unmarked(&data.as_ref(), &mut (), &metadata_astar, &specs_astar())
-            .unwrap();
-
-    let hash_prep_whole_registry = metadata_astar.types.hash_prep::<()>().unwrap();
-    assert_eq!(1778, hash_prep_whole_registry.len());
-
-    let hash_prep_short_registry = short_metadata.short_registry.hash_prep::<()>().unwrap();
-    assert_eq!(23, hash_prep_short_registry.len());
-
-    let excluded = short_metadata
-        .short_registry
-        .exclude_from::<()>(&metadata_astar.types)
-        .unwrap();
-    assert_eq!(1755, excluded.len());
-
     let reply = parse_transaction_unmarked(
         &data.as_ref(),
         &mut (),
-        &short_metadata,
+        &metadata_astar,
         H256(
             hex::decode("9eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c6")
                 .unwrap()
@@ -1811,8 +1631,10 @@ fn short_metadata_6_decode() {
     )
     .unwrap()
     .card(
-        &short_metadata.to_specs(),
-        &short_metadata.spec_name_version.spec_name,
+        &specs_astar(),
+        &<RuntimeMetadataV14 as AsMetadata<()>>::spec_name_version(&metadata_astar)
+            .unwrap()
+            .spec_name,
     );
 
     let call_printed = format!(
@@ -1857,7 +1679,7 @@ Block Hash: 9eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c6
 }
 
 #[test]
-fn tr_6() {
+fn tr_11() {
     let metadata_polkadot = metadata("for_tests/polkadot9430");
 
     let data = hex::decode("15000600a9569408db2bf9dd45318e13074b02ffce42dcf91b89cbef0fbe92191eb9627f019b02f1160003792192b533ff24d1ac92297d3905d02aac6dc63c10d62400001800000091b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c391b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3").unwrap();

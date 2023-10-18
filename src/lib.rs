@@ -114,7 +114,7 @@
 //!
 //! # Examples
 //!```
-//! #[cfg(feature = "std")]
+//! # #[cfg(feature = "std")]
 //! # {
 //! use frame_metadata::v14::RuntimeMetadataV14;
 //! use parity_scale_codec::Decode;
@@ -463,7 +463,6 @@ use scale_info::interner::UntrackedSymbol;
 pub mod additional_types;
 pub mod cards;
 pub mod compacts;
-pub mod cut_metadata;
 pub mod decoding_sci;
 mod decoding_sci_ext;
 pub mod error;

@@ -20,7 +20,6 @@ use parity_scale_codec::{Decode, Encode};
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, PortableRegistry, Type};
 
 use crate::cards::ParsedData;
-use crate::cut_metadata::{ShortMetadata, ShortRegistry};
 use crate::decode_all_as_type;
 use crate::error::{MetaVersionError, ParserError};
 use crate::special_indicators::{SpecialtyStr, SpecialtyUnsignedInteger};
@@ -260,35 +259,4 @@ fn spec_name_version_from_runtime_version_data(
         printed_spec_version,
         spec_name,
     })
-}
-
-impl<E: ExternalMemory> ResolveType<E> for ShortRegistry {
-    fn resolve_ty(
-        &self,
-        id: u32,
-        _ext_memory: &mut E,
-    ) -> Result<Type<PortableForm>, ParserError<E>> {
-        for short_registry_entry in self.types.iter() {
-            if short_registry_entry.id == id {
-                return Ok(short_registry_entry.ty.to_owned());
-            }
-        }
-        Err(ParserError::V14TypeNotResolved { id })
-    }
-}
-
-impl<E: ExternalMemory> AsMetadata<E> for ShortMetadata {
-    type TypeRegistry = ShortRegistry;
-
-    fn types(&self) -> Self::TypeRegistry {
-        self.short_registry.to_owned()
-    }
-
-    fn spec_name_version(&self) -> Result<SpecNameVersion, MetaVersionError> {
-        Ok(self.spec_name_version.to_owned())
-    }
-
-    fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm> {
-        self.extrinsic.to_owned()
-    }
 }
