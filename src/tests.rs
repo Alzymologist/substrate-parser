@@ -55,6 +55,14 @@ fn specs_astar() -> ShortSpecs {
     }
 }
 
+fn specs_bifrost() -> ShortSpecs {
+    ShortSpecs {
+        base58prefix: 6,
+        decimals: 12,
+        unit: "BNC".to_string(),
+    }
+}
+
 fn specs_polkadot() -> ShortSpecs {
     ShortSpecs {
         base58prefix: 0,
@@ -1441,7 +1449,8 @@ Pallet: XcmPallet
                     Enum
                       Enum Variant Name: AccountKey20
                         Field Name: network
-                          Option: None
+                          Enum
+                            Enum Variant Name: None
                         Field Name: key
                           Sequence u8: eda947e425ea94b7642cc2d3939d30207e457a92
                   Field Number: 5
@@ -1561,16 +1570,19 @@ Pallet: XcmPallet
                                 Enum Variant Name: AccountId32
                                   Field Name: network
                                     Enum
-                                      Enum Variant Name: Ethereum
-                                        Field Name: chain_id
-                                          u64: 15093
+                                      Enum Variant Name: Some
+                                        Enum
+                                          Enum Variant Name: Ethereum
+                                            Field Name: chain_id
+                                              u64: 15093
                                   Field Name: id
                                     Sequence u8: d78dfce4bdb789c0e310e2172b3f3a13ec09e39ba8b644e368816bd7acd57f10
                             Field Number: 3
                               Enum
                                 Enum Variant Name: AccountKey20
                                   Field Name: network
-                                    Option: None
+                                    Enum
+                                      Enum Variant Name: None
                                   Field Name: key
                                     Sequence u8: 25867d9fc900c0f7afe1ce1fc756f152b3f38e5a
               Field Name: fun
@@ -1747,6 +1759,90 @@ Tip: 2158321035032515.9632029318439228220671 TDOT
 Chain: polkadot9430
 Tx Version: 24
 Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
+";
+    assert_eq!(extensions_known, extensions_printed);
+}
+
+#[test]
+fn tr_12() {
+    let metadata_bifrost = metadata("for_tests/bifrost982");
+
+    let data = hex::decode("78000006000001010000004a6e76f5062e334f7322752db2dae9d19edfe764172aaed603000001000000262e1b2ad728475fd6fe88e62d34c200abe6fd693931ddad144059b1eb884e5bc16d68cf9978c938e405eec35d283be02e720072e8a0f66b11c722bb85d86f01").unwrap();
+
+    let reply = parse_transaction_unmarked(
+        &data.as_ref(),
+        &mut (),
+        &metadata_bifrost,
+        H256(
+            hex::decode("262e1b2ad728475fd6fe88e62d34c200abe6fd693931ddad144059b1eb884e5b")
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
+    )
+    .unwrap()
+    .card(
+        &specs_bifrost(),
+        &<RuntimeMetadataV14 as AsMetadata<()>>::spec_name_version(&metadata_bifrost)
+            .unwrap()
+            .spec_name,
+    );
+
+    let call_printed = format!(
+        "\n{}\n",
+        reply
+            .call
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let call_known = "
+Pallet: SystemStaking
+  Call: token_config
+    Field Name: token
+      Enum
+        Enum Variant Name: Native
+          Enum
+            Enum Variant Name: KAR
+    Field Name: exec_delay
+      Enum
+        Enum Variant Name: None
+    Field Name: system_stakable_farming_rate
+      Enum
+        Enum Variant Name: None
+    Field Name: add_or_sub
+      Enum
+        Enum Variant Name: Some
+          Bool: true
+    Field Name: system_stakable_base
+      Enum
+        Enum Variant Name: None
+    Field Name: farming_poolids
+      Enum
+        Enum Variant Name: None
+    Field Name: lptoken_rates
+      Enum
+        Enum Variant Name: None
+";
+    assert_eq!(call_known, call_printed);
+
+    let extensions_printed = format!(
+        "\n{}\n",
+        reply
+            .extensions
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let extensions_known = "
+Era: Mortal, phase: 1764, period: 2048
+Nonce: 193051997
+Tip: 231504222224632.337793143774330474361679 TBNC
+Chain: bifrost_polkadot982
+Tx Version: 1
+Block Hash: c16d68cf9978c938e405eec35d283be02e720072e8a0f66b11c722bb85d86f01
 ";
     assert_eq!(extensions_known, extensions_printed);
 }

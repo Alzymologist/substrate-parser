@@ -8,17 +8,9 @@
 //! mentioned in metadata descriptors, rather than decoded as more generalized
 //! type and cast into custom type later on.
 use frame_metadata::v14::SignedExtensionMetadata;
-use scale_info::{
-    form::PortableForm, interner::UntrackedSymbol, Field, Path, Type, TypeDef, Variant,
-};
+use scale_info::{form::PortableForm, Field, Path, Type, TypeDef, Variant};
 
 use crate::std::{borrow::ToOwned, string::String, vec::Vec};
-
-#[cfg(feature = "std")]
-use std::any::TypeId;
-
-#[cfg(not(feature = "std"))]
-use core::any::TypeId;
 
 use crate::cards::Info;
 use crate::decoding_sci::pick_variant;
@@ -78,10 +70,6 @@ pub const H256: &str = "H256";
 /// [`Type`]-associated [`Path`] `ident` for [primitive_types::H512].
 pub const H512: &str = "H512";
 
-/// [`Type`]-associated [`Path`] `ident` indicating that the data to follow
-/// *may* be an option.
-pub const OPTION: &str = "Option";
-
 /// [`Type`]-associated [`Path`] `ident` for [sp_arithmetic::Perbill].
 pub const PERBILL: &str = "Perbill";
 
@@ -118,14 +106,6 @@ pub const UNCHECKED_EXTRINSIC_NAMESPACE: &[&str] =
 
 /// [`Type`]-associated [`Path`] `ident` for [sp_runtime::generic::UncheckedExtrinsic].
 pub const UNCHECKED_EXTRINSIC_IDENT: &str = "UncheckedExtrinsic";
-
-/// [`Variant`] name `None` that must be found for type to be processed as
-/// `Option`.
-pub const NONE: &str = "None";
-
-/// [`Variant`] name `Some` that must be found for type to be processed as
-/// `Option`.
-pub const SOME: &str = "Some";
 
 /// Extensions `identifier` from [`SignedExtensionMetadata`] for metadata spec
 /// version.
@@ -343,8 +323,6 @@ impl Hint {
 ///
 /// Does not propagate.
 ///
-/// Checks type internal structure for `Option`.
-///
 /// Type internal structure must be additionally confirmed for `Call` and
 /// `Event` before transforming into [`SpecialtyTypeChecked`], the type
 /// specialty that causes parser action.
@@ -355,7 +333,6 @@ pub enum SpecialtyTypeHinted {
     H160,
     H256,
     H512,
-    Option(UntrackedSymbol<TypeId>),
     PalletSpecific(PalletSpecificItem),
     Perbill,
     Percent,
@@ -395,35 +372,6 @@ impl SpecialtyTypeHinted {
                 a if H160.contains(&a) => Self::H160,
                 H256 => Self::H256,
                 H512 => Self::H512,
-                OPTION => {
-                    if let TypeDef::Variant(x) = &ty.type_def {
-                        if ty.type_params.len() == 1 {
-                            if let Some(ty_symbol) = ty.type_params[0].ty {
-                                let mut has_none = false;
-                                let mut has_some = false;
-                                for variant in x.variants.iter() {
-                                    if variant.index == 0 && variant.name == NONE {
-                                        has_none = true
-                                    }
-                                    if variant.index == 1 && variant.name == SOME {
-                                        has_some = true
-                                    }
-                                }
-                                if has_none && has_some && (x.variants.len() == 2) {
-                                    Self::Option(ty_symbol)
-                                } else {
-                                    Self::None
-                                }
-                            } else {
-                                Self::None
-                            }
-                        } else {
-                            Self::None
-                        }
-                    } else {
-                        Self::None
-                    }
-                }
                 PERBILL => Self::Perbill,
                 PERCENT => Self::Percent,
                 PERMILL => Self::Permill,
@@ -484,7 +432,6 @@ pub enum SpecialtyTypeChecked {
     H160,
     H256,
     H512,
-    Option(UntrackedSymbol<TypeId>),
     PalletSpecific {
         pallet_name: String,
         pallet_info: Info,
@@ -530,7 +477,6 @@ impl SpecialtyTypeChecked {
             SpecialtyTypeHinted::H160 => Self::H160,
             SpecialtyTypeHinted::H256 => Self::H256,
             SpecialtyTypeHinted::H512 => Self::H512,
-            SpecialtyTypeHinted::Option(x) => Self::Option(x),
             SpecialtyTypeHinted::PalletSpecific(item) => {
                 if let TypeDef::Variant(x) = &ty.type_def {
                     // found specific variant corresponding to pallet,

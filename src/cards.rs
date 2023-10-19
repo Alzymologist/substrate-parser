@@ -29,7 +29,6 @@ use plot_icon::generate_png_scaled_default;
 
 use crate::std::{
     borrow::ToOwned,
-    boxed::Box,
     fmt::Write,
     string::{String, ToString},
     vec::Vec,
@@ -315,7 +314,6 @@ pub enum ParsedData {
     H256(H256),
     H512(H512),
     Id(AccountId32),
-    Option(Option<Box<ParsedData>>),
     PerU16(PerU16),
     Percent(Percent),
     Permill(Permill),
@@ -538,16 +536,6 @@ impl ParsedData {
                     info_flat,
                 }]
             }
-            ParsedData::Option(option) => match option {
-                None => vec![ExtendedCard {
-                    parser_card: ParserCard::None,
-                    indent,
-                    info_flat,
-                }],
-                Some(parsed_data) => {
-                    parsed_data.card(info_flat, indent, display_balance, short_specs, spec_name)
-                }
-            },
             ParsedData::PerU16(value) => single_card!(PerU16, value, indent, info_flat),
             ParsedData::Percent(value) => single_card!(Percent, value, indent, info_flat),
             ParsedData::Permill(value) => single_card!(Permill, value, indent, info_flat),
@@ -1004,7 +992,6 @@ pub enum ParserCard {
         version: String,
     },
     Nonce(String),
-    None,
     PalletName(String),
     PerU16(PerU16),
     Percent(Percent),
@@ -1158,7 +1145,6 @@ impl ExtendedCard {
                 readable(self.indent, "Chain", &format!("{name}{version}"))
             }
             ParserCard::Nonce(a) => readable(self.indent, "Nonce", a),
-            ParserCard::None => readable(self.indent, "Option", "None"),
             ParserCard::PalletName(a) => readable(self.indent, "Pallet", a),
             ParserCard::PerU16(a) => readable(self.indent, "PerU16", &a.deconstruct().to_string()),
             ParserCard::Percent(a) => {

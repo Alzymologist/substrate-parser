@@ -80,8 +80,8 @@
 //!
 //! Other `Path` identifiers are checked first, and used only if the further
 //! discovered type information matches the expected one, this is the case for
-//! `Call`, `Event` and `Option`. If it does not match, the data is parsed as
-//! is, i.e. without fitting into specific item format.
+//! `Call` and `Event`. If it does not match, the data is parsed as is, i.e.
+//! without fitting into specific item format.
 //!
 //! Enums and structs contain sets of [`Field`](scale_info::Field)s. Field
 //! `name` and `type_name` may also hint at type specialty information, although
