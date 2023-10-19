@@ -100,11 +100,11 @@ pub const SP_CORE_SR25519: &[&str] = &["sp_core", "sr25519"];
 /// [`Path`] `namespace` for `sp_core::ecdsa`.
 pub const SP_CORE_ECDSA: &[&str] = &["sp_core", "ecdsa"];
 
-/// [`Path`] `namespace` for [sp_runtime::generic::UncheckedExtrinsic].
+/// [`Path`] `namespace` for `sp_runtime::generic::UncheckedExtrinsic`.
 pub const UNCHECKED_EXTRINSIC_NAMESPACE: &[&str] =
     &["sp_runtime", "generic", "unchecked_extrinsic"];
 
-/// [`Type`]-associated [`Path`] `ident` for [sp_runtime::generic::UncheckedExtrinsic].
+/// [`Type`]-associated [`Path`] `ident` for `sp_runtime::generic::UncheckedExtrinsic`.
 pub const UNCHECKED_EXTRINSIC_IDENT: &str = "UncheckedExtrinsic";
 
 /// Extensions `identifier` from [`SignedExtensionMetadata`] for metadata spec
