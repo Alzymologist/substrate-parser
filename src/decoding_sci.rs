@@ -3,7 +3,7 @@
 use bitvec::prelude::BitOrder;
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use num_bigint::{BigInt, BigUint};
-use parity_scale_codec::{Decode, DecodeAll, OptionBool};
+use parity_scale_codec::DecodeAll;
 use primitive_types::{H160, H512};
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, Type, TypeDef, TypeDefBitSequence,
@@ -24,7 +24,7 @@ use sp_core::{
     sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
 };
 
-use crate::std::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
+use crate::std::{borrow::ToOwned, string::String, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use core::{any::TypeId, mem::size_of};
@@ -314,7 +314,6 @@ pub const CALL_INDICATOR: &str = "Call";
 /// - tuples (`TypeDef::Tuple(_)`)
 /// - compacts (`TypeDef::Compact(_)`)
 /// - calls and events (`SpecialtyTypeChecked::PalletSpecific{..}`)
-/// - options (`SpecialtyTypeChecked:Option{..}`)
 ///
 /// Of those, the parser position changes on each new iteration for:
 ///
@@ -516,66 +515,6 @@ where
             )?,
             info: propagated.info,
         }),
-        SpecialtyTypeChecked::Option(ty_symbol) => {
-            propagated.reject_compact()?;
-            let param_ty = registry.resolve_ty(ty_symbol.id, ext_memory)?;
-            match &param_ty.type_def {
-                TypeDef::Primitive(TypeDefPrimitive::Bool) => {
-                    let slice_to_decode =
-                        data.read_slice(ext_memory, *position, ENUM_INDEX_ENCODED_LEN)?;
-                    let parsed_data = match OptionBool::decode(&mut slice_to_decode.as_ref()) {
-                        Ok(OptionBool(Some(true))) => {
-                            ParsedData::Option(Some(Box::new(ParsedData::PrimitiveBool(true))))
-                        }
-                        Ok(OptionBool(Some(false))) => {
-                            ParsedData::Option(Some(Box::new(ParsedData::PrimitiveBool(false))))
-                        }
-                        Ok(OptionBool(None)) => ParsedData::Option(None),
-                        Err(_) => {
-                            return Err(ParserError::UnexpectedOptionVariant {
-                                position: *position,
-                            })
-                        }
-                    };
-                    *position += ENUM_INDEX_ENCODED_LEN;
-                    Ok(ExtendedData {
-                        data: parsed_data,
-                        info: propagated.info,
-                    })
-                }
-                _ => match data.read_byte(ext_memory, *position)? {
-                    0 => {
-                        *position += ENUM_INDEX_ENCODED_LEN;
-                        Ok(ExtendedData {
-                            data: ParsedData::Option(None),
-                            info: propagated.info,
-                        })
-                    }
-                    1 => {
-                        *position += ENUM_INDEX_ENCODED_LEN;
-                        let extended_option_data = decode_with_type::<B, E, M>(
-                            &Ty::Resolved(ResolvedTy {
-                                ty: param_ty,
-                                id: ty_symbol.id,
-                            }),
-                            data,
-                            ext_memory,
-                            position,
-                            registry,
-                            Propagated::new(),
-                        )?;
-                        propagated.add_info_slice(&extended_option_data.info);
-                        Ok(ExtendedData {
-                            data: ParsedData::Option(Some(Box::new(extended_option_data.data))),
-                            info: propagated.info,
-                        })
-                    }
-                    _ => Err(ParserError::UnexpectedOptionVariant {
-                        position: *position,
-                    }),
-                },
-            }
-        }
         SpecialtyTypeChecked::PalletSpecific {
             pallet_name,
             pallet_info,
