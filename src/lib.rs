@@ -154,7 +154,7 @@
 //!     &signable_data.as_ref(),
 //!     &mut (),
 //!     &metadata_westend9111,
-//!     westend_genesis_hash,
+//!     Some(westend_genesis_hash),
 //! ).unwrap();
 //!
 //! let call_data = parsed.call_result.unwrap();
@@ -620,7 +620,7 @@ pub fn parse_transaction<B, E, M>(
     data: &B,
     ext_memory: &mut E,
     meta_v14: &M,
-    genesis_hash: H256,
+    optional_genesis_hash: Option<H256>,
 ) -> Result<TransactionParsed<E>, SignableError<E>>
 where
     B: AddressableBuffer<E>,
@@ -634,7 +634,7 @@ where
     // try parsing extensions, check that spec version and genesis hash are
     // correct
     let extensions =
-        decode_extensions::<B, E, M>(&marked_data, ext_memory, meta_v14, genesis_hash)?;
+        decode_extensions::<B, E, M>(&marked_data, ext_memory, meta_v14, optional_genesis_hash)?;
 
     // try parsing call data
     let call_result = decode_as_call::<B, E, M>(&marked_data, ext_memory, meta_v14);
@@ -683,7 +683,7 @@ pub fn parse_transaction_unmarked<B, E, M>(
     data: &B,
     ext_memory: &mut E,
     meta_v14: &M,
-    genesis_hash: H256,
+    optional_genesis_hash: Option<H256>,
 ) -> Result<TransactionUnmarkedParsed, SignableError<E>>
 where
     B: AddressableBuffer<E>,
@@ -702,7 +702,7 @@ where
         &mut position,
         ext_memory,
         meta_v14,
-        genesis_hash,
+        optional_genesis_hash,
     )?;
 
     Ok(TransactionUnmarkedParsed { call, extensions })

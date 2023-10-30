@@ -38,7 +38,7 @@ pub fn decode_extensions<B, E, M>(
     marked_data: &MarkedData<B, E>,
     ext_memory: &mut E,
     meta_v14: &M,
-    genesis_hash: H256,
+    optional_genesis_hash: Option<H256>,
 ) -> Result<Vec<ExtendedData>, SignableError<E>>
 where
     B: AddressableBuffer<E>,
@@ -48,7 +48,13 @@ where
     let mut position = marked_data.extensions_start();
     let data = marked_data.data();
 
-    decode_extensions_unmarked(data, &mut position, ext_memory, meta_v14, genesis_hash)
+    decode_extensions_unmarked(
+        data,
+        &mut position,
+        ext_memory,
+        meta_v14,
+        optional_genesis_hash,
+    )
 }
 
 /// Parse extensions part of the signable transaction using provided metadata.
@@ -68,7 +74,7 @@ pub fn decode_extensions_unmarked<B, E, M>(
     position: &mut usize,
     ext_memory: &mut E,
     meta_v14: &M,
-    genesis_hash: H256,
+    optional_genesis_hash: Option<H256>,
 ) -> Result<Vec<ExtendedData>, SignableError<E>>
 where
     B: AddressableBuffer<E>,
@@ -113,7 +119,7 @@ where
     check_extensions::<E>(
         &extensions,
         &spec_name_version.printed_spec_version,
-        genesis_hash,
+        optional_genesis_hash,
     )?;
     Ok(extensions)
 }
@@ -126,7 +132,7 @@ where
 fn check_extensions<E: ExternalMemory>(
     extensions: &[ExtendedData],
     version: &str,
-    genesis_hash: H256,
+    optional_genesis_hash: Option<H256>,
 ) -> Result<(), SignableError<E>> {
     let mut collected_ext = CollectedExt::new();
     for ext in extensions.iter() {
@@ -156,11 +162,13 @@ fn check_extensions<E: ExternalMemory>(
     }
     match collected_ext.genesis_hash {
         Some(found_genesis_hash) => {
-            if found_genesis_hash != genesis_hash {
-                return Err(SignableError::WrongGenesisHash {
-                    as_decoded: found_genesis_hash,
-                    expected: genesis_hash,
-                });
+            if let Some(genesis_hash) = optional_genesis_hash {
+                if found_genesis_hash != genesis_hash {
+                    return Err(SignableError::WrongGenesisHash {
+                        as_decoded: found_genesis_hash,
+                        expected: genesis_hash,
+                    });
+                }
             }
         }
         None => {
@@ -171,8 +179,10 @@ fn check_extensions<E: ExternalMemory>(
     }
     if let Some(Era::Immortal) = collected_ext.era {
         if let Some(block_hash) = collected_ext.block_hash {
-            if genesis_hash != block_hash {
-                return Err(SignableError::ImmortalHashMismatch);
+            if let Some(genesis_hash) = collected_ext.genesis_hash {
+                if genesis_hash != block_hash {
+                    return Err(SignableError::ImmortalHashMismatch);
+                }
             }
         }
     }
