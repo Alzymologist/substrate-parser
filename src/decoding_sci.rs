@@ -164,10 +164,10 @@ where
 /// pallet-specific calls. If the pallet-call pattern is not observed, an error
 /// occurs.
 pub fn decode_as_call<B, E, M>(
-    marked_data: &MarkedData<B, E>,
+    marked_data: &MarkedData<B, E, M>,
     ext_memory: &mut E,
     meta_v14: &M,
-) -> Result<Call, SignableError<E>>
+) -> Result<Call, SignableError<E, M>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -198,15 +198,18 @@ pub fn decode_as_call_unmarked<B, E, M>(
     position: &mut usize,
     ext_memory: &mut E,
     meta_v14: &M,
-) -> Result<Call, SignableError<E>>
+) -> Result<Call, SignableError<E, M>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let extrinsic_type_params =
-        extrinsic_type_params(ext_memory, meta_v14).map_err(SignableError::Parsing)?;
+    let extrinsic = meta_v14.extrinsic().map_err(SignableError::MetaStructure)?;
+    let extrinsic_ty = extrinsic.ty;
     let types = meta_v14.types();
+
+    let extrinsic_type_params = extrinsic_type_params::<E, M>(ext_memory, &types, &extrinsic_ty)
+        .map_err(SignableError::Parsing)?;
 
     let mut found_all_calls_ty = None;
 
@@ -239,17 +242,15 @@ where
 /// get associated `TypeParameter`s set.
 pub fn extrinsic_type_params<E, M>(
     ext_memory: &mut E,
-    meta_v14: &M,
+    meta_v14_types: &M::TypeRegistry,
+    extrinsic_ty: &UntrackedSymbol<TypeId>,
 ) -> Result<Vec<TypeParameter<PortableForm>>, ParserError<E>>
 where
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let extrinsic_ty = meta_v14.extrinsic().ty;
-    let meta_v14_types = meta_v14.types();
-
     let husked_extrinsic_ty =
-        husk_type::<E, M>(&extrinsic_ty, &meta_v14_types, ext_memory, Checker::new())?;
+        husk_type::<E, M>(extrinsic_ty, meta_v14_types, ext_memory, Checker::new())?;
 
     // check here that the underlying type is really `Vec<u8>`
     match husked_extrinsic_ty.ty.type_def {
