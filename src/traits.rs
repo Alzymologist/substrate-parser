@@ -21,7 +21,7 @@ use scale_info::{form::PortableForm, interner::UntrackedSymbol, PortableRegistry
 
 use crate::cards::ParsedData;
 use crate::decode_all_as_type;
-use crate::error::{MetaVersionError, ParserError};
+use crate::error::{MetaVersionErrorPallets, ParserError};
 use crate::special_indicators::{SpecialtyStr, SpecialtyUnsignedInteger};
 
 pub trait ExternalMemory: Debug {
@@ -93,11 +93,12 @@ impl<'a, E: ExternalMemory> AddressableBuffer<E> for &'a [u8] {
     }
 }
 
-pub trait AsMetadata<E: ExternalMemory> {
+pub trait AsMetadata<E: ExternalMemory>: Debug + Sized {
     type TypeRegistry: ResolveType<E>;
+    type MetaStructureError: Debug + Display + Eq;
     fn types(&self) -> Self::TypeRegistry;
-    fn spec_name_version(&self) -> Result<SpecNameVersion, MetaVersionError>;
-    fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm>;
+    fn spec_name_version(&self) -> Result<SpecNameVersion, Self::MetaStructureError>;
+    fn extrinsic(&self) -> Result<ExtrinsicMetadata<PortableForm>, Self::MetaStructureError>;
 }
 
 #[repr(C)]
@@ -128,11 +129,13 @@ impl<E: ExternalMemory> ResolveType<E> for PortableRegistry {
 impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14 {
     type TypeRegistry = PortableRegistry;
 
+    type MetaStructureError = MetaVersionErrorPallets;
+
     fn types(&self) -> Self::TypeRegistry {
         self.types.to_owned()
     }
 
-    fn spec_name_version(&self) -> Result<SpecNameVersion, MetaVersionError> {
+    fn spec_name_version(&self) -> Result<SpecNameVersion, Self::MetaStructureError> {
         let (value, ty) = runtime_version_data_and_ty(&self.pallets)?;
         match decode_all_as_type::<&[u8], (), RuntimeMetadataV14>(
             &ty,
@@ -141,18 +144,18 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14 {
             &self.types,
         ) {
             Ok(extended_data) => spec_name_version_from_runtime_version_data(extended_data.data),
-            Err(_) => Err(MetaVersionError::RuntimeVersionNotDecodeable),
+            Err(_) => Err(MetaVersionErrorPallets::RuntimeVersionNotDecodeable),
         }
     }
 
-    fn extrinsic(&self) -> ExtrinsicMetadata<PortableForm> {
-        self.extrinsic.to_owned()
+    fn extrinsic(&self) -> Result<ExtrinsicMetadata<PortableForm>, Self::MetaStructureError> {
+        Ok(self.extrinsic.to_owned())
     }
 }
 
 fn runtime_version_data_and_ty(
     pallets: &[PalletMetadata<PortableForm>],
-) -> Result<(Vec<u8>, UntrackedSymbol<TypeId>), MetaVersionError> {
+) -> Result<(Vec<u8>, UntrackedSymbol<TypeId>), MetaVersionErrorPallets> {
     let mut runtime_version_data_and_ty = None;
     let mut system_block = false;
     for pallet in pallets.iter() {
@@ -167,14 +170,14 @@ fn runtime_version_data_and_ty(
         }
     }
     if !system_block {
-        return Err(MetaVersionError::NoSystemPallet);
+        return Err(MetaVersionErrorPallets::NoSystemPallet);
     }
-    runtime_version_data_and_ty.ok_or(MetaVersionError::NoVersionInConstants)
+    runtime_version_data_and_ty.ok_or(MetaVersionErrorPallets::NoVersionInConstants)
 }
 
 fn spec_name_version_from_runtime_version_data(
     parsed_data: ParsedData,
-) -> Result<SpecNameVersion, MetaVersionError> {
+) -> Result<SpecNameVersion, MetaVersionErrorPallets> {
     let mut printed_spec_version = None;
     let mut spec_name = None;
 
@@ -188,7 +191,7 @@ fn spec_name_version_from_runtime_version_data(
                     if printed_spec_version.is_none() {
                         printed_spec_version = Some(value.to_string())
                     } else {
-                        return Err(MetaVersionError::SpecVersionIdentifierTwice);
+                        return Err(MetaVersionErrorPallets::SpecVersionIdentifierTwice);
                     }
                 }
                 ParsedData::PrimitiveU16 {
@@ -198,7 +201,7 @@ fn spec_name_version_from_runtime_version_data(
                     if printed_spec_version.is_none() {
                         printed_spec_version = Some(value.to_string())
                     } else {
-                        return Err(MetaVersionError::SpecVersionIdentifierTwice);
+                        return Err(MetaVersionErrorPallets::SpecVersionIdentifierTwice);
                     }
                 }
                 ParsedData::PrimitiveU32 {
@@ -208,7 +211,7 @@ fn spec_name_version_from_runtime_version_data(
                     if printed_spec_version.is_none() {
                         printed_spec_version = Some(value.to_string())
                     } else {
-                        return Err(MetaVersionError::SpecVersionIdentifierTwice);
+                        return Err(MetaVersionErrorPallets::SpecVersionIdentifierTwice);
                     }
                 }
                 ParsedData::PrimitiveU64 {
@@ -218,7 +221,7 @@ fn spec_name_version_from_runtime_version_data(
                     if printed_spec_version.is_none() {
                         printed_spec_version = Some(value.to_string())
                     } else {
-                        return Err(MetaVersionError::SpecVersionIdentifierTwice);
+                        return Err(MetaVersionErrorPallets::SpecVersionIdentifierTwice);
                     }
                 }
                 ParsedData::PrimitiveU128 {
@@ -228,7 +231,7 @@ fn spec_name_version_from_runtime_version_data(
                     if printed_spec_version.is_none() {
                         printed_spec_version = Some(value.to_string())
                     } else {
-                        return Err(MetaVersionError::SpecVersionIdentifierTwice);
+                        return Err(MetaVersionErrorPallets::SpecVersionIdentifierTwice);
                     }
                 }
                 ParsedData::Text {
@@ -238,22 +241,22 @@ fn spec_name_version_from_runtime_version_data(
                     if spec_name.is_none() {
                         spec_name = Some(text.to_owned())
                     } else {
-                        return Err(MetaVersionError::SpecNameIdentifierTwice);
+                        return Err(MetaVersionErrorPallets::SpecNameIdentifierTwice);
                     }
                 }
                 _ => (),
             }
         }
     } else {
-        return Err(MetaVersionError::UnexpectedRuntimeVersionFormat);
+        return Err(MetaVersionErrorPallets::UnexpectedRuntimeVersionFormat);
     }
     let printed_spec_version = match printed_spec_version {
         Some(a) => a,
-        None => return Err(MetaVersionError::NoSpecVersionIdentifier),
+        None => return Err(MetaVersionErrorPallets::NoSpecVersionIdentifier),
     };
     let spec_name = match spec_name {
         Some(a) => a,
-        None => return Err(MetaVersionError::NoSpecNameIdentifier),
+        None => return Err(MetaVersionErrorPallets::NoSpecNameIdentifier),
     };
     Ok(SpecNameVersion {
         printed_spec_version,
