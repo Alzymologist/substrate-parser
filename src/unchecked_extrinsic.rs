@@ -78,15 +78,21 @@ pub fn decode_as_unchecked_extrinsic<B, E, M>(
     input: &B,
     ext_memory: &mut E,
     meta_v14: &M,
-) -> Result<UncheckedExtrinsic, UncheckedExtrinsicError<E>>
+) -> Result<UncheckedExtrinsic, UncheckedExtrinsicError<E, M>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let extrinsic_type_params =
-        extrinsic_type_params(ext_memory, meta_v14).map_err(UncheckedExtrinsicError::Parser)?;
+    let extrinsic = meta_v14
+        .extrinsic()
+        .map_err(UncheckedExtrinsicError::MetaStructure)?;
+    let extrinsic_ty = extrinsic.ty;
     let meta_v14_types = meta_v14.types();
+
+    let extrinsic_type_params =
+        extrinsic_type_params::<E, M>(ext_memory, &meta_v14_types, &extrinsic_ty)
+            .map_err(UncheckedExtrinsicError::Parser)?;
 
     // This could have been just a single decode line.
     // Written this way to: (1) trace position from the start, (2) have descriptive errors
@@ -119,7 +125,7 @@ where
         .map_err(UncheckedExtrinsicError::Parser)?;
     position += VERSION_LENGTH;
 
-    let version = meta_v14.extrinsic().version;
+    let version = extrinsic.version;
 
     // First bit of `version_byte` is `0` if the transaction is unsigned and `1` if the transaction is signed.
     // Other 7 bits must match the `version` from the metadata.
