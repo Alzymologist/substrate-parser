@@ -12,15 +12,19 @@ use std::{
 #[cfg(not(feature = "std"))]
 use core::fmt::{Display, Formatter, Result as FmtResult};
 
-use crate::traits::ExternalMemory;
+use crate::traits::{AsMetadata, ExternalMemory};
 
 /// Errors in signable transactions parsing.
 #[derive(Debug, Eq, PartialEq)]
-pub enum SignableError<E: ExternalMemory> {
+pub enum SignableError<E, M>
+where
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
     CutSignable,
     ExtensionsList(ExtensionsError),
     ImmortalHashMismatch,
-    MetaVersion(MetaVersionError),
+    MetaStructure(M::MetaStructureError),
     NotACall(u32),
     Parsing(ParserError<E>),
     SomeDataNotUsedCall {
@@ -40,13 +44,17 @@ pub enum SignableError<E: ExternalMemory> {
     },
 }
 
-impl<E: ExternalMemory> SignableError<E> {
+impl<E, M> SignableError<E, M>
+where
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
     fn error_text(&self) -> String {
         match &self {
             SignableError::CutSignable => String::from("Unable to separate signable transaction data into call data and extensions data."),
             SignableError::ExtensionsList(extensions_error) => extensions_error.error_text(),
             SignableError::ImmortalHashMismatch => String::from("Extensions error. Block hash does not match the chain genesis hash in transaction with immortal `Era`."),
-            SignableError::MetaVersion(meta_version_error) => format!("Unable to determine metadata spec version. {meta_version_error}"),
+            SignableError::MetaStructure(meta_structure_error) => format!("Unexpected structure of the metadata. {meta_structure_error}"),
             SignableError::NotACall(all_calls_ty_id) => format!("Decoded signable transaction is not a call. Unexpected structure of calls descriptor type {all_calls_ty_id}."),
             SignableError::Parsing(parser_error) => format!("Parsing error. {parser_error}"),
             SignableError::SomeDataNotUsedCall { from, to } => format!("Some call data (input positions [{from}..{to}]) remained unused after decoding."),
@@ -217,7 +225,7 @@ impl ExtensionsError {
 
 /// Error in metadata version constant search.
 #[derive(Debug, Eq, PartialEq)]
-pub enum MetaVersionError {
+pub enum MetaVersionErrorPallets {
     NoSpecNameIdentifier,
     NoSpecVersionIdentifier,
     NoSystemPallet,
@@ -228,29 +236,31 @@ pub enum MetaVersionError {
     UnexpectedRuntimeVersionFormat,
 }
 
-impl MetaVersionError {
+impl MetaVersionErrorPallets {
     fn error_text(&self) -> String {
         match &self {
-            MetaVersionError::NoSpecNameIdentifier => {
+            MetaVersionErrorPallets::NoSpecNameIdentifier => {
                 String::from("No spec name found in decoded `Version` constant.")
             }
-            MetaVersionError::NoSpecVersionIdentifier => {
+            MetaVersionErrorPallets::NoSpecVersionIdentifier => {
                 String::from("No spec version found in decoded `Version` constant.")
             }
-            MetaVersionError::NoSystemPallet => String::from("No `System` pallet in metadata."),
-            MetaVersionError::NoVersionInConstants => {
+            MetaVersionErrorPallets::NoSystemPallet => {
+                String::from("No `System` pallet in metadata.")
+            }
+            MetaVersionErrorPallets::NoVersionInConstants => {
                 String::from("No `Version` constant in metadata `System` pallet.")
             }
-            MetaVersionError::RuntimeVersionNotDecodeable => String::from(
+            MetaVersionErrorPallets::RuntimeVersionNotDecodeable => String::from(
                 "`Version` constant from metadata `System` pallet could not be decoded.",
             ),
-            MetaVersionError::SpecNameIdentifierTwice => String::from(
+            MetaVersionErrorPallets::SpecNameIdentifierTwice => String::from(
                 "Spec name associated identifier found twice when decoding `Version` constant.",
             ),
-            MetaVersionError::SpecVersionIdentifierTwice => String::from(
+            MetaVersionErrorPallets::SpecVersionIdentifierTwice => String::from(
                 "Spec version associated identifier found twice when decoding `Version` constant.",
             ),
-            MetaVersionError::UnexpectedRuntimeVersionFormat => {
+            MetaVersionErrorPallets::UnexpectedRuntimeVersionFormat => {
                 String::from("Decoded `Version` constant is not a composite.")
             }
         }
@@ -259,8 +269,9 @@ impl MetaVersionError {
 
 /// Error in parsing an unchecked extrinsic.
 #[derive(Debug, Eq, PartialEq)]
-pub enum UncheckedExtrinsicError<E: ExternalMemory> {
+pub enum UncheckedExtrinsicError<E: ExternalMemory, M: AsMetadata<E>> {
     FormatNoCompact,
+    MetaStructure(M::MetaStructureError),
     NoAddressParam,
     NoCallParam,
     NoExtraParam,
@@ -270,10 +281,15 @@ pub enum UncheckedExtrinsicError<E: ExternalMemory> {
     UnexpectedCallTy { call_ty_id: u32 },
 }
 
-impl<E: ExternalMemory> UncheckedExtrinsicError<E> {
+impl<E, M> UncheckedExtrinsicError<E, M>
+where
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
     fn error_text(&self) -> String {
         match &self {
             UncheckedExtrinsicError::FormatNoCompact => String::from("Unchecked extrinsic was expected to be a SCALE-encoded opaque `Vec<u8>`. Have not found a compact indicating vector length."),
+            UncheckedExtrinsicError::MetaStructure(meta_structure_error) => format!("Unexpected structure of the metadata. {meta_structure_error}"),
             UncheckedExtrinsicError::NoAddressParam => String::from("Unchecked extrinsic type in provided metadata has no specified address parameter."),
             UncheckedExtrinsicError::NoCallParam => String::from("Unchecked extrinsic type in provided metadata has no specified call parameter."),
             UncheckedExtrinsicError::NoExtraParam => String::from("Unchecked extrinsic type in provided metadata has no specified extra parameter."),
@@ -306,7 +322,7 @@ macro_rules! impl_display_and_error {
     }
 }
 
-impl_display_and_error!(ExtensionsError, MetaVersionError);
+impl_display_and_error!(ExtensionsError, MetaVersionErrorPallets);
 
 /// Implement [`Display`] for errors in both `std` and `no_std` cases.
 /// Implement `Error` for `std` case.
@@ -329,9 +345,46 @@ macro_rules! impl_display_and_error_traited {
     }
 }
 
-impl_display_and_error_traited!(
-    ParserError<E>,
-    SignableError<E>,
-    StorageError<E>,
-    UncheckedExtrinsicError<E>
-);
+impl_display_and_error_traited!(ParserError<E>, StorageError<E>);
+
+impl<E, M> Display for SignableError<E, M>
+where
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "{}", self.error_text())
+    }
+}
+
+#[cfg(feature = "std")]
+impl<E, M> Error for SignableError<E, M>
+where
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+
+impl<E, M> Display for UncheckedExtrinsicError<E, M>
+where
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "{}", self.error_text())
+    }
+}
+
+#[cfg(feature = "std")]
+impl<E, M> Error for UncheckedExtrinsicError<E, M>
+where
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}

@@ -31,12 +31,49 @@ fn metadata(filename: &str) -> RuntimeMetadataV14 {
     RuntimeMetadataV14::decode(&mut &metadata_vec[..]).unwrap()
 }
 
-fn specs_westend() -> ShortSpecs {
-    ShortSpecs {
-        base58prefix: 42,
-        decimals: 12,
-        unit: "WND".to_string(),
-    }
+fn genesis_hash_acala() -> H256 {
+    H256(
+        hex::decode("fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    )
+}
+
+fn genesis_hash_astar() -> H256 {
+    H256(
+        hex::decode("9eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c6")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    )
+}
+
+fn genesis_hash_bifrost() -> H256 {
+    H256(
+        hex::decode("262e1b2ad728475fd6fe88e62d34c200abe6fd693931ddad144059b1eb884e5b")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    )
+}
+
+fn genesis_hash_polkadot() -> H256 {
+    H256(
+        hex::decode("91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    )
+}
+
+fn genesis_hash_westend() -> H256 {
+    H256(
+        hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    )
 }
 
 fn specs_acala() -> ShortSpecs {
@@ -68,6 +105,14 @@ fn specs_polkadot() -> ShortSpecs {
         base58prefix: 0,
         decimals: 10,
         unit: "DOT".to_string(),
+    }
+}
+
+fn specs_westend() -> ShortSpecs {
+    ShortSpecs {
+        base58prefix: 42,
+        decimals: 12,
+        unit: "WND".to_string(),
     }
 }
 
@@ -119,12 +164,7 @@ fn tr_1() {
         &data.as_ref(),
         &mut (),
         &metadata_westend,
-        H256(
-            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_westend()),
     )
     .unwrap()
     .card(
@@ -191,6 +231,7 @@ Nonce: 2
 Tip: 0 pWND
 Chain: westend9111
 Tx Version: 7
+Genesis Hash: e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e
 Block Hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff
 ";
     assert_eq!(extensions_known, extensions_printed);
@@ -206,12 +247,7 @@ fn tr_2() {
         &data.as_ref(),
         &mut (),
         &metadata_westend,
-        H256(
-            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_westend()),
     )
     .unwrap()
     .card(
@@ -325,12 +361,7 @@ fn tr_3() {
         &data.as_ref(),
         &mut (),
         &metadata_westend,
-        H256(
-            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_westend()),
     )
     .unwrap()
     .card(
@@ -377,6 +408,7 @@ Nonce: 261
 Tip: 10.000000 uWND
 Chain: westend9111
 Tx Version: 7
+Genesis Hash: e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e
 Block Hash: 98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84
 ";
     assert_eq!(extensions_known, extensions_printed);
@@ -392,12 +424,7 @@ fn tr_4() {
         &data.as_ref(),
         &mut (),
         &metadata_westend,
-        H256(
-            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_westend()),
     )
     .unwrap()
     .card(
@@ -440,6 +467,7 @@ Nonce: 11
 Tip: 0 pWND
 Chain: westend9111
 Tx Version: 7
+Genesis Hash: e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e
 Block Hash: 1b2b0a177ad4f3f93f9a56dae700e938a40201a5beabbda160a74c70e612c66a
 ";
     assert_eq!(extensions_known, extensions_printed);
@@ -454,12 +482,7 @@ fn tr_5() {
         &data.as_ref(),
         &mut (),
         &metadata_acala,
-        H256(
-            hex::decode("fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_acala()),
     )
     .unwrap()
     .card(
@@ -506,6 +529,7 @@ Nonce: 0
 Tip: 0 pACA
 Chain: acala2012
 Tx Version: 1
+Genesis Hash: fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c
 Block Hash: 5cfeb3e46c080274613bdb80809a3e84fe782ac31ea91e2c778de996f738e620
 ";
     assert_eq!(extensions_known, extensions_printed);
@@ -802,12 +826,7 @@ fn parser_error_1() {
         &data.as_ref(),
         &mut (),
         &metadata("for_tests/westend9111"),
-        H256(
-            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_westend()),
     )
     .unwrap_err();
     let error_known = SignableError::WrongSpecVersion {
@@ -824,12 +843,7 @@ fn parser_error_2() {
         &data.as_ref(),
         &mut (),
         &metadata("for_tests/westend9111"),
-        H256(
-            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_westend()),
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
@@ -844,12 +858,7 @@ fn parser_error3() {
         &data.as_ref(),
         &mut (),
         &metadata("for_tests/westend9111"),
-        H256(
-            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_westend()),
     )
     .unwrap_err();
     let signable_error_known = SignableError::SomeDataNotUsedExtensions { from: 118 };
@@ -863,12 +872,7 @@ fn parser_error_4() {
         &data.as_ref(),
         &mut (),
         &metadata("for_tests/westend9111"),
-        H256(
-            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_westend()),
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
@@ -883,12 +887,7 @@ fn parser_error_5() {
         &data.as_ref(),
         &mut (),
         &metadata("for_tests/westend9111"),
-        H256(
-            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_westend()),
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
@@ -904,12 +903,7 @@ fn parser_error_6() {
         &data.as_ref(),
         &mut (),
         &metadata("for_tests/westend9111"),
-        H256(
-            hex::decode("e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_westend()),
     )
     .unwrap();
     let call_error = parsed.call_result.unwrap_err();
@@ -1239,12 +1233,7 @@ fn tr_7() {
         &data.as_ref(),
         &mut (),
         &metadata_acala,
-        H256(
-            hex::decode("fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_acala()),
     )
     .unwrap()
     .card(
@@ -1293,6 +1282,7 @@ Struct: 1 field(s)
 Tip: 55.555555 uACA
 Chain: acala2200
 Tx Version: 3
+Genesis Hash: fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c
 Block Hash: fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c
 ";
     assert_eq!(extensions_known, extensions_printed);
@@ -1308,12 +1298,7 @@ fn tr_8() {
         &data.as_ref(),
         &mut (),
         &metadata_polkadot,
-        H256(
-            hex::decode("91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_polkadot()),
     )
     .unwrap()
     .card(
@@ -1372,6 +1357,7 @@ Nonce: 1
 Tip: 555.2342355555 DOT
 Chain: polkadot9430
 Tx Version: 24
+Genesis Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 ";
     assert_eq!(extensions_known, extensions_printed);
@@ -1387,12 +1373,7 @@ fn tr_9() {
         &data.as_ref(),
         &mut (),
         &metadata_polkadot,
-        H256(
-            hex::decode("91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_polkadot()),
     )
     .unwrap()
     .card(
@@ -1619,6 +1600,7 @@ Nonce: 100
 Tip: 555.2342355555 DOT
 Chain: polkadot9430
 Tx Version: 24
+Genesis Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 ";
     assert_eq!(extensions_known, extensions_printed);
@@ -1634,12 +1616,7 @@ fn tr_10() {
         &data.as_ref(),
         &mut (),
         &metadata_astar,
-        H256(
-            hex::decode("9eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c6")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_astar()),
     )
     .unwrap()
     .card(
@@ -1685,6 +1662,7 @@ Nonce: 1
 Tip: 1.234567890 nASTR
 Chain: astar66
 Tx Version: 2
+Genesis Hash: 9eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c6
 Block Hash: 9eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c6
 ";
     assert_eq!(extensions_known, extensions_printed);
@@ -1700,12 +1678,7 @@ fn tr_11() {
         &data.as_ref(),
         &mut (),
         &metadata_polkadot,
-        H256(
-            hex::decode("91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_polkadot()),
     )
     .unwrap()
     .card(
@@ -1758,6 +1731,7 @@ Nonce: 3046252921
 Tip: 2158321035032515.9632029318439228220671 TDOT
 Chain: polkadot9430
 Tx Version: 24
+Genesis Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 ";
     assert_eq!(extensions_known, extensions_printed);
@@ -1773,12 +1747,7 @@ fn tr_12() {
         &data.as_ref(),
         &mut (),
         &metadata_bifrost,
-        H256(
-            hex::decode("262e1b2ad728475fd6fe88e62d34c200abe6fd693931ddad144059b1eb884e5b")
-                .unwrap()
-                .try_into()
-                .unwrap(),
-        ),
+        Some(genesis_hash_bifrost()),
     )
     .unwrap()
     .card(
@@ -1842,6 +1811,7 @@ Nonce: 193051997
 Tip: 231504222224632.337793143774330474361679 TBNC
 Chain: bifrost_polkadot982
 Tx Version: 1
+Genesis Hash: 262e1b2ad728475fd6fe88e62d34c200abe6fd693931ddad144059b1eb884e5b
 Block Hash: c16d68cf9978c938e405eec35d283be02e720072e8a0f66b11c722bb85d86f01
 ";
     assert_eq!(extensions_known, extensions_printed);
