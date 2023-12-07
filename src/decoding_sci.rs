@@ -3,7 +3,7 @@
 use bitvec::prelude::BitOrder;
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use num_bigint::{BigInt, BigUint};
-use parity_scale_codec::{Decode, DecodeAll, OptionBool};
+use parity_scale_codec::DecodeAll;
 use primitive_types::{H160, H512};
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, Type, TypeDef, TypeDefBitSequence,
@@ -24,7 +24,7 @@ use sp_core::{
     sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
 };
 
-use crate::std::{borrow::ToOwned, boxed::Box, string::String, vec::Vec};
+use crate::std::{borrow::ToOwned, string::String, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 use core::{any::TypeId, mem::size_of};
@@ -164,10 +164,10 @@ where
 /// pallet-specific calls. If the pallet-call pattern is not observed, an error
 /// occurs.
 pub fn decode_as_call<B, E, M>(
-    marked_data: &MarkedData<B, E>,
+    marked_data: &MarkedData<B, E, M>,
     ext_memory: &mut E,
     meta_v14: &M,
-) -> Result<Call, SignableError<E>>
+) -> Result<Call, SignableError<E, M>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
@@ -198,15 +198,18 @@ pub fn decode_as_call_unmarked<B, E, M>(
     position: &mut usize,
     ext_memory: &mut E,
     meta_v14: &M,
-) -> Result<Call, SignableError<E>>
+) -> Result<Call, SignableError<E, M>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let extrinsic_type_params =
-        extrinsic_type_params(ext_memory, meta_v14).map_err(SignableError::Parsing)?;
+    let extrinsic = meta_v14.extrinsic().map_err(SignableError::MetaStructure)?;
+    let extrinsic_ty = extrinsic.ty;
     let types = meta_v14.types();
+
+    let extrinsic_type_params = extrinsic_type_params::<E, M>(ext_memory, &types, &extrinsic_ty)
+        .map_err(SignableError::Parsing)?;
 
     let mut found_all_calls_ty = None;
 
@@ -239,17 +242,15 @@ where
 /// get associated `TypeParameter`s set.
 pub fn extrinsic_type_params<E, M>(
     ext_memory: &mut E,
-    meta_v14: &M,
+    meta_v14_types: &M::TypeRegistry,
+    extrinsic_ty: &UntrackedSymbol<TypeId>,
 ) -> Result<Vec<TypeParameter<PortableForm>>, ParserError<E>>
 where
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let extrinsic_ty = meta_v14.extrinsic().ty;
-    let meta_v14_types = meta_v14.types();
-
     let husked_extrinsic_ty =
-        husk_type::<E, M>(&extrinsic_ty, &meta_v14_types, ext_memory, Checker::new())?;
+        husk_type::<E, M>(extrinsic_ty, meta_v14_types, ext_memory, Checker::new())?;
 
     // check here that the underlying type is really `Vec<u8>`
     match husked_extrinsic_ty.ty.type_def {
@@ -314,13 +315,14 @@ pub const CALL_INDICATOR: &str = "Call";
 /// - tuples (`TypeDef::Tuple(_)`)
 /// - compacts (`TypeDef::Compact(_)`)
 /// - calls and events (`SpecialtyTypeChecked::PalletSpecific{..}`)
-/// - options (`SpecialtyTypeChecked:Option{..}`)
 ///
 /// Of those, the parser position changes on each new iteration for:
 ///
 /// - enums (variant index is passed)
 /// - vectors (compact vector length indicator is passed)
 /// - calls and events, options (also variant index is passed)
+///
+/// In empty enums there are no inner types, therefore cycling is impossible.
 ///
 /// Thus the potential endless cycling could happen for structs, arrays, tuples,
 /// and compacts. Notably, this *should not* happen in good metadata.
@@ -367,12 +369,24 @@ where
             }
             TypeDef::Variant(x) => {
                 propagated.reject_compact()?;
-                let variant_data =
-                    decode_variant::<B, E, M>(&x.variants, data, ext_memory, position, registry)?;
-                Ok(ExtendedData {
-                    data: ParsedData::Variant(variant_data),
-                    info: propagated.info,
-                })
+                if !x.variants.is_empty() {
+                    let variant_data = decode_variant::<B, E, M>(
+                        &x.variants,
+                        data,
+                        ext_memory,
+                        position,
+                        registry,
+                    )?;
+                    Ok(ExtendedData {
+                        data: ParsedData::Variant(variant_data),
+                        info: propagated.info,
+                    })
+                } else {
+                    Ok(ExtendedData {
+                        data: ParsedData::EmptyEnum,
+                        info: propagated.info,
+                    })
+                }
             }
             TypeDef::Sequence(x) => {
                 let number_of_elements = get_compact::<u32, B, E>(data, ext_memory, position)?;
@@ -502,66 +516,6 @@ where
             )?,
             info: propagated.info,
         }),
-        SpecialtyTypeChecked::Option(ty_symbol) => {
-            propagated.reject_compact()?;
-            let param_ty = registry.resolve_ty(ty_symbol.id, ext_memory)?;
-            match &param_ty.type_def {
-                TypeDef::Primitive(TypeDefPrimitive::Bool) => {
-                    let slice_to_decode =
-                        data.read_slice(ext_memory, *position, ENUM_INDEX_ENCODED_LEN)?;
-                    let parsed_data = match OptionBool::decode(&mut slice_to_decode.as_ref()) {
-                        Ok(OptionBool(Some(true))) => {
-                            ParsedData::Option(Some(Box::new(ParsedData::PrimitiveBool(true))))
-                        }
-                        Ok(OptionBool(Some(false))) => {
-                            ParsedData::Option(Some(Box::new(ParsedData::PrimitiveBool(false))))
-                        }
-                        Ok(OptionBool(None)) => ParsedData::Option(None),
-                        Err(_) => {
-                            return Err(ParserError::UnexpectedOptionVariant {
-                                position: *position,
-                            })
-                        }
-                    };
-                    *position += ENUM_INDEX_ENCODED_LEN;
-                    Ok(ExtendedData {
-                        data: parsed_data,
-                        info: propagated.info,
-                    })
-                }
-                _ => match data.read_byte(ext_memory, *position)? {
-                    0 => {
-                        *position += ENUM_INDEX_ENCODED_LEN;
-                        Ok(ExtendedData {
-                            data: ParsedData::Option(None),
-                            info: propagated.info,
-                        })
-                    }
-                    1 => {
-                        *position += ENUM_INDEX_ENCODED_LEN;
-                        let extended_option_data = decode_with_type::<B, E, M>(
-                            &Ty::Resolved(ResolvedTy {
-                                ty: param_ty,
-                                id: ty_symbol.id,
-                            }),
-                            data,
-                            ext_memory,
-                            position,
-                            registry,
-                            Propagated::new(),
-                        )?;
-                        propagated.add_info_slice(&extended_option_data.info);
-                        Ok(ExtendedData {
-                            data: ParsedData::Option(Some(Box::new(extended_option_data.data))),
-                            info: propagated.info,
-                        })
-                    }
-                    _ => Err(ParserError::UnexpectedOptionVariant {
-                        position: *position,
-                    }),
-                },
-            }
-        }
         SpecialtyTypeChecked::PalletSpecific {
             pallet_name,
             pallet_info,

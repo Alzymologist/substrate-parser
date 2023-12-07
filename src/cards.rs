@@ -29,7 +29,6 @@ use plot_icon::generate_png_scaled_default;
 
 use crate::std::{
     borrow::ToOwned,
-    boxed::Box,
     fmt::Write,
     string::{String, ToString},
     vec::Vec,
@@ -307,6 +306,7 @@ pub enum ParsedData {
     BlockHash(H256),
     Call(Call),
     Composite(Vec<FieldData>),
+    EmptyEnum,
     Era(Era),
     Event(Event),
     GenesisHash(H256),
@@ -314,7 +314,6 @@ pub enum ParsedData {
     H256(H256),
     H512(H512),
     Id(AccountId32),
-    Option(Option<Box<ParsedData>>),
     PerU16(PerU16),
     Percent(Percent),
     Permill(Permill),
@@ -516,9 +515,14 @@ impl ParsedData {
                     out
                 }
             }
+            ParsedData::EmptyEnum => vec![ExtendedCard {
+                parser_card: ParserCard::EmptyEnum,
+                indent,
+                info_flat,
+            }],
             ParsedData::Era(value) => single_card!(Era, value, indent, info_flat),
             ParsedData::Event(event) => event.card(indent, short_specs, spec_name),
-            ParsedData::GenesisHash(_) => Vec::new(),
+            ParsedData::GenesisHash(value) => single_card!(GenesisHash, value, indent, info_flat),
             ParsedData::H160(value) => single_card!(H160, value, indent, info_flat),
             ParsedData::H256(value) => single_card!(H256, value, indent, info_flat),
             ParsedData::H512(value) => single_card!(H512, value, indent, info_flat),
@@ -532,16 +536,6 @@ impl ParsedData {
                     info_flat,
                 }]
             }
-            ParsedData::Option(option) => match option {
-                None => vec![ExtendedCard {
-                    parser_card: ParserCard::None,
-                    indent,
-                    info_flat,
-                }],
-                Some(parsed_data) => {
-                    parsed_data.card(info_flat, indent, display_balance, short_specs, spec_name)
-                }
-            },
             ParsedData::PerU16(value) => single_card!(PerU16, value, indent, info_flat),
             ParsedData::Percent(value) => single_card!(Percent, value, indent, info_flat),
             ParsedData::Permill(value) => single_card!(Permill, value, indent, info_flat),
@@ -982,12 +976,14 @@ pub enum ParserCard {
     BlockHash(H256),
     CallName(String),
     CompositeAnnounced(usize),
+    EmptyEnum,
     EnumAnnounced,
     EnumVariantName(String),
     Era(Era),
     EventName(String),
     FieldName(String),
     FieldNumber(usize),
+    GenesisHash(H256),
     H160(H160),
     H256(H256),
     H512(H512),
@@ -997,7 +993,6 @@ pub enum ParserCard {
         version: String,
     },
     Nonce(String),
-    None,
     PalletName(String),
     PerU16(PerU16),
     Percent(Percent),
@@ -1124,6 +1119,9 @@ impl ExtendedCard {
             ParserCard::CompositeAnnounced(a) => {
                 readable(self.indent, "Struct", &format!("{a} field(s)"))
             }
+            ParserCard::EmptyEnum => {
+                format!("{}Enum With No Variants", "  ".repeat(self.indent as usize))
+            }
             ParserCard::EnumAnnounced => format!("{}Enum", "  ".repeat(self.indent as usize)),
             ParserCard::EnumVariantName(a) => readable(self.indent, "Enum Variant Name", a),
             ParserCard::Era(a) => match a {
@@ -1137,6 +1135,7 @@ impl ExtendedCard {
             ParserCard::EventName(a) => readable(self.indent, "Event", a),
             ParserCard::FieldName(a) => readable(self.indent, "Field Name", a),
             ParserCard::FieldNumber(a) => readable(self.indent, "Field Number", &a.to_string()),
+            ParserCard::GenesisHash(a) => readable(self.indent, "Genesis Hash", &hex::encode(a)),
             ParserCard::H160(a) => readable(self.indent, "H160", &hex::encode(a.0)),
             ParserCard::H256(a) => readable(self.indent, "H256", &hex::encode(a.0)),
             ParserCard::H512(a) => readable(self.indent, "H512", &hex::encode(a.0)),
@@ -1148,7 +1147,6 @@ impl ExtendedCard {
                 readable(self.indent, "Chain", &format!("{name}{version}"))
             }
             ParserCard::Nonce(a) => readable(self.indent, "Nonce", a),
-            ParserCard::None => readable(self.indent, "Option", "None"),
             ParserCard::PalletName(a) => readable(self.indent, "Pallet", a),
             ParserCard::PerU16(a) => readable(self.indent, "PerU16", &a.deconstruct().to_string()),
             ParserCard::Percent(a) => {
