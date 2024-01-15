@@ -38,7 +38,7 @@ jobs:
           version:            0.9
 
       - name:                 Rust Cache
-        uses:                 Swatinem/rust-cache@v2.7.1
+        uses:                 Swatinem/rust-cache@v2.7.3
 
       - name:                 cargo nextest
         run:                  cargo nextest run
