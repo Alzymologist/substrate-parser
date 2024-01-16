@@ -1,4 +1,5 @@
 //! Data that can propagate hierarchically during parsing.
+use external_memory_tools::ExternalMemory;
 use frame_metadata::v14::SignedExtensionMetadata;
 use scale_info::{form::PortableForm, Field, Path, Type};
 
@@ -7,7 +8,6 @@ use crate::std::vec::Vec;
 use crate::cards::Info;
 use crate::error::ParserError;
 use crate::special_indicators::{Hint, SpecialtyH256, SpecialtyUnsignedInteger};
-use crate::traits::ExternalMemory;
 
 /// Type specialty data (type specialty [`Hint`] and compact info) that
 /// hierarchically propagates during the decoding.

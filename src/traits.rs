@@ -1,12 +1,12 @@
 #[cfg(not(feature = "std"))]
 use core::{
     any::TypeId,
-    fmt::{Debug, Display, Formatter, Result as FmtResult},
+    fmt::{Debug, Display},
 };
 #[cfg(feature = "std")]
 use std::{
     any::TypeId,
-    fmt::{Debug, Display, Formatter, Result as FmtResult},
+    fmt::{Debug, Display},
 };
 
 use crate::std::{
@@ -15,6 +15,7 @@ use crate::std::{
     vec::Vec,
 };
 
+use external_memory_tools::ExternalMemory;
 use frame_metadata::v14::{ExtrinsicMetadata, PalletMetadata, RuntimeMetadataV14};
 use parity_scale_codec::{Decode, Encode};
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, PortableRegistry, Type};
@@ -23,75 +24,6 @@ use crate::cards::ParsedData;
 use crate::decode_all_as_type;
 use crate::error::{MetaVersionErrorPallets, ParserError};
 use crate::special_indicators::{SpecialtyStr, SpecialtyUnsignedInteger};
-
-pub trait ExternalMemory: Debug {
-    type ExternalMemoryError: Debug + Display + Eq + PartialEq;
-}
-
-impl ExternalMemory for () {
-    type ExternalMemoryError = NoEntries;
-}
-
-#[derive(Debug, Eq, PartialEq)]
-pub enum NoEntries {}
-
-impl Display for NoEntries {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "")
-    }
-}
-
-pub trait AddressableBuffer<E: ExternalMemory> {
-    type ReadBuffer: AsRef<[u8]>;
-    fn total_len(&self) -> usize;
-    fn read_slice(
-        &self,
-        ext_memory: &mut E,
-        position: usize,
-        slice_len: usize,
-    ) -> Result<Self::ReadBuffer, ParserError<E>>;
-    fn read_byte(&self, ext_memory: &mut E, position: usize) -> Result<u8, ParserError<E>> {
-        let byte_slice = self.read_slice(ext_memory, position, 1)?;
-        Ok(byte_slice.as_ref()[0])
-    }
-    /// Limits the available buffer length to shorter `new_len` provided.
-    ///
-    /// If `new_len` exceeds initial `total_len`, panics. This should be
-    /// used only with pre-checked `new_len`.
-    ///
-    /// Mostly for call decoding, so that the input stops when the call ends.
-    fn limit_length(&self, new_len: usize) -> Self;
-}
-
-impl<'a, E: ExternalMemory> AddressableBuffer<E> for &'a [u8] {
-    type ReadBuffer = &'a [u8];
-    fn total_len(&self) -> usize {
-        self.len()
-    }
-    fn read_slice(
-        &self,
-        _ext_memory: &mut E,
-        position: usize,
-        slice_len: usize,
-    ) -> Result<Self::ReadBuffer, ParserError<E>> {
-        if self.len() < position {
-            return Err(ParserError::OutOfRange {
-                position,
-                total_length: self.len(),
-            });
-        }
-        match self.get(position..position + slice_len) {
-            Some(a) => Ok(a),
-            None => Err(ParserError::DataTooShort {
-                position,
-                minimal_length: slice_len,
-            }),
-        }
-    }
-    fn limit_length(&self, new_len: usize) -> Self {
-        &self[..new_len]
-    }
-}
 
 pub trait AsMetadata<E: ExternalMemory>: Debug + Sized {
     type TypeRegistry: ResolveType<E>;

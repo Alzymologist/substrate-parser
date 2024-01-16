@@ -7,6 +7,7 @@
 //! Additionally, some data should better be decoded directly as the custom type
 //! mentioned in metadata descriptors, rather than decoded as more generalized
 //! type and cast into custom type later on.
+use external_memory_tools::{AddressableBuffer, ExternalMemory};
 use frame_metadata::v14::SignedExtensionMetadata;
 use scale_info::{form::PortableForm, Field, Path, Type, TypeDef, Variant};
 
@@ -14,7 +15,7 @@ use crate::std::{borrow::ToOwned, string::String, vec::Vec};
 
 use crate::cards::Info;
 use crate::decoding_sci::pick_variant;
-use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
+use crate::traits::{AsMetadata, ResolveType};
 
 /// [`Field`] `type_name` set indicating that the value *may* be
 /// currency-related.

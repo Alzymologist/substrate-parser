@@ -48,12 +48,14 @@ use std::cmp::Ordering;
 #[cfg(not(feature = "std"))]
 use core::cmp::Ordering;
 
+use external_memory_tools::{AddressableBuffer, BufferError, ExternalMemory};
+
 use crate::cards::{Call, ExtendedData, ParsedData};
 use crate::compacts::get_compact;
 use crate::decode_as_type_at_position;
 use crate::decoding_sci::{extrinsic_type_params, CALL_INDICATOR};
 use crate::error::{ParserError, UncheckedExtrinsicError};
-use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory};
+use crate::traits::AsMetadata;
 
 /// Length of version indicator, 1 byte.
 const VERSION_LENGTH: usize = 1;
@@ -91,8 +93,7 @@ where
     let meta_v14_types = meta_v14.types();
 
     let extrinsic_type_params =
-        extrinsic_type_params::<E, M>(ext_memory, &meta_v14_types, &extrinsic_ty)
-            .map_err(UncheckedExtrinsicError::Parser)?;
+        extrinsic_type_params::<E, M>(ext_memory, &meta_v14_types, &extrinsic_ty)?;
 
     // This could have been just a single decode line.
     // Written this way to: (1) trace position from the start, (2) have descriptive errors
@@ -102,13 +103,15 @@ where
     let len = input.total_len();
     match (extrinsic_start + extrinsic_length).cmp(&len) {
         Ordering::Greater => {
-            return Err(UncheckedExtrinsicError::Parser(ParserError::DataTooShort {
-                position: len,
-                minimal_length: extrinsic_start + extrinsic_length - len,
-            }))
+            return Err(UncheckedExtrinsicError::Parsing(ParserError::Buffer(
+                BufferError::DataTooShort {
+                    position: len,
+                    minimal_length: extrinsic_start + extrinsic_length - len,
+                },
+            )))
         }
         Ordering::Less => {
-            return Err(UncheckedExtrinsicError::Parser(
+            return Err(UncheckedExtrinsicError::Parsing(
                 ParserError::SomeDataNotUsedBlob {
                     from: extrinsic_start + extrinsic_length,
                 },
@@ -122,7 +125,7 @@ where
     // version byte from extrinsic, to diffirentiate signed and unsigned extrinsics
     let version_byte = input
         .read_byte(ext_memory, position)
-        .map_err(UncheckedExtrinsicError::Parser)?;
+        .map_err(|e| UncheckedExtrinsicError::Parsing(ParserError::Buffer(e)))?;
     position += VERSION_LENGTH;
 
     let version = extrinsic.version;
@@ -144,7 +147,7 @@ where
             }
         }
 
-        let call_ty = found_call.ok_or(UncheckedExtrinsicError::Parser(
+        let call_ty = found_call.ok_or(UncheckedExtrinsicError::Parsing(
             ParserError::ExtrinsicNoCallParam,
         ))?;
         let call_extended_data = decode_as_type_at_position::<B, E, M>(
@@ -153,8 +156,7 @@ where
             ext_memory,
             &meta_v14_types,
             &mut position,
-        )
-        .map_err(UncheckedExtrinsicError::Parser)?;
+        )?;
         if let ParsedData::Call(call) = call_extended_data.data {
             Ok(UncheckedExtrinsic::Unsigned { call })
         } else {
@@ -187,8 +189,7 @@ where
             ext_memory,
             &meta_v14_types,
             &mut position,
-        )
-        .map_err(UncheckedExtrinsicError::Parser)?;
+        )?;
 
         let signature_ty = found_signature.ok_or(UncheckedExtrinsicError::NoSignatureParam)?;
         let signature = decode_as_type_at_position::<B, E, M>(
@@ -197,8 +198,7 @@ where
             ext_memory,
             &meta_v14_types,
             &mut position,
-        )
-        .map_err(UncheckedExtrinsicError::Parser)?;
+        )?;
 
         let extra_ty = found_extra.ok_or(UncheckedExtrinsicError::NoExtraParam)?;
         let extra = decode_as_type_at_position::<B, E, M>(
@@ -207,8 +207,7 @@ where
             ext_memory,
             &meta_v14_types,
             &mut position,
-        )
-        .map_err(UncheckedExtrinsicError::Parser)?;
+        )?;
 
         let call_ty = found_call.ok_or(UncheckedExtrinsicError::NoCallParam)?;
         let call_extended_data = decode_as_type_at_position::<B, E, M>(
@@ -217,8 +216,7 @@ where
             ext_memory,
             &meta_v14_types,
             &mut position,
-        )
-        .map_err(UncheckedExtrinsicError::Parser)?;
+        )?;
         if let ParsedData::Call(call) = call_extended_data.data {
             Ok(UncheckedExtrinsic::Signed {
                 address,

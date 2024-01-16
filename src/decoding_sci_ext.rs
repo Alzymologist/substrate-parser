@@ -1,4 +1,5 @@
 //! Decode signable transaction extensions using `RuntimeMetadataV14`.
+use external_memory_tools::{AddressableBuffer, ExternalMemory};
 use primitive_types::H256;
 
 #[cfg(not(feature = "std"))]
@@ -18,7 +19,7 @@ use crate::error::{ExtensionsError, SignableError};
 use crate::propagated::Propagated;
 use crate::special_indicators::SpecialtyUnsignedInteger;
 use crate::special_types::UnsignedInteger;
-use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory};
+use crate::traits::AsMetadata;
 use crate::MarkedData;
 
 /// Parse extensions part of the signable transaction [`MarkedData`] using
@@ -85,30 +86,24 @@ where
     let meta_v14_types = meta_v14.types();
     let extrinsic = meta_v14.extrinsic().map_err(SignableError::MetaStructure)?;
     for signed_extensions_metadata in extrinsic.signed_extensions.iter() {
-        extensions.push(
-            decode_with_type::<B, E, M>(
-                &Ty::Symbol(&signed_extensions_metadata.ty),
-                data,
-                ext_memory,
-                position,
-                &meta_v14_types,
-                Propagated::from_ext_meta(signed_extensions_metadata),
-            )
-            .map_err(SignableError::Parsing)?,
-        )
+        extensions.push(decode_with_type::<B, E, M>(
+            &Ty::Symbol(&signed_extensions_metadata.ty),
+            data,
+            ext_memory,
+            position,
+            &meta_v14_types,
+            Propagated::from_ext_meta(signed_extensions_metadata),
+        )?)
     }
     for signed_extensions_metadata in extrinsic.signed_extensions.iter() {
-        extensions.push(
-            decode_with_type::<B, E, M>(
-                &Ty::Symbol(&signed_extensions_metadata.additional_signed),
-                data,
-                ext_memory,
-                position,
-                &meta_v14_types,
-                Propagated::from_ext_meta(signed_extensions_metadata),
-            )
-            .map_err(SignableError::Parsing)?,
-        )
+        extensions.push(decode_with_type::<B, E, M>(
+            &Ty::Symbol(&signed_extensions_metadata.additional_signed),
+            data,
+            ext_memory,
+            position,
+            &meta_v14_types,
+            Propagated::from_ext_meta(signed_extensions_metadata),
+        )?)
     }
     // `position > data.total_len()` is ruled out elsewhere
     if *position != data.total_len() {

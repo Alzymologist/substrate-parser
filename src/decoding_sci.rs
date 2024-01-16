@@ -2,6 +2,9 @@
 #[cfg(any(target_pointer_width = "32", test))]
 use bitvec::prelude::BitOrder;
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
+#[cfg(any(target_pointer_width = "32", test))]
+use external_memory_tools::BufferError;
+use external_memory_tools::{AddressableBuffer, ExternalMemory};
 use num_bigint::{BigInt, BigUint};
 use parity_scale_codec::DecodeAll;
 use primitive_types::{H160, H512};
@@ -44,7 +47,7 @@ use crate::special_indicators::{
 use crate::special_types::{
     special_case_era, special_case_h256, wrap_sequence, CheckCompact, UnsignedInteger,
 };
-use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
+use crate::traits::{AsMetadata, ResolveType};
 use crate::MarkedData;
 
 /// Finalize parsing of primitives (variants of [`TypeDefPrimitive`]).
@@ -208,8 +211,7 @@ where
     let extrinsic_ty = extrinsic.ty;
     let types = meta_v14.types();
 
-    let extrinsic_type_params = extrinsic_type_params::<E, M>(ext_memory, &types, &extrinsic_ty)
-        .map_err(SignableError::Parsing)?;
+    let extrinsic_type_params = extrinsic_type_params::<E, M>(ext_memory, &types, &extrinsic_ty)?;
 
     let mut found_all_calls_ty = None;
 
@@ -229,8 +231,7 @@ where
         position,
         &types,
         Propagated::new(),
-    )
-    .map_err(SignableError::Parsing)?;
+    )?;
     if let ParsedData::Call(call) = call_extended_data.data {
         Ok(call)
     } else {
@@ -1097,10 +1098,11 @@ macro_rules! impl_patched {
                                     .expect("constant size slice, always fits"),
                             ),
                             Err(_) => {
-                                return Err(ParserError::DataTooShort {
+                                return Err(ParserError::Buffer(
+                                BufferError::DataTooShort {
                                     position: bitvec_positions.bitvec_start,
                                     minimal_length: bitvec_positions.minimal_length,
-                                })
+                                }))
                             }
                         }
                     }

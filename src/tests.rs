@@ -3,6 +3,7 @@ use crate::std::{
     string::{String, ToString},
     vec::Vec,
 };
+use external_memory_tools::BufferError;
 use frame_metadata::v14::{RuntimeMetadataV14, StorageEntryMetadata};
 use parity_scale_codec::Decode;
 use primitive_types::H256;
@@ -915,10 +916,10 @@ fn parser_error_6() {
     //  i.e. `88157155` `u8` elements are expected to be found).  When all call
     // data is exhausted, i.e. after element `42` of the data, no new `u8`
     // element could be found, therefore the error.
-    let call_error_known = SignableError::Parsing(ParserError::DataTooShort {
+    let call_error_known = SignableError::Parsing(ParserError::Buffer(BufferError::DataTooShort {
         position: 42,
         minimal_length: 1,
-    });
+    }));
     assert_eq!(call_error_known, call_error);
 }
 
