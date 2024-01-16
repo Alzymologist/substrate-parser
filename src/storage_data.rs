@@ -23,6 +23,7 @@
 //!
 //! [`Storage`] contains parsed storage entry data (key, value, and general
 //! documentation associated with every key with the same prefix).
+use external_memory_tools::{AddressableBuffer, ExternalMemory};
 use frame_metadata::v14::{StorageEntryMetadata, StorageEntryType, StorageHasher};
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, TypeDef};
 use sp_core_hashing::{blake2_128, twox_64};
@@ -38,9 +39,9 @@ use core::any::TypeId;
 use crate::cards::{Documented, ExtendedData, Info};
 use crate::decode_all_as_type;
 use crate::decoding_sci::{decode_with_type, Ty};
-use crate::error::StorageError;
+use crate::error::{ParserError, StorageError};
 use crate::propagated::Propagated;
-use crate::traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
+use crate::traits::{AsMetadata, ResolveType};
 
 /// Parsed storage entry data: key, value, general docs.
 #[derive(Debug, Eq, PartialEq)]
@@ -204,7 +205,7 @@ macro_rules! cut_hash {
         {
             let slice = key_input
                 .read_slice(ext_memory, *position, $hash_len)
-                .map_err(StorageError::ParsingKey)?;
+                .map_err(|e| StorageError::ParsingKey(ParserError::Buffer(e)))?;
             let hash_part: [u8; $hash_len] = slice
                 .as_ref()
                 .try_into()
@@ -245,7 +246,7 @@ macro_rules! check_hash {
         {
             let slice = key_input
                 .read_slice(ext_memory, *position, $hash_len)
-                .map_err(StorageError::ParsingKey)?;
+                .map_err(|e| StorageError::ParsingKey(ParserError::Buffer(e)))?;
             let hash_part: [u8; $hash_len] = slice
                 .as_ref()
                 .try_into()

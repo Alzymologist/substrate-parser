@@ -455,6 +455,7 @@
 #![no_std]
 #![deny(unused_crate_dependencies)]
 
+pub use external_memory_tools::{AddressableBuffer, ExternalMemory};
 use parity_scale_codec::{Decode, Encode};
 use primitive_types::H256;
 use scale_info::interner::UntrackedSymbol;
@@ -496,7 +497,7 @@ use core::{any::TypeId, marker::PhantomData};
 
 pub use decoding_sci::{decode_as_call, decode_as_call_unmarked, ResolvedTy};
 pub use decoding_sci_ext::{decode_extensions, decode_extensions_unmarked};
-pub use traits::{AddressableBuffer, AsMetadata, ExternalMemory, ResolveType};
+pub use traits::{AsMetadata, ResolveType};
 
 use cards::{Call, ExtendedCard, ExtendedData};
 use compacts::get_compact;

@@ -1,4 +1,5 @@
 //! Decoders for special types: primitives, `PerThing` items, well-known arrays.
+use external_memory_tools::{AddressableBuffer, ExternalMemory};
 use num_bigint::{BigInt, BigUint};
 use parity_scale_codec::{DecodeAll, HasCompact};
 use primitive_types::{H160, H256, H512};
@@ -35,7 +36,6 @@ use crate::error::ParserError;
 use crate::printing_balance::AsBalance;
 use crate::propagated::SpecialtySet;
 use crate::special_indicators::{SpecialtyH256, SpecialtyUnsignedInteger};
-use crate::traits::{AddressableBuffer, ExternalMemory};
 
 /// Stable length trait.
 ///

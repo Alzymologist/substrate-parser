@@ -1,4 +1,5 @@
 //! Errors.
+use external_memory_tools::BufferError;
 use primitive_types::H256;
 
 use crate::std::string::String;
@@ -12,7 +13,9 @@ use std::{
 #[cfg(not(feature = "std"))]
 use core::fmt::{Display, Formatter, Result as FmtResult};
 
-use crate::traits::{AsMetadata, ExternalMemory};
+use external_memory_tools::ExternalMemory;
+
+use crate::traits::AsMetadata;
 
 /// Errors in signable transactions parsing.
 #[derive(Debug, Eq, PartialEq)]
@@ -112,66 +115,31 @@ impl<E: ExternalMemory> StorageError<E> {
 /// Errors in data parsing.
 #[derive(Debug, Eq, PartialEq)]
 pub enum ParserError<E: ExternalMemory> {
-    DataTooShort {
-        position: usize,
-        minimal_length: usize,
-    },
-    CyclicMetadata {
-        id: u32,
-    },
-    External(E::ExternalMemoryError),
+    Buffer(BufferError<E>),
+    CyclicMetadata { id: u32 },
     ExtrinsicNoCallParam,
-    NoCompact {
-        position: usize,
-    },
-    NotBitOrderType {
-        id: u32,
-    },
-    NotBitStoreType {
-        id: u32,
-    },
-    OutOfRange {
-        position: usize,
-        total_length: usize,
-    },
-    SomeDataNotUsedBlob {
-        from: usize,
-    },
-    TypeFailure {
-        position: usize,
-        ty: &'static str,
-    },
-    UnexpectedCompactInsides {
-        id: u32,
-    },
-    UnexpectedEnumVariant {
-        position: usize,
-    },
-    UnexpectedExtrinsicType {
-        extrinsic_ty_id: u32,
-    },
-    V14ShortTypesIncomplete {
-        old_id: u32,
-    },
-    V14TypeNotResolved {
-        id: u32,
-    },
-    V14TypeNotResolvedShortened {
-        id: u32,
-    },
+    NoCompact { position: usize },
+    NotBitOrderType { id: u32 },
+    NotBitStoreType { id: u32 },
+    SomeDataNotUsedBlob { from: usize },
+    TypeFailure { position: usize, ty: &'static str },
+    UnexpectedCompactInsides { id: u32 },
+    UnexpectedEnumVariant { position: usize },
+    UnexpectedExtrinsicType { extrinsic_ty_id: u32 },
+    V14ShortTypesIncomplete { old_id: u32 },
+    V14TypeNotResolved { id: u32 },
+    V14TypeNotResolvedShortened { id: u32 },
 }
 
 impl<E: ExternalMemory> ParserError<E> {
     fn error_text(&self) -> String {
         match &self {
-            ParserError::DataTooShort { position, minimal_length } => format!("Data is too short for expected content. Expected at least {minimal_length} element(s) after position {position}."),
+            ParserError::Buffer(buffer_error) => format!("{buffer_error}"),
             ParserError::CyclicMetadata { id } => format!("Resolving type id {id} in metadata type registry results in cycling."),
-            ParserError::External(e) => format!("Error accessing external memory. {e}"),
             ParserError::ExtrinsicNoCallParam => String::from("Extrinsic type in provided metadata has no specified call parameter."),
             ParserError::NoCompact { position } => format!("Expected compact starting at position {position}, not found one."),
             ParserError::NotBitOrderType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitOrder type."),
             ParserError::NotBitStoreType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitStore type."),
-            ParserError::OutOfRange { position, total_length } => format!("Position {position} is out of range for data length {total_length}."),
             ParserError::SomeDataNotUsedBlob { from } => format!("Some data (input positions [{from}..]) remained unused after decoding."),
             ParserError::TypeFailure { position, ty } => format!("Unable to decode data starting at position {position} as {ty}."),
             ParserError::UnexpectedCompactInsides { id } => format!("Compact type {id} in metadata type registry has unexpected type inside compact."),
@@ -276,7 +244,7 @@ pub enum UncheckedExtrinsicError<E: ExternalMemory, M: AsMetadata<E>> {
     NoCallParam,
     NoExtraParam,
     NoSignatureParam,
-    Parser(ParserError<E>),
+    Parsing(ParserError<E>),
     VersionMismatch { version_byte: u8, version: u8 },
     UnexpectedCallTy { call_ty_id: u32 },
 }
@@ -294,7 +262,7 @@ where
             UncheckedExtrinsicError::NoCallParam => String::from("Unchecked extrinsic type in provided metadata has no specified call parameter."),
             UncheckedExtrinsicError::NoExtraParam => String::from("Unchecked extrinsic type in provided metadata has no specified extra parameter."),
             UncheckedExtrinsicError::NoSignatureParam => String::from("Unchecked extrinsic type in provided metadata has no specified signature parameter."),
-            UncheckedExtrinsicError::Parser(parser_error) => format!("Error parsing unchecked extrinsic data. {parser_error}"),
+            UncheckedExtrinsicError::Parsing(parser_error) => format!("Error parsing unchecked extrinsic data. {parser_error}"),
             UncheckedExtrinsicError::VersionMismatch { version_byte, version } => format!("Version byte in unchecked extrinsic {version_byte} does not match with version {version} from provided metadata. Last 7 bits were expected to be identical."),
             UncheckedExtrinsicError::UnexpectedCallTy { call_ty_id } => format!("Parameter type for call {call_ty_id} in metadata type registry is not a call type, and does not match known call type descriptors."),
         }
@@ -326,7 +294,7 @@ impl_display_and_error!(ExtensionsError, MetaVersionErrorPallets);
 
 /// Implement [`Display`] for errors in both `std` and `no_std` cases.
 /// Implement `Error` for `std` case.
-macro_rules! impl_display_and_error_traited {
+macro_rules! impl_display_and_error_gen {
     ($($ty: ty), *) => {
         $(
             impl <E: ExternalMemory> Display for $ty {
@@ -345,46 +313,52 @@ macro_rules! impl_display_and_error_traited {
     }
 }
 
-impl_display_and_error_traited!(ParserError<E>, StorageError<E>);
+impl_display_and_error_gen!(ParserError<E>, StorageError<E>);
 
-impl<E, M> Display for SignableError<E, M>
-where
-    E: ExternalMemory,
-    M: AsMetadata<E>,
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "{}", self.error_text())
+impl<E: ExternalMemory> From<BufferError<E>> for ParserError<E> {
+    fn from(buffer_error: BufferError<E>) -> Self {
+        ParserError::Buffer(buffer_error)
     }
 }
 
-#[cfg(feature = "std")]
-impl<E, M> Error for SignableError<E, M>
-where
-    E: ExternalMemory,
-    M: AsMetadata<E>,
-{
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
+/// Implement [`Display`] for errors in both `std` and `no_std` cases.
+/// Implement `Error` for `std` case.
+/// Implement `From<ParserError<E>>` for simplified error conversion.
+macro_rules! impl_display_error_from_2gen {
+    ($($ty: ty), *) => {
+        $(
+            impl <E, M> Display for $ty
+            where
+                E: ExternalMemory,
+                M: AsMetadata<E>,
+            {
+                fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+                    write!(f, "{}", self.error_text())
+                }
+            }
+
+            #[cfg(feature = "std")]
+            impl <E, M> Error for $ty
+            where
+                E: ExternalMemory,
+                M: AsMetadata<E>,
+            {
+                fn source(&self) -> Option<&(dyn Error + 'static)> {
+                    None
+                }
+            }
+
+            impl <E, M> From<ParserError<E>> for $ty
+            where
+                E: ExternalMemory,
+                M: AsMetadata<E>,
+            {
+                fn from(parser_error: ParserError<E>) -> Self {
+                    <$ty>::Parsing(parser_error)
+                }
+            }
+        )*
     }
 }
 
-impl<E, M> Display for UncheckedExtrinsicError<E, M>
-where
-    E: ExternalMemory,
-    M: AsMetadata<E>,
-{
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "{}", self.error_text())
-    }
-}
-
-#[cfg(feature = "std")]
-impl<E, M> Error for UncheckedExtrinsicError<E, M>
-where
-    E: ExternalMemory,
-    M: AsMetadata<E>,
-{
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-}
+impl_display_error_from_2gen!(SignableError<E, M>, UncheckedExtrinsicError<E, M>);

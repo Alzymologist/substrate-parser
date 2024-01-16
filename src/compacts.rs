@@ -1,8 +1,8 @@
 //! [`Compact`] search and processing.
+use external_memory_tools::{AddressableBuffer, BufferError, ExternalMemory};
 use parity_scale_codec::{Compact, Decode, HasCompact};
 
 use crate::error::ParserError;
-use crate::traits::{AddressableBuffer, ExternalMemory};
 
 /// Compact found in data.
 pub struct FoundCompact<T: HasCompact> {
@@ -34,10 +34,10 @@ where
     Compact<T>: Decode,
 {
     if data.total_len() < position {
-        return Err(ParserError::OutOfRange {
+        return Err(ParserError::Buffer(BufferError::OutOfRange {
             position,
             total_length: data.total_len(),
-        });
+        }));
     }
     let mut out = None;
     for i in 0..(data.total_len() - position) {
