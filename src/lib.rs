@@ -636,7 +636,7 @@ where
 pub fn parse_transaction<B, E, M>(
     data: &B,
     ext_memory: &mut E,
-    meta_v14: &M,
+    metadata: &M,
     optional_genesis_hash: Option<H256>,
 ) -> Result<TransactionParsed<E, M>, SignableError<E, M>>
 where
@@ -651,10 +651,10 @@ where
     // try parsing extensions, check that spec version and genesis hash are
     // correct
     let extensions =
-        decode_extensions::<B, E, M>(&marked_data, ext_memory, meta_v14, optional_genesis_hash)?;
+        decode_extensions::<B, E, M>(&marked_data, ext_memory, metadata, optional_genesis_hash)?;
 
     // try parsing call data
-    let call_result = decode_as_call::<B, E, M>(&marked_data, ext_memory, meta_v14);
+    let call_result = decode_as_call::<B, E, M>(&marked_data, ext_memory, metadata);
 
     Ok(TransactionParsed::<E, M> {
         call_result,
@@ -699,7 +699,7 @@ impl TransactionUnmarkedParsed {
 pub fn parse_transaction_unmarked<B, E, M>(
     data: &B,
     ext_memory: &mut E,
-    meta_v14: &M,
+    metadata: &M,
     optional_genesis_hash: Option<H256>,
 ) -> Result<TransactionUnmarkedParsed, SignableError<E, M>>
 where
@@ -710,7 +710,7 @@ where
     let mut position = 0;
 
     // try parsing call data
-    let call = decode_as_call_unmarked::<B, E, M>(data, &mut position, ext_memory, meta_v14)?;
+    let call = decode_as_call_unmarked::<B, E, M>(data, &mut position, ext_memory, metadata)?;
 
     // try parsing extensions, check that spec version and genesis hash are
     // correct
@@ -718,7 +718,7 @@ where
         data,
         &mut position,
         ext_memory,
-        meta_v14,
+        metadata,
         optional_genesis_hash,
     )?;
 

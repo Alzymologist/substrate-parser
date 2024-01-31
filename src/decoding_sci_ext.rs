@@ -38,7 +38,7 @@ use crate::MarkedData;
 pub fn decode_extensions<B, E, M>(
     marked_data: &MarkedData<B, E, M>,
     ext_memory: &mut E,
-    meta_v14: &M,
+    metadata: &M,
     optional_genesis_hash: Option<H256>,
 ) -> Result<Vec<ExtendedData>, SignableError<E, M>>
 where
@@ -53,7 +53,7 @@ where
         data,
         &mut position,
         ext_memory,
-        meta_v14,
+        metadata,
         optional_genesis_hash,
     )
 }
@@ -74,7 +74,7 @@ pub fn decode_extensions_unmarked<B, E, M>(
     data: &B,
     position: &mut usize,
     ext_memory: &mut E,
-    meta_v14: &M,
+    metadata: &M,
     optional_genesis_hash: Option<H256>,
 ) -> Result<Vec<ExtendedData>, SignableError<E, M>>
 where
@@ -83,25 +83,27 @@ where
     M: AsMetadata<E>,
 {
     let mut extensions: Vec<ExtendedData> = Vec::new();
-    let meta_v14_types = meta_v14.types();
-    let extrinsic = meta_v14.extrinsic().map_err(SignableError::MetaStructure)?;
-    for signed_extensions_metadata in extrinsic.signed_extensions.iter() {
+    let registry = metadata.types();
+    let signed_extensions = metadata
+        .signed_extensions()
+        .map_err(SignableError::MetaStructure)?;
+    for signed_extensions_metadata in signed_extensions.iter() {
         extensions.push(decode_with_type::<B, E, M>(
             &Ty::Symbol(&signed_extensions_metadata.ty),
             data,
             ext_memory,
             position,
-            &meta_v14_types,
+            &registry,
             Propagated::from_ext_meta(signed_extensions_metadata),
         )?)
     }
-    for signed_extensions_metadata in extrinsic.signed_extensions.iter() {
+    for signed_extensions_metadata in signed_extensions.iter() {
         extensions.push(decode_with_type::<B, E, M>(
             &Ty::Symbol(&signed_extensions_metadata.additional_signed),
             data,
             ext_memory,
             position,
-            &meta_v14_types,
+            &registry,
             Propagated::from_ext_meta(signed_extensions_metadata),
         )?)
     }
@@ -109,7 +111,7 @@ where
     if *position != data.total_len() {
         return Err(SignableError::SomeDataNotUsedExtensions { from: *position });
     }
-    let spec_name_version = meta_v14
+    let spec_name_version = metadata
         .spec_name_version()
         .map_err(SignableError::MetaStructure)?;
     check_extensions::<E, M>(

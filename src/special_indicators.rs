@@ -8,14 +8,13 @@
 //! mentioned in metadata descriptors, rather than decoded as more generalized
 //! type and cast into custom type later on.
 use external_memory_tools::{AddressableBuffer, ExternalMemory};
-use frame_metadata::v14::SignedExtensionMetadata;
 use scale_info::{form::PortableForm, Field, Path, Type, TypeDef, Variant};
 
 use crate::std::{borrow::ToOwned, string::String, vec::Vec};
 
 use crate::cards::Info;
 use crate::decoding_sci::pick_variant;
-use crate::traits::{AsMetadata, ResolveType};
+use crate::traits::{AsMetadata, ResolveType, SignedExtensionMetadata};
 
 /// [`Field`] `type_name` set indicating that the value *may* be
 /// currency-related.
@@ -261,7 +260,7 @@ impl Hint {
     }
 
     /// `Hint` for signed extensions instance.
-    pub fn from_ext_meta(signed_ext_meta: &SignedExtensionMetadata<PortableForm>) -> Self {
+    pub fn from_ext_meta(signed_ext_meta: &SignedExtensionMetadata) -> Self {
         match signed_ext_meta.identifier.as_str() {
             CHECK_SPEC_VERSION => Self::CheckSpecVersion,
             CHECK_TX_VERSION => Self::CheckTxVersion,

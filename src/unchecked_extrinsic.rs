@@ -53,7 +53,6 @@ use external_memory_tools::{AddressableBuffer, BufferError, ExternalMemory};
 use crate::cards::{Call, ExtendedData, ParsedData};
 use crate::compacts::get_compact;
 use crate::decode_as_type_at_position;
-use crate::decoding_sci::{extrinsic_type_params, CALL_INDICATOR};
 use crate::error::{ParserError, UncheckedExtrinsicError};
 use crate::traits::AsMetadata;
 
@@ -66,34 +65,21 @@ const VERSION_MASK: u8 = 0b0111_1111;
 /// Version value for unsigned extrinsic, after `VERSION_MASK` is applied.
 const VERSION_UNSIGNED: u8 = 0;
 
-/// [`TypeParameter`](scale_info::TypeParameter) name for `address`.
-const ADDRESS_INDICATOR: &str = "Address";
-
-/// [`TypeParameter`](scale_info::TypeParameter) name for `signature`.
-const SIGNATURE_INDICATOR: &str = "Signature";
-
-/// [`TypeParameter`](scale_info::TypeParameter) name for `extra`.
-const EXTRA_INDICATOR: &str = "Extra";
-
 /// Decode an unchecked extrinsic.
 pub fn decode_as_unchecked_extrinsic<B, E, M>(
     input: &B,
     ext_memory: &mut E,
-    meta_v14: &M,
+    metadata: &M,
 ) -> Result<UncheckedExtrinsic, UncheckedExtrinsicError<E, M>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let extrinsic = meta_v14
-        .extrinsic()
+    let extrinsic_type_params = metadata
+        .extrinsic_type_params()
         .map_err(UncheckedExtrinsicError::MetaStructure)?;
-    let extrinsic_ty = extrinsic.ty;
-    let meta_v14_types = meta_v14.types();
-
-    let extrinsic_type_params =
-        extrinsic_type_params::<E, M>(ext_memory, &meta_v14_types, &extrinsic_ty)?;
+    let registry = metadata.types();
 
     // This could have been just a single decode line.
     // Written this way to: (1) trace position from the start, (2) have descriptive errors
@@ -128,7 +114,9 @@ where
         .map_err(|e| UncheckedExtrinsicError::Parsing(ParserError::Buffer(e)))?;
     position += VERSION_LENGTH;
 
-    let version = extrinsic.version;
+    let version = metadata
+        .extrinsic_version()
+        .map_err(UncheckedExtrinsicError::MetaStructure)?;
 
     // First bit of `version_byte` is `0` if the transaction is unsigned and `1` if the transaction is signed.
     // Other 7 bits must match the `version` from the metadata.
@@ -138,83 +126,50 @@ where
             version,
         })
     } else if version_byte & !VERSION_MASK == VERSION_UNSIGNED {
-        let mut found_call = None;
-
-        // Need the call parameter from unchecked extrinsic parameters.
-        for param in extrinsic_type_params.iter() {
-            if param.name == CALL_INDICATOR {
-                found_call = param.ty
-            }
-        }
-
-        let call_ty = found_call.ok_or(UncheckedExtrinsicError::Parsing(
-            ParserError::ExtrinsicNoCallParam,
-        ))?;
         let call_extended_data = decode_as_type_at_position::<B, E, M>(
-            &call_ty,
+            &extrinsic_type_params.call_ty,
             input,
             ext_memory,
-            &meta_v14_types,
+            &registry,
             &mut position,
         )?;
         if let ParsedData::Call(call) = call_extended_data.data {
             Ok(UncheckedExtrinsic::Unsigned { call })
         } else {
             Err(UncheckedExtrinsicError::UnexpectedCallTy {
-                call_ty_id: call_ty.id,
+                call_ty_id: extrinsic_type_params.call_ty.id,
             })
         }
     } else {
-        let mut found_address = None;
-        let mut found_signature = None;
-        let mut found_extra = None;
-        let mut found_call = None;
-
-        // Unchecked extrinsic parameters typically contain address, signature,
-        // and extensions. Expect to find all entries.
-        for param in extrinsic_type_params.iter() {
-            match param.name.as_str() {
-                ADDRESS_INDICATOR => found_address = param.ty,
-                SIGNATURE_INDICATOR => found_signature = param.ty,
-                EXTRA_INDICATOR => found_extra = param.ty,
-                CALL_INDICATOR => found_call = param.ty,
-                _ => (),
-            }
-        }
-
-        let address_ty = found_address.ok_or(UncheckedExtrinsicError::NoAddressParam)?;
         let address = decode_as_type_at_position::<B, E, M>(
-            &address_ty,
+            &extrinsic_type_params.address_ty,
             input,
             ext_memory,
-            &meta_v14_types,
+            &registry,
             &mut position,
         )?;
 
-        let signature_ty = found_signature.ok_or(UncheckedExtrinsicError::NoSignatureParam)?;
         let signature = decode_as_type_at_position::<B, E, M>(
-            &signature_ty,
+            &extrinsic_type_params.signature_ty,
             input,
             ext_memory,
-            &meta_v14_types,
+            &registry,
             &mut position,
         )?;
 
-        let extra_ty = found_extra.ok_or(UncheckedExtrinsicError::NoExtraParam)?;
         let extra = decode_as_type_at_position::<B, E, M>(
-            &extra_ty,
+            &extrinsic_type_params.extra_ty,
             input,
             ext_memory,
-            &meta_v14_types,
+            &registry,
             &mut position,
         )?;
 
-        let call_ty = found_call.ok_or(UncheckedExtrinsicError::NoCallParam)?;
         let call_extended_data = decode_as_type_at_position::<B, E, M>(
-            &call_ty,
+            &extrinsic_type_params.call_ty,
             input,
             ext_memory,
-            &meta_v14_types,
+            &registry,
             &mut position,
         )?;
         if let ParsedData::Call(call) = call_extended_data.data {
@@ -226,7 +181,7 @@ where
             })
         } else {
             Err(UncheckedExtrinsicError::UnexpectedCallTy {
-                call_ty_id: call_ty.id,
+                call_ty_id: extrinsic_type_params.call_ty.id,
             })
         }
     }

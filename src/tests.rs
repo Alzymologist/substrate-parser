@@ -4,7 +4,10 @@ use crate::std::{
     vec::Vec,
 };
 use external_memory_tools::BufferError;
-use frame_metadata::v14::{RuntimeMetadataV14, StorageEntryMetadata};
+use frame_metadata::{
+    v14::{RuntimeMetadataV14, StorageEntryMetadata},
+    v15::RuntimeMetadataV15,
+};
 use parity_scale_codec::Decode;
 use primitive_types::H256;
 use scale_info::{
@@ -18,7 +21,7 @@ use sp_runtime::generic::Era;
 use crate::cards::{
     ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
 };
-use crate::error::{ParserError, SignableError};
+use crate::error::{ParserError, RegistryError, SignableError};
 use crate::special_indicators::SpecialtyUnsignedInteger;
 use crate::storage_data::{decode_as_storage_entry, KeyData, KeyPart};
 use crate::traits::AsMetadata;
@@ -26,10 +29,16 @@ use crate::traits::AsMetadata;
 use crate::unchecked_extrinsic::{decode_as_unchecked_extrinsic, UncheckedExtrinsic};
 use crate::{decode_all_as_type, parse_transaction, parse_transaction_unmarked, ShortSpecs};
 
-fn metadata(filename: &str) -> RuntimeMetadataV14 {
+fn metadata_v14(filename: &str) -> RuntimeMetadataV14 {
     let metadata_hex = std::fs::read_to_string(filename).unwrap();
-    let metadata_vec = hex::decode(metadata_hex.trim()).unwrap()[5..].to_vec();
-    RuntimeMetadataV14::decode(&mut &metadata_vec[..]).unwrap()
+    let metadata_vec = hex::decode(metadata_hex.trim()).unwrap();
+    RuntimeMetadataV14::decode(&mut &metadata_vec[5..]).unwrap()
+}
+
+fn metadata_v15(filename: &str) -> RuntimeMetadataV15 {
+    let metadata_hex = std::fs::read_to_string(filename).unwrap();
+    let metadata_vec = hex::decode(metadata_hex.trim()).unwrap();
+    RuntimeMetadataV15::decode(&mut &metadata_vec[5..]).unwrap()
 }
 
 fn genesis_hash_acala() -> H256 {
@@ -157,7 +166,7 @@ fn assets_metadata_storage_entry(
 
 #[test]
 fn tr_1() {
-    let metadata_westend = metadata("for_tests/westend9111");
+    let metadata_westend = metadata_v14("for_tests/westend9111");
 
     let data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
 
@@ -240,7 +249,7 @@ Block Hash: 5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff
 
 #[test]
 fn tr_2() {
-    let metadata_westend = metadata("for_tests/westend9111");
+    let metadata_westend = metadata_v14("for_tests/westend9111");
 
     let data = hex::decode("4d0210020806000046ebddef8cd9bb167dc30878d7113b7e168e6f0646beffd77d69d39bad76b47a07001b2c3ef70006050c0008264834504a64ace1373f0c8ed5d57381ddf54a2f67a318fa42b1352681606d00aebb0211dbb07b4d335a657257b8ac5e53794c901e4f616d4a254f2490c43934009ae581fef1fc06828723715731adcf810e42ce4dadad629b1b7fa5c3c144a81d550008009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e5b1d91c89d3de85a4d6eee76ecf3a303cf38b59e7d81522eb7cd24b02eb161ff").unwrap();
 
@@ -354,7 +363,7 @@ which is capped at CompactAssignments::LIMIT (MAX_NOMINATIONS).
 
 #[test]
 fn tr_3() {
-    let metadata_westend = metadata("for_tests/westend9111");
+    let metadata_westend = metadata_v14("for_tests/westend9111");
 
     let data = hex::decode("9c0403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480284d717d5031504025a62029723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84").unwrap();
 
@@ -417,7 +426,7 @@ Block Hash: 98a8ee9e389043cd8a9954b254d822d34138b9ae97d3b7f50dc6781b13df8d84
 
 #[test]
 fn tr_4() {
-    let metadata_westend = metadata("for_tests/westend9111");
+    let metadata_westend = metadata_v14("for_tests/westend9111");
 
     let data = hex::decode("2509000115094c6f72656d20697073756d20646f6c6f722073697420616d65742c20636f6e73656374657475722061646970697363696e6720656c69742c2073656420646f20656975736d6f642074656d706f7220696e6369646964756e74207574206c61626f726520657420646f6c6f7265206d61676e6120616c697175612e20436f6e67756520657520636f6e7365717561742061632066656c697320646f6e65632e20547572706973206567657374617320696e7465676572206567657420616c6971756574206e696268207072616573656e742e204e6571756520636f6e76616c6c6973206120637261732073656d70657220617563746f72206e657175652e204e65747573206574206d616c6573756164612066616d6573206163207475727069732065676573746173207365642074656d7075732e2050656c6c656e746573717565206861626974616e74206d6f726269207472697374697175652073656e6563747573206574206e657475732065742e205072657469756d2076756c7075746174652073617069656e206e656320736167697474697320616c697175616d2e20436f6e76616c6c69732061656e65616e20657420746f72746f7220617420726973757320766976657272612e20566976616d757320617263752066656c697320626962656e64756d207574207472697374697175652065742065676573746173207175697320697073756d2e204d616c6573756164612070726f696e206c696265726f206e756e6320636f6e73657175617420696e74657264756d207661726975732e2045022c009723000007000000e143f23803ac50e8f6f8e62695d1ce9e4e1d68aa36c1cd2cfd15340213f3423e1b2b0a177ad4f3f93f9a56dae700e938a40201a5beabbda160a74c70e612c66a").unwrap();
 
@@ -476,7 +485,7 @@ Block Hash: 1b2b0a177ad4f3f93f9a56dae700e938a40201a5beabbda160a74c70e612c66a
 
 #[test]
 fn tr_5() {
-    let metadata_acala = metadata("for_tests/acala2012");
+    let metadata_acala = metadata_v14("for_tests/acala2012");
 
     let data = hex::decode("a80a0000dc621b10081b4b51335553ef8df227feb0327649d00beab6e09c10a1dce973590b00407a10f35a24010000dc07000001000000fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c5cfeb3e46c080274613bdb80809a3e84fe782ac31ea91e2c778de996f738e620").unwrap();
     let reply = parse_transaction(
@@ -542,7 +551,7 @@ fn storage_1_good() {
     let data = hex::decode("04066175726120c1f2410800000000").unwrap();
 
     // Correct westmint metadata.
-    let metadata = metadata("for_tests/westmint9270");
+    let metadata = metadata_v14("for_tests/westmint9270");
 
     // Type associated with `Digest` storage entry in `System` pallet.
     let system_digest_ty = system_digest_ty(&metadata);
@@ -635,7 +644,7 @@ fn storage_2_spoiled_digest() {
     let data = hex::decode("04066175726120c1f2410800000000").unwrap();
 
     // Manually spoiled westmint metadata.
-    let metadata = metadata("for_tests/westmint9270_spoiled_digest");
+    let metadata = metadata_v14("for_tests/westmint9270_spoiled_digest");
 
     // Type associated with `Digest` storage entry in `System` pallet.
     let system_digest_ty = system_digest_ty(&metadata);
@@ -665,7 +674,7 @@ fn storage_2_spoiled_digest() {
         &metadata.types,
     )
     .unwrap_err();
-    let reply_known = ParserError::CyclicMetadata { id: 11 };
+    let reply_known = ParserError::Registry(RegistryError::CyclicMetadata { id: 11 });
     assert_eq!(reply_known, reply);
 }
 
@@ -681,7 +690,7 @@ fn storage_3_assets_with_key() {
     .unwrap();
 
     // Westmint metadata.
-    let metadata = metadata("for_tests/westmint9270");
+    let metadata = metadata_v14("for_tests/westmint9270");
 
     // `StorageEntryMetadata` for `Assets` pallet, `Metadata` entry.
     let storage_entry_metadata = assets_metadata_storage_entry(&metadata);
@@ -826,7 +835,7 @@ fn parser_error_1() {
     let error = parse_transaction(
         &data.as_ref(),
         &mut (),
-        &metadata("for_tests/westend9111"),
+        &metadata_v14("for_tests/westend9111"),
         Some(genesis_hash_westend()),
     )
     .unwrap_err();
@@ -843,7 +852,7 @@ fn parser_error_2() {
     let parsed = parse_transaction(
         &data.as_ref(),
         &mut (),
-        &metadata("for_tests/westend9111"),
+        &metadata_v14("for_tests/westend9111"),
         Some(genesis_hash_westend()),
     )
     .unwrap();
@@ -858,7 +867,7 @@ fn parser_error3() {
     let signable_error = parse_transaction(
         &data.as_ref(),
         &mut (),
-        &metadata("for_tests/westend9111"),
+        &metadata_v14("for_tests/westend9111"),
         Some(genesis_hash_westend()),
     )
     .unwrap_err();
@@ -872,7 +881,7 @@ fn parser_error_4() {
     let parsed = parse_transaction(
         &data.as_ref(),
         &mut (),
-        &metadata("for_tests/westend9111"),
+        &metadata_v14("for_tests/westend9111"),
         Some(genesis_hash_westend()),
     )
     .unwrap();
@@ -887,7 +896,7 @@ fn parser_error_5() {
     let parsed = parse_transaction(
         &data.as_ref(),
         &mut (),
-        &metadata("for_tests/westend9111"),
+        &metadata_v14("for_tests/westend9111"),
         Some(genesis_hash_westend()),
     )
     .unwrap();
@@ -903,7 +912,7 @@ fn parser_error_6() {
     let parsed = parse_transaction(
         &data.as_ref(),
         &mut (),
-        &metadata("for_tests/westend9111"),
+        &metadata_v14("for_tests/westend9111"),
         Some(genesis_hash_westend()),
     )
     .unwrap();
@@ -927,7 +936,7 @@ fn parser_error_6() {
 #[test]
 fn unchecked_extrinsic_1() {
     let data = hex::decode("39028400d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d0158e09098782f2e40602b37d94fe3e2d051c2e4927c34bc85525297310642db08280110b4a02b89676e966d07fdf7f362cdeb858d28d681564bd0f7d33dce5c8cc50204000403008eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a480284d717").unwrap();
-    let metadata = metadata("for_tests/westend9111");
+    let metadata = metadata_v14("for_tests/westend9111");
     let parsed = decode_as_unchecked_extrinsic(&data.as_ref(), &mut (), &metadata).unwrap();
     match parsed {
         UncheckedExtrinsic::Signed {
@@ -1228,7 +1237,7 @@ fn unchecked_extrinsic_1() {
 fn tr_7() {
     let data = hex::decode("a00a0304a84b841c4d9d1a179be03bb31131c14ebf6ce22233158139ae28a3dfaac5fe1560a5e9e05cd5038d248ed73e0d9808000003000000fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64cfc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c").unwrap();
 
-    let metadata_acala = metadata("for_tests/acala2200");
+    let metadata_acala = metadata_v14("for_tests/acala2200");
 
     let reply = parse_transaction(
         &data.as_ref(),
@@ -1293,7 +1302,7 @@ Block Hash: fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c
 fn tr_8() {
     let data = hex::decode("641a04100000083434000008383800000c31333200000c313736d503040b63ce64c10c05d62400001800000091b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c391b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3").unwrap();
 
-    let metadata_polkadot = metadata("for_tests/polkadot9430");
+    let metadata_polkadot = metadata_v14("for_tests/polkadot9430");
 
     let reply = parse_transaction(
         &data.as_ref(),
@@ -1368,7 +1377,7 @@ Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 fn tr_9() {
     let data = hex::decode("6301039508080401380074063d03aeada02cc26977d0ab68927e12516a3287a3c72cc937981d1e7c9ade0cf91f0300eda947e425ea94b7642cc2d3939d30207e457a92049804580804044e7eca0311ba0594016808003d3d080701ada1020180d1043985798860eb63723790bda41de487e0730251717471e9660ab0aa5a6a65dde70807042c021673020808049d604a87138c0704aa060102ab90ebe5eeaf95088767ace3e78d04147180b016cf193a542fe5c9a4291e70784f6d64fb705349e4a361c453b28d18ba43b8e0bee72dad92845acbe281f21ea6c270f553481dc183b60ca8c1803544f33691adef9c5d4f807827e288143f4af2aa1c2c0b9e6087db1decedb85e2774f792c9bbc61ed85f031d11d175f93ecf7d030800a90307010107d5ebd78dfce4bdb789c0e310e2172b3f3a13ec09e39ba8b644e368816bd7acd57f10030025867d9fc900c0f7afe1ce1fc756f152b3f38e5a010001dec102c8abb0449d91dd617be6a7dc4d7ea0ae7f7cebaf1c9e4c9f0a64716c3d007800000000d50391010b63ce64c10c05d62400001800000091b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c391b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3").unwrap();
 
-    let metadata_polkadot = metadata("for_tests/polkadot9430");
+    let metadata_polkadot = metadata_v14("for_tests/polkadot9430");
 
     let reply = parse_transaction_unmarked(
         &data.as_ref(),
@@ -1611,7 +1620,7 @@ Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 fn tr_10() {
     let data = hex::decode("1f00001b7a61c73f450f4518731981d9cdd99013cfe044294617b74f93ba4bba6090d00b63ce64c10c05d5030403d202964942000000020000009eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c69eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c6").unwrap();
 
-    let metadata_astar = metadata("for_tests/astar66");
+    let metadata_astar = metadata_v14("for_tests/astar66");
 
     let reply = parse_transaction_unmarked(
         &data.as_ref(),
@@ -1671,7 +1680,7 @@ Block Hash: 9eb76c5184c4ab8679d2d5d819fdf90b9c001403e9e17da2e14b6d8aec4029c6
 
 #[test]
 fn tr_11() {
-    let metadata_polkadot = metadata("for_tests/polkadot9430");
+    let metadata_polkadot = metadata_v14("for_tests/polkadot9430");
 
     let data = hex::decode("15000600a9569408db2bf9dd45318e13074b02ffce42dcf91b89cbef0fbe92191eb9627f019b02f1160003792192b533ff24d1ac92297d3905d02aac6dc63c10d62400001800000091b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c391b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3").unwrap();
 
@@ -1740,7 +1749,7 @@ Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 
 #[test]
 fn tr_12() {
-    let metadata_bifrost = metadata("for_tests/bifrost982");
+    let metadata_bifrost = metadata_v14("for_tests/bifrost982");
 
     let data = hex::decode("78000006000001010000004a6e76f5062e334f7322752db2dae9d19edfe764172aaed603000001000000262e1b2ad728475fd6fe88e62d34c200abe6fd693931ddad144059b1eb884e5bc16d68cf9978c938e405eec35d283be02e720072e8a0f66b11c722bb85d86f01").unwrap();
 
@@ -1814,6 +1823,81 @@ Chain: bifrost_polkadot982
 Tx Version: 1
 Genesis Hash: 262e1b2ad728475fd6fe88e62d34c200abe6fd693931ddad144059b1eb884e5b
 Block Hash: c16d68cf9978c938e405eec35d283be02e720072e8a0f66b11c722bb85d86f01
+";
+    assert_eq!(extensions_known, extensions_printed);
+}
+
+#[test]
+fn tr_13() {
+    let data = hex::decode("641a04100000083434000008383800000c31333200000c313736d503040b63ce64c10c0541420f001800000091b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c391b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3").unwrap();
+
+    let metadata_polkadot = metadata_v15("for_tests/polkadot1000001_v15");
+
+    let reply = parse_transaction(
+        &data.as_ref(),
+        &mut (),
+        &metadata_polkadot,
+        Some(genesis_hash_polkadot()),
+    )
+    .unwrap()
+    .card(
+        &specs_polkadot(),
+        &<RuntimeMetadataV15 as AsMetadata<()>>::spec_name_version(&metadata_polkadot)
+            .unwrap()
+            .spec_name,
+    );
+
+    let call_printed = format!(
+        "\n{}\n",
+        reply
+            .call_result
+            .unwrap()
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let call_known = "
+Pallet: Utility
+  Call: force_batch
+    Field Name: calls
+      Sequence: 4 element(s)
+        Pallet: System
+          Call: remark
+            Field Name: remark
+              Text: 44
+        Pallet: System
+          Call: remark
+            Field Name: remark
+              Text: 88
+        Pallet: System
+          Call: remark
+            Field Name: remark
+              Text: 132
+        Pallet: System
+          Call: remark
+            Field Name: remark
+              Text: 176
+";
+    assert_eq!(call_known, call_printed);
+
+    let extensions_printed = format!(
+        "\n{}\n",
+        reply
+            .extensions
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let extensions_known = "
+Era: Mortal, phase: 61, period: 64
+Nonce: 1
+Tip: 555.2342355555 DOT
+Chain: polkadot1000001
+Tx Version: 24
+Genesis Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
+Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 ";
     assert_eq!(extensions_known, extensions_printed);
 }
