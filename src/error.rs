@@ -116,38 +116,58 @@ impl<E: ExternalMemory> StorageError<E> {
 #[derive(Debug, Eq, PartialEq)]
 pub enum ParserError<E: ExternalMemory> {
     Buffer(BufferError<E>),
-    CyclicMetadata { id: u32 },
-    ExtrinsicNoCallParam,
+    Registry(RegistryError),
     NoCompact { position: usize },
-    NotBitOrderType { id: u32 },
-    NotBitStoreType { id: u32 },
     SomeDataNotUsedBlob { from: usize },
     TypeFailure { position: usize, ty: &'static str },
-    UnexpectedCompactInsides { id: u32 },
     UnexpectedEnumVariant { position: usize },
-    UnexpectedExtrinsicType { extrinsic_ty_id: u32 },
-    V14ShortTypesIncomplete { old_id: u32 },
-    V14TypeNotResolved { id: u32 },
-    V14TypeNotResolvedShortened { id: u32 },
 }
 
 impl<E: ExternalMemory> ParserError<E> {
     fn error_text(&self) -> String {
         match &self {
             ParserError::Buffer(buffer_error) => format!("{buffer_error}"),
-            ParserError::CyclicMetadata { id } => format!("Resolving type id {id} in metadata type registry results in cycling."),
-            ParserError::ExtrinsicNoCallParam => String::from("Extrinsic type in provided metadata has no specified call parameter."),
-            ParserError::NoCompact { position } => format!("Expected compact starting at position {position}, not found one."),
-            ParserError::NotBitOrderType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitOrder type."),
-            ParserError::NotBitStoreType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitStore type."),
-            ParserError::SomeDataNotUsedBlob { from } => format!("Some data (input positions [{from}..]) remained unused after decoding."),
-            ParserError::TypeFailure { position, ty } => format!("Unable to decode data starting at position {position} as {ty}."),
-            ParserError::UnexpectedCompactInsides { id } => format!("Compact type {id} in metadata type registry has unexpected type inside compact."),
-            ParserError::UnexpectedEnumVariant { position } => format!("Encountered unexpected enum variant at position {position}."),
-            ParserError::UnexpectedExtrinsicType { extrinsic_ty_id } => format!("Decoding is based on assumption that extrinsic type resolves into a SCALE-encoded opaque `Vec<u8>`. Unexpected type description is found for type {extrinsic_ty_id} in metadata type registry."),
-            ParserError::V14ShortTypesIncomplete { old_id } => format!("Unable to resolve type with old id {old_id} in shortened metadata type registry."),
-            ParserError::V14TypeNotResolved { id } => format!("Unable to resolve type id {id} in metadata type registry."),
-            ParserError::V14TypeNotResolvedShortened { id } => format!("Unable to resolve type with updated id {id} in shortened metadata type registry."),
+            ParserError::Registry(registry_error) => {
+                format!("{registry_error}")
+            }
+            ParserError::NoCompact { position } => {
+                format!("Expected compact starting at position {position}, not found one.")
+            }
+            ParserError::SomeDataNotUsedBlob { from } => {
+                format!("Some data (input positions [{from}..]) remained unused after decoding.")
+            }
+            ParserError::TypeFailure { position, ty } => {
+                format!("Unable to decode data starting at position {position} as {ty}.")
+            }
+            ParserError::UnexpectedEnumVariant { position } => {
+                format!("Encountered unexpected enum variant at position {position}.")
+            }
+        }
+    }
+}
+
+/// Errors in metadata types registry.
+#[derive(Debug, Eq, PartialEq)]
+pub enum RegistryError {
+    CyclicMetadata { id: u32 },
+    ExtrinsicNoCallParam,
+    NotBitOrderType { id: u32 },
+    NotBitStoreType { id: u32 },
+    TypeNotResolved { id: u32 },
+    UnexpectedCompactInsides { id: u32 },
+    UnexpectedExtrinsicType { extrinsic_ty_id: u32 },
+}
+
+impl RegistryError {
+    fn error_text(&self) -> String {
+        match &self {
+            RegistryError::CyclicMetadata { id } => format!("Resolving type id {id} in metadata type registry results in cycling."),
+            RegistryError::ExtrinsicNoCallParam => String::from("Extrinsic type in provided metadata has no specified call parameter."),
+            RegistryError::NotBitOrderType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitOrder type."),
+            RegistryError::NotBitStoreType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitStore type."),
+            RegistryError::TypeNotResolved { id } => format!("Unable to resolve type id {id} in metadata type registry."),
+            RegistryError::UnexpectedCompactInsides { id } => format!("Compact type {id} in metadata type registry has unexpected type inside compact."),
+            RegistryError::UnexpectedExtrinsicType { extrinsic_ty_id } => format!("Decoding is based on assumption that extrinsic type resolves into a SCALE-encoded opaque `Vec<u8>`. Unexpected type description is found for type {extrinsic_ty_id} in metadata type registry."),
         }
     }
 }
@@ -188,6 +208,44 @@ impl ExtensionsError {
             ExtensionsError::NoSpecVersion => String::from("Signable transaction extensions do not include metadata spec version. Unable to verify that correct metadata version is used for parsing."),
             ExtensionsError::SpecVersionTwice => String::from("Signable transaction extensions contain more than one metadata spec version. Unable to verify that correct metadata version is used for parsing."),
         }
+    }
+}
+
+/// Errors in expected structure of V14 metadata.
+#[derive(Debug, Eq, PartialEq)]
+pub enum MetaStructureErrorV14 {
+    ExtrinsicTypeNotResolved(RegistryError),
+    NoAddressParam,
+    NoCallParam,
+    NoExtraParam,
+    NoSignatureParam,
+    UnexpectedExtrinsicType { extrinsic_ty_id: u32 },
+    Version(MetaVersionErrorPallets),
+}
+
+impl MetaStructureErrorV14 {
+    fn error_text(&self) -> String {
+        match &self {
+            MetaStructureErrorV14::ExtrinsicTypeNotResolved(registry_error_extrinsic) => format!("Unable to resolve in registry the chain extrinsic type. {registry_error_extrinsic}"),
+            MetaStructureErrorV14::NoAddressParam => String::from("Unchecked extrinsic type in provided metadata has no specified address parameter."),
+            MetaStructureErrorV14::NoCallParam => String::from("Unchecked extrinsic type in provided metadata has no specified call parameter."),
+            MetaStructureErrorV14::NoExtraParam => String::from("Unchecked extrinsic type in provided metadata has no specified extra parameter."),
+            MetaStructureErrorV14::NoSignatureParam => String::from("Unchecked extrinsic type in provided metadata has no specified signature parameter."),
+            MetaStructureErrorV14::UnexpectedExtrinsicType { extrinsic_ty_id } => format!("Decoding is based on assumption that extrinsic type resolves into a SCALE-encoded opaque `Vec<u8>`. Unexpected type description is found for type {extrinsic_ty_id} in metadata type registry."),
+            MetaStructureErrorV14::Version(meta_version_error_pallets) => format!("{meta_version_error_pallets}"),
+        }
+    }
+}
+
+impl From<MetaVersionErrorPallets> for MetaStructureErrorV14 {
+    fn from(meta_version_error_pallets: MetaVersionErrorPallets) -> Self {
+        MetaStructureErrorV14::Version(meta_version_error_pallets)
+    }
+}
+
+impl From<RegistryError> for MetaStructureErrorV14 {
+    fn from(registry_error_extrinsic: RegistryError) -> Self {
+        MetaStructureErrorV14::ExtrinsicTypeNotResolved(registry_error_extrinsic)
     }
 }
 
@@ -240,10 +298,6 @@ impl MetaVersionErrorPallets {
 pub enum UncheckedExtrinsicError<E: ExternalMemory, M: AsMetadata<E>> {
     FormatNoCompact,
     MetaStructure(M::MetaStructureError),
-    NoAddressParam,
-    NoCallParam,
-    NoExtraParam,
-    NoSignatureParam,
     Parsing(ParserError<E>),
     VersionMismatch { version_byte: u8, version: u8 },
     UnexpectedCallTy { call_ty_id: u32 },
@@ -258,10 +312,6 @@ where
         match &self {
             UncheckedExtrinsicError::FormatNoCompact => String::from("Unchecked extrinsic was expected to be a SCALE-encoded opaque `Vec<u8>`. Have not found a compact indicating vector length."),
             UncheckedExtrinsicError::MetaStructure(meta_structure_error) => format!("Unexpected structure of the metadata. {meta_structure_error}"),
-            UncheckedExtrinsicError::NoAddressParam => String::from("Unchecked extrinsic type in provided metadata has no specified address parameter."),
-            UncheckedExtrinsicError::NoCallParam => String::from("Unchecked extrinsic type in provided metadata has no specified call parameter."),
-            UncheckedExtrinsicError::NoExtraParam => String::from("Unchecked extrinsic type in provided metadata has no specified extra parameter."),
-            UncheckedExtrinsicError::NoSignatureParam => String::from("Unchecked extrinsic type in provided metadata has no specified signature parameter."),
             UncheckedExtrinsicError::Parsing(parser_error) => format!("Error parsing unchecked extrinsic data. {parser_error}"),
             UncheckedExtrinsicError::VersionMismatch { version_byte, version } => format!("Version byte in unchecked extrinsic {version_byte} does not match with version {version} from provided metadata. Last 7 bits were expected to be identical."),
             UncheckedExtrinsicError::UnexpectedCallTy { call_ty_id } => format!("Parameter type for call {call_ty_id} in metadata type registry is not a call type, and does not match known call type descriptors."),
@@ -290,7 +340,12 @@ macro_rules! impl_display_and_error {
     }
 }
 
-impl_display_and_error!(ExtensionsError, MetaVersionErrorPallets);
+impl_display_and_error!(
+    ExtensionsError,
+    MetaStructureErrorV14,
+    MetaVersionErrorPallets,
+    RegistryError
+);
 
 /// Implement [`Display`] for errors in both `std` and `no_std` cases.
 /// Implement `Error` for `std` case.
@@ -318,6 +373,12 @@ impl_display_and_error_gen!(ParserError<E>, StorageError<E>);
 impl<E: ExternalMemory> From<BufferError<E>> for ParserError<E> {
     fn from(buffer_error: BufferError<E>) -> Self {
         ParserError::Buffer(buffer_error)
+    }
+}
+
+impl<E: ExternalMemory> From<RegistryError> for ParserError<E> {
+    fn from(registry_error: RegistryError) -> Self {
+        ParserError::Registry(registry_error)
     }
 }
 

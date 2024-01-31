@@ -3,7 +3,7 @@
 //! Exactly follow current substrate code from `no_std` incompatible crates. Last confirmed on v7.0.0
 #[cfg(feature = "embed-display")]
 use base58::ToBase58;
-use parity_scale_codec::{Decode, Error, Input};
+use parity_scale_codec::{Decode, Encode, Error, Input, Output};
 
 pub use crate::special_types::{SIGNATURE_LEN_ECDSA, SIGNATURE_LEN_ED25519, SIGNATURE_LEN_SR25519};
 
@@ -38,6 +38,21 @@ impl Decode for Era {
                 Ok(Self::Mortal(period, phase))
             } else {
                 Err("Invalid period and phase".into())
+            }
+        }
+    }
+}
+
+/// [`Encode`] implementation, same as in `sp_runtime::generic::Era`.
+impl Encode for Era {
+    fn encode_to<T: Output + ?Sized>(&self, output: &mut T) {
+        match self {
+            Self::Immortal => output.push_byte(0),
+            Self::Mortal(period, phase) => {
+                let quantize_factor = (*period as u64 >> 12).max(1);
+                let encoded = (period.trailing_zeros() - 1).clamp(1, 15) as u16
+                    | ((phase / quantize_factor) << 4) as u16;
+                encoded.encode_to(output);
             }
         }
     }

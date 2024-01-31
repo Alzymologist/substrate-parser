@@ -32,7 +32,7 @@ use sp_core::{
 
 use crate::cards::{ParsedData, Sequence, SequenceData};
 use crate::compacts::get_compact;
-use crate::error::ParserError;
+use crate::error::{ParserError, RegistryError};
 use crate::printing_balance::AsBalance;
 use crate::propagated::SpecialtySet;
 use crate::special_indicators::{SpecialtyH256, SpecialtyUnsignedInteger};
@@ -344,7 +344,7 @@ macro_rules! impl_block_compact {
                     E: ExternalMemory
                 {
                     let value = {
-                        if let Some(id) = compact_at {return Err(ParserError::UnexpectedCompactInsides{id})}
+                        if let Some(id) = compact_at {return Err(ParserError::Registry(RegistryError::UnexpectedCompactInsides{id}))}
                         else {<Self>::cut_and_decode::<B, E>(data, ext_memory, position)?}
                     };
                     Ok(ParsedData::$enum_variant(value))

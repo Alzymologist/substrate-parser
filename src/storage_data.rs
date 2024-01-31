@@ -356,7 +356,7 @@ where
         } else {
             let key_ty_resolved = registry
                 .resolve_ty(key_ty.id, ext_memory)
-                .map_err(StorageError::ParsingKey)?;
+                .map_err(|e| StorageError::ParsingKey(ParserError::Registry(e)))?;
             let info = Info::from_ty(&key_ty_resolved);
             match key_ty_resolved.type_def {
                 TypeDef::Tuple(t) => {

@@ -10,7 +10,7 @@ use parity_scale_codec::DecodeAll;
 use primitive_types::{H160, H512};
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, Field, Type, TypeDef, TypeDefBitSequence,
-    TypeDefPrimitive, TypeParameter, Variant,
+    TypeDefPrimitive, Variant,
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 
@@ -39,7 +39,7 @@ use crate::cards::{
     SequenceData, SequenceRawData, VariantData,
 };
 use crate::compacts::{find_compact, get_compact};
-use crate::error::{ParserError, SignableError};
+use crate::error::{ParserError, RegistryError, SignableError};
 use crate::propagated::{Checker, Propagated, SpecialtySet};
 use crate::special_indicators::{
     Hint, PalletSpecificItem, SpecialtyTypeChecked, SpecialtyTypeHinted, ENUM_INDEX_ENCODED_LEN,
@@ -169,7 +169,7 @@ where
 pub fn decode_as_call<B, E, M>(
     marked_data: &MarkedData<B, E, M>,
     ext_memory: &mut E,
-    meta_v14: &M,
+    metadata: &M,
 ) -> Result<Call, SignableError<E, M>>
 where
     B: AddressableBuffer<E>,
@@ -179,7 +179,7 @@ where
     let data = marked_data.data_no_extensions();
     let mut position = marked_data.call_start();
 
-    let call = decode_as_call_unmarked(&data, &mut position, ext_memory, meta_v14)?;
+    let call = decode_as_call_unmarked(&data, &mut position, ext_memory, metadata)?;
     if position != marked_data.extensions_start() {
         Err(SignableError::SomeDataNotUsedCall {
             from: position,
@@ -200,106 +200,31 @@ pub fn decode_as_call_unmarked<B, E, M>(
     data: &B,
     position: &mut usize,
     ext_memory: &mut E,
-    meta_v14: &M,
+    metadata: &M,
 ) -> Result<Call, SignableError<E, M>>
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let extrinsic = meta_v14.extrinsic().map_err(SignableError::MetaStructure)?;
-    let extrinsic_ty = extrinsic.ty;
-    let types = meta_v14.types();
-
-    let extrinsic_type_params = extrinsic_type_params::<E, M>(ext_memory, &types, &extrinsic_ty)?;
-
-    let mut found_all_calls_ty = None;
-
-    for param in extrinsic_type_params.iter() {
-        if param.name == CALL_INDICATOR {
-            found_all_calls_ty = param.ty
-        }
-    }
-
-    let all_calls_ty =
-        found_all_calls_ty.ok_or(SignableError::Parsing(ParserError::ExtrinsicNoCallParam))?;
+    let extrinsic_type_params = metadata
+        .extrinsic_type_params()
+        .map_err(SignableError::MetaStructure)?;
 
     let call_extended_data = decode_with_type::<B, E, M>(
-        &Ty::Symbol(&all_calls_ty),
+        &Ty::Symbol(&extrinsic_type_params.call_ty),
         data,
         ext_memory,
         position,
-        &types,
+        &metadata.types(),
         Propagated::new(),
     )?;
     if let ParsedData::Call(call) = call_extended_data.data {
         Ok(call)
     } else {
-        Err(SignableError::NotACall(all_calls_ty.id))
+        Err(SignableError::NotACall(extrinsic_type_params.call_ty.id))
     }
 }
-
-/// Check that extrinsic type resolves into a SCALE-encoded opaque `Vec<u8>`,
-/// get associated `TypeParameter`s set.
-pub fn extrinsic_type_params<E, M>(
-    ext_memory: &mut E,
-    meta_v14_types: &M::TypeRegistry,
-    extrinsic_ty: &UntrackedSymbol<TypeId>,
-) -> Result<Vec<TypeParameter<PortableForm>>, ParserError<E>>
-where
-    E: ExternalMemory,
-    M: AsMetadata<E>,
-{
-    let husked_extrinsic_ty =
-        husk_type::<E, M>(extrinsic_ty, meta_v14_types, ext_memory, Checker::new())?;
-
-    // check here that the underlying type is really `Vec<u8>`
-    match husked_extrinsic_ty.ty.type_def {
-        TypeDef::Sequence(s) => {
-            let element_ty_id = s.type_param.id;
-            let element_ty = meta_v14_types.resolve_ty(element_ty_id, ext_memory)?;
-            if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
-                Ok(husked_extrinsic_ty.ty.type_params)
-            } else {
-                Err(ParserError::UnexpectedExtrinsicType {
-                    extrinsic_ty_id: husked_extrinsic_ty.id,
-                })
-            }
-        }
-        TypeDef::Composite(c) => {
-            if c.fields.len() != 1 {
-                Err(ParserError::UnexpectedExtrinsicType {
-                    extrinsic_ty_id: husked_extrinsic_ty.id,
-                })
-            } else {
-                let field_ty_id = c.fields[0].ty.id;
-                let field_ty = meta_v14_types.resolve_ty(field_ty_id, ext_memory)?;
-                match field_ty.type_def {
-                    TypeDef::Sequence(s) => {
-                        let element_ty_id = s.type_param.id;
-                        let element_ty = meta_v14_types.resolve_ty(element_ty_id, ext_memory)?;
-                        if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
-                            Ok(husked_extrinsic_ty.ty.type_params)
-                        } else {
-                            Err(ParserError::UnexpectedExtrinsicType {
-                                extrinsic_ty_id: husked_extrinsic_ty.id,
-                            })
-                        }
-                    }
-                    _ => Err(ParserError::UnexpectedExtrinsicType {
-                        extrinsic_ty_id: husked_extrinsic_ty.id,
-                    }),
-                }
-            }
-        }
-        _ => Err(ParserError::UnexpectedExtrinsicType {
-            extrinsic_ty_id: husked_extrinsic_ty.id,
-        }),
-    }
-}
-
-/// [`TypeParameter`](scale_info::TypeParameter) name for `call`.
-pub const CALL_INDICATOR: &str = "Call";
 
 /// General decoder function. Parse part of data as [`Ty`].
 ///
@@ -825,9 +750,34 @@ where
 }
 
 /// `BitOrder` as determined by the `bit_order_type` for [`TypeDefBitSequence`].
-enum FoundBitOrder {
+pub enum FoundBitOrder {
     Lsb0,
     Msb0,
+}
+
+/// Determine BitOrder type of [`TypeDefBitSequence`].
+pub fn find_bit_order_ty<E, M>(
+    bit_ty: &TypeDefBitSequence<PortableForm>,
+    id: u32,
+    ext_memory: &mut E,
+    registry: &M::TypeRegistry,
+) -> Result<FoundBitOrder, RegistryError>
+where
+    E: ExternalMemory,
+    M: AsMetadata<E>,
+{
+    let bitorder_type = registry.resolve_ty(bit_ty.bit_order_type.id, ext_memory)?;
+    match &bitorder_type.type_def {
+        TypeDef::Composite(_) => match bitorder_type.path.ident() {
+            Some(x) => match x.as_str() {
+                LSB0 => Ok(FoundBitOrder::Lsb0),
+                MSB0 => Ok(FoundBitOrder::Msb0),
+                _ => Err(RegistryError::NotBitOrderType { id }),
+            },
+            None => Err(RegistryError::NotBitOrderType { id }),
+        },
+        _ => Err(RegistryError::NotBitOrderType { id }),
+    }
 }
 
 /// [`Type`]-associated [`Path`](scale_info::Path) `ident` for
@@ -855,18 +805,7 @@ where
     let bitvec_start = *position;
 
     // BitOrder
-    let bitorder_type = registry.resolve_ty(bit_ty.bit_order_type.id, ext_memory)?;
-    let bitorder = match &bitorder_type.type_def {
-        TypeDef::Composite(_) => match bitorder_type.path.ident() {
-            Some(x) => match x.as_str() {
-                LSB0 => FoundBitOrder::Lsb0,
-                MSB0 => FoundBitOrder::Msb0,
-                _ => return Err(ParserError::NotBitOrderType { id }),
-            },
-            None => return Err(ParserError::NotBitOrderType { id }),
-        },
-        _ => return Err(ParserError::NotBitOrderType { id }),
-    };
+    let bitorder = find_bit_order_ty::<E, M>(bit_ty, id, ext_memory, registry)?;
 
     // BitStore
     let bitstore_type = registry.resolve_ty(bit_ty.bit_store_type.id, ext_memory)?;
@@ -948,7 +887,7 @@ where
             FoundBitOrder::Msb0 => Msb0::patch_bitvec_u64::<B, E>(data, ext_memory, position)
                 .map(ParsedData::BitVecU64Msb0),
         },
-        _ => Err(ParserError::NotBitStoreType { id }),
+        _ => Err(ParserError::Registry(RegistryError::NotBitStoreType { id })),
     }
 }
 
@@ -1185,23 +1124,23 @@ impl_patched!(Msb0, reform_vec_msb0);
 /// Element [`Info`] is collected while resolving the type. No identical
 /// [`Type`] `id`s are expected to be encountered (these are collected and
 /// checked in [`Checker`]), otherwise the resolving would go indefinitely.
-struct HuskedType {
-    info: Vec<Info>,
-    checker: Checker,
-    ty: Type<PortableForm>,
-    id: u32,
+pub struct HuskedType {
+    pub info: Vec<Info>,
+    pub checker: Checker,
+    pub ty: Type<PortableForm>,
+    pub id: u32,
 }
 
 /// Resolve [`Type`] of set element.
 ///
 /// Compact and single-field structs are resolved into corresponding inner
 /// types. All available [`Info`] is collected.
-fn husk_type<E, M>(
+pub fn husk_type<E, M>(
     entry_symbol: &UntrackedSymbol<TypeId>,
     registry: &M::TypeRegistry,
     ext_memory: &mut E,
     mut checker: Checker,
-) -> Result<HuskedType, ParserError<E>>
+) -> Result<HuskedType, RegistryError>
 where
     E: ExternalMemory,
     M: AsMetadata<E>,

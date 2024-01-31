@@ -1,13 +1,12 @@
 //! Data that can propagate hierarchically during parsing.
-use external_memory_tools::ExternalMemory;
-use frame_metadata::v14::SignedExtensionMetadata;
 use scale_info::{form::PortableForm, Field, Path, Type};
 
 use crate::std::vec::Vec;
 
 use crate::cards::Info;
-use crate::error::ParserError;
+use crate::error::RegistryError;
 use crate::special_indicators::{Hint, SpecialtyH256, SpecialtyUnsignedInteger};
+use crate::traits::SignedExtensionMetadata;
 
 /// Type specialty data (type specialty [`Hint`] and compact info) that
 /// hierarchically propagates during the decoding.
@@ -52,9 +51,9 @@ impl SpecialtySet {
 
     /// Check that `compact_at` field is not `Some(_)`, i.e. there was no
     /// compact type encountered.
-    pub fn reject_compact<E: ExternalMemory>(&self) -> Result<(), ParserError<E>> {
+    pub fn reject_compact(&self) -> Result<(), RegistryError> {
         if let Some(id) = self.compact_at {
-            Err(ParserError::UnexpectedCompactInsides { id })
+            Err(RegistryError::UnexpectedCompactInsides { id })
         } else {
             Ok(())
         }
@@ -114,8 +113,8 @@ impl Checker {
 
     /// Check that `compact_at` field in associated [`SpecialtySet`] is not
     /// `Some(_)`, i.e. there was no compact type encountered.
-    pub fn reject_compact<E: ExternalMemory>(&self) -> Result<(), ParserError<E>> {
-        self.specialty_set.reject_compact::<E>()
+    pub fn reject_compact(&self) -> Result<(), RegistryError> {
+        self.specialty_set.reject_compact()
     }
 
     /// Discard previously found [`Hint`].
@@ -125,10 +124,7 @@ impl Checker {
 
     /// Use known, propagated from above `Checker` to construct a new `Checker`
     /// for an individual [`Field`].
-    pub fn update_for_field<E: ExternalMemory>(
-        &self,
-        field: &Field<PortableForm>,
-    ) -> Result<Self, ParserError<E>> {
+    pub fn update_for_field(&self, field: &Field<PortableForm>) -> Result<Self, RegistryError> {
         let mut checker = self.clone();
 
         // update `Hint`
@@ -144,11 +140,7 @@ impl Checker {
 
     /// Use known, propagated from above `Checker` to construct a new `Checker`
     /// for a [`Type`].
-    pub fn update_for_ty<E: ExternalMemory>(
-        &self,
-        ty: &Type<PortableForm>,
-        id: u32,
-    ) -> Result<Self, ParserError<E>> {
+    pub fn update_for_ty(&self, ty: &Type<PortableForm>, id: u32) -> Result<Self, RegistryError> {
         let mut checker = self.clone();
         checker.check_id(id)?;
         checker.specialty_set.update_from_path(&ty.path);
@@ -168,9 +160,9 @@ impl Checker {
     /// If type was already encountered in this `Checker` (and thus its `id` is
     /// in `cycle_check`), the decoding has entered a cycle and must be stopped.
     /// If not, type `id` is added into `cycle_check`.
-    pub fn check_id<E: ExternalMemory>(&mut self, id: u32) -> Result<(), ParserError<E>> {
+    pub fn check_id(&mut self, id: u32) -> Result<(), RegistryError> {
         if self.cycle_check.contains(&id) {
-            Err(ParserError::CyclicMetadata { id })
+            Err(RegistryError::CyclicMetadata { id })
         } else {
             self.cycle_check.push(id);
             Ok(())
@@ -207,7 +199,7 @@ impl Propagated {
     }
 
     /// Initiate new `Propagated` for signed extensions instance.
-    pub fn from_ext_meta(signed_ext_meta: &SignedExtensionMetadata<PortableForm>) -> Self {
+    pub fn from_ext_meta(signed_ext_meta: &SignedExtensionMetadata) -> Self {
         Self {
             checker: Checker {
                 specialty_set: SpecialtySet {
@@ -230,10 +222,10 @@ impl Propagated {
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`
     /// for an individual [`Field`].
-    pub fn for_field<E: ExternalMemory>(
+    pub fn for_field(
         checker: &Checker,
         field: &Field<PortableForm>,
-    ) -> Result<Self, ParserError<E>> {
+    ) -> Result<Self, RegistryError> {
         Ok(Self {
             checker: Checker::update_for_field(checker, field)?,
             info: Vec::new(),
@@ -242,11 +234,11 @@ impl Propagated {
 
     /// Initiate new `Propagated` with known, propagated from above `Checker`
     /// for a [`Type`].
-    pub fn for_ty<E: ExternalMemory>(
+    pub fn for_ty(
         checker: &Checker,
         ty: &Type<PortableForm>,
         id: u32,
-    ) -> Result<Self, ParserError<E>> {
+    ) -> Result<Self, RegistryError> {
         Ok(Self {
             checker: Checker::update_for_ty(checker, ty, id)?,
             info: Vec::new(),
@@ -260,8 +252,8 @@ impl Propagated {
 
     /// Check that `compact_at` field in associated [`SpecialtySet`] is not
     /// `Some(_)`, i.e. there was no compact type encountered.
-    pub fn reject_compact<E: ExternalMemory>(&self) -> Result<(), ParserError<E>> {
-        self.checker.specialty_set.reject_compact::<E>()
+    pub fn reject_compact(&self) -> Result<(), RegistryError> {
+        self.checker.specialty_set.reject_compact()
     }
 
     /// Discard previously found [`Hint`].
