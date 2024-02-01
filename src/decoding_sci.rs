@@ -207,12 +207,10 @@ where
     E: ExternalMemory,
     M: AsMetadata<E>,
 {
-    let extrinsic_type_params = metadata
-        .extrinsic_type_params()
-        .map_err(SignableError::MetaStructure)?;
+    let call_ty = metadata.call_ty().map_err(SignableError::MetaStructure)?;
 
     let call_extended_data = decode_with_type::<B, E, M>(
-        &Ty::Symbol(&extrinsic_type_params.call_ty),
+        &Ty::Symbol(&call_ty),
         data,
         ext_memory,
         position,
@@ -222,7 +220,7 @@ where
     if let ParsedData::Call(call) = call_extended_data.data {
         Ok(call)
     } else {
-        Err(SignableError::NotACall(extrinsic_type_params.call_ty.id))
+        Err(SignableError::NotACall(call_ty.id))
     }
 }
 

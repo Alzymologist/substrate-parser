@@ -54,7 +54,7 @@ use crate::cards::{Call, ExtendedData, ParsedData};
 use crate::compacts::get_compact;
 use crate::decode_as_type_at_position;
 use crate::error::{ParserError, UncheckedExtrinsicError};
-use crate::traits::AsMetadata;
+use crate::traits::AsCompleteMetadata;
 
 /// Length of version indicator, 1 byte.
 const VERSION_LENGTH: usize = 1;
@@ -74,7 +74,7 @@ pub fn decode_as_unchecked_extrinsic<B, E, M>(
 where
     B: AddressableBuffer<E>,
     E: ExternalMemory,
-    M: AsMetadata<E>,
+    M: AsCompleteMetadata<E>,
 {
     let extrinsic_type_params = metadata
         .extrinsic_type_params()

@@ -44,9 +44,13 @@ pub trait AsMetadata<E: ExternalMemory>: Debug + Sized {
     type MetaStructureError: Debug + Display + Eq;
     fn types(&self) -> Self::TypeRegistry;
     fn spec_name_version(&self) -> Result<SpecNameVersion, Self::MetaStructureError>;
+    fn call_ty(&self) -> Result<UntrackedSymbol<TypeId>, Self::MetaStructureError>;
+    fn signed_extensions(&self) -> Result<Vec<SignedExtensionMetadata>, Self::MetaStructureError>;
+}
+
+pub trait AsCompleteMetadata<E: ExternalMemory>: AsMetadata<E> {
     fn extrinsic_type_params(&self) -> Result<ExtrinsicTypeParams, Self::MetaStructureError>;
     fn extrinsic_version(&self) -> Result<u8, Self::MetaStructureError>;
-    fn signed_extensions(&self) -> Result<Vec<SignedExtensionMetadata>, Self::MetaStructureError>;
 }
 
 #[repr(C)]
@@ -137,6 +141,24 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14 {
         }
     }
 
+    fn call_ty(&self) -> Result<UntrackedSymbol<TypeId>, Self::MetaStructureError> {
+        let extrinsic_type_params =
+            <RuntimeMetadataV14 as AsCompleteMetadata<E>>::extrinsic_type_params(self)?;
+        Ok(extrinsic_type_params.call_ty)
+    }
+
+    fn signed_extensions(&self) -> Result<Vec<SignedExtensionMetadata>, Self::MetaStructureError> {
+        Ok(self
+            .extrinsic
+            .signed_extensions
+            .iter()
+            .cloned()
+            .map(SignedExtensionMetadata::from)
+            .collect())
+    }
+}
+
+impl<E: ExternalMemory> AsCompleteMetadata<E> for RuntimeMetadataV14 {
     fn extrinsic_type_params(&self) -> Result<ExtrinsicTypeParams, Self::MetaStructureError> {
         let husked_extrinsic_ty = husk_type::<(), RuntimeMetadataV14>(
             &self.extrinsic.ty,
@@ -193,16 +215,6 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14 {
     fn extrinsic_version(&self) -> Result<u8, Self::MetaStructureError> {
         Ok(self.extrinsic.version)
     }
-
-    fn signed_extensions(&self) -> Result<Vec<SignedExtensionMetadata>, Self::MetaStructureError> {
-        Ok(self
-            .extrinsic
-            .signed_extensions
-            .iter()
-            .cloned()
-            .map(SignedExtensionMetadata::from)
-            .collect())
-    }
 }
 
 impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV15 {
@@ -229,6 +241,22 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV15 {
         }
     }
 
+    fn call_ty(&self) -> Result<UntrackedSymbol<TypeId>, Self::MetaStructureError> {
+        Ok(self.extrinsic.call_ty)
+    }
+
+    fn signed_extensions(&self) -> Result<Vec<SignedExtensionMetadata>, Self::MetaStructureError> {
+        Ok(self
+            .extrinsic
+            .signed_extensions
+            .iter()
+            .cloned()
+            .map(SignedExtensionMetadata::from)
+            .collect())
+    }
+}
+
+impl<E: ExternalMemory> AsCompleteMetadata<E> for RuntimeMetadataV15 {
     fn extrinsic_type_params(&self) -> Result<ExtrinsicTypeParams, Self::MetaStructureError> {
         Ok(ExtrinsicTypeParams {
             address_ty: self.extrinsic.address_ty,
@@ -240,16 +268,6 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV15 {
 
     fn extrinsic_version(&self) -> Result<u8, Self::MetaStructureError> {
         Ok(self.extrinsic.version)
-    }
-
-    fn signed_extensions(&self) -> Result<Vec<SignedExtensionMetadata>, Self::MetaStructureError> {
-        Ok(self
-            .extrinsic
-            .signed_extensions
-            .iter()
-            .cloned()
-            .map(SignedExtensionMetadata::from)
-            .collect())
     }
 }
 
