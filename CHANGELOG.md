@@ -4,7 +4,7 @@ New features:
 
 - MetadataV15 support
 - `AsMetadata` trait now requires milder implementation, so that it is usable on shortened metadata
-- `AsCompleteMetadata` trait should be used instead now for full functionality (including events and database parsing)
+- `AsCompleteMetadata` trait should be used instead now for full functionality (parsing of unchecked extrinsics)
 
 API changes:
 
