@@ -1,3 +1,15 @@
+# v0.5.0
+
+New features:
+
+- MetadataV15 support
+- `AsMetadata` trait now requires milder implementation, so that it is usable on shortened metadata
+- `AsCompleteMetadata` trait should be used instead now for full functionality (parsing of unchecked extrinsics)
+
+API changes:
+
+- What used to be `AsMetadata` might need to become `AsCompleteMetadata`, see above
+
 # v0.4.0
 
 This is a major rehaul of crate. Older versions are going into deprecation soon, as they are desperately obsolete at this point.
