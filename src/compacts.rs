@@ -5,6 +5,7 @@ use parity_scale_codec::{Compact, Decode, HasCompact};
 use crate::error::ParserError;
 
 /// Compact found in data.
+#[derive(Debug)]
 pub struct FoundCompact<T: HasCompact> {
     /// Compact found and decoded.
     pub compact: T,
@@ -18,10 +19,10 @@ pub struct FoundCompact<T: HasCompact> {
 /// Would not make sense to check slices of higher length for a compact.
 pub const MAX_COMPACT_LEN: usize = 17;
 
-/// Search `&[u8]` for compact at given position by brute force.
+/// Search bytes slice for compact at given position by brute force.
 ///
-/// Tries to find shortest `[u8]` slice that could be decoded as a compact.
-/// Does not modify the input.
+/// Tries to find shortest slice that could be decoded as a compact.
+/// Does not shift current parser position.
 pub fn find_compact<T, B, E>(
     data: &B,
     ext_memory: &mut E,

@@ -3,24 +3,35 @@
 //! metadata. Decoded data could be pattern matched or represented in readable
 //! form.
 //!
-//! Currently only the most recent `RuntimeMetadata` version `V14` is supported
-//! for the chain metadata, as only the `V14` has conveniently in-built types
-//! database in it, thus allowing to track types using metadata itself without
-//! any additional information.
+//! Key trait [`AsMetadata`] describes the metadata suitable for parsing of
+//! signable transactions and other encoded chain items, for example, the data
+//! from chain storage. Trait [`AsCompleteMetadata`] is [`AsMetadata`] with few
+//! additional properties, it describes the metadata suitable for parsing of
+//! unchecked extrinsics.
+//!
+//! Traits `AsMetadata` and `AsCompleteMetadata` could be applied as well to
+//! metadata addressable in external memory. As metadata typically is typically
+//! a few hundred kB, this is useful for hardware devices with limited memory
+//! capacity.
+//!
+//! `AsMetadata` and `AsCompleteMetadata` are implemented for `RuntimeMetadata`
+//! versions `V14` and `V15`, both of which have conveniently in-built types
+//! registry allowing to track types using metadata itself without any
+//! additional information.
 //!
 //! # Assumptions
 //!
 //! Chain data is [SCALE-encoded](https://docs.substrate.io/reference/scale-codec/).
 //! Data blobs entering decoder are expected to be decoded completely: all
-//! provided `&[u8]` data must be used in decoding with no data remaining
-//! unparsed.
+//! provided bytes must be used in decoding with no data remaining unparsed.
 //!
 //! For decoding either the entry type (such as the type of particular storage
 //! item) or the data internal structure used to find the entry type in metadata
-//! (as is the case for signable transactions) must be known.
+//! (as is the case for signable transactions or unchecked extrinsics) must be
+//! known.
 //!
 //! Entry type gets resolved into constituting types with metadata in-built
-//! types registry and appropriate `&[u8]` chunks are selected from input blob
+//! types registry and appropriate bytes chunks are selected from input blob
 //! and decoded. The process follows what the `decode` from the
 //! [SCALE codec](parity_scale_codec) does, except the types that go into the
 //! decoder are found dynamically during the decoding itself.
@@ -29,30 +40,62 @@
 //!
 //! Signable transaction consist of the call part and extensions part.
 //!
-//! Call part contains double SCALE-encoded call data. This means that the
-//! SCALE-encoded call data is preceded with compact of the encoded call data
-//! length. This length is used to separate encoded call data and extensions
-//! data, and decode them independently.
+//! Call part may or may not be double SCALE-encoded, i.e. SCALE-encoded call
+//! data may or may not be preceded by [compact](parity_scale_codec::Compact) of
+//! the encoded call length.
 //!
-//! Call data is effectively an enum, and first `u8` of the encoded call is
-//! pallet `index` in [`PalletMetadata`](frame_metadata::v14::PalletMetadata).
-//! Enum describing the calls corresponding to this pallet has type found in
-//! [`PalletCallMetadata`](frame_metadata::v14::PalletCallMetadata). Further
-//! decoding uses the type information found.
+//! Function [`parse_transaction`] is used for signable transactions with double
+//! SCALE-encoded call data. Call length allows to separate encoded call data
+//! and extensions, and decode them independently, extensions first. This
+//! approach is preferable if multiple metadata entries (same chain, different
+//! `spec_version`) are tried for transaction parsing, because extensions must
+//! contain metadata `spec_version`, thus allowing to check if the correct one
+//! is being used for decoding before call decoding even starts.
 //!
-//! Remaining data is SCALE-encoded set of signable extensions, as declared in
-//! [`ExtrinsicMetadata`](frame_metadata::v14::ExtrinsicMetadata). Chain genesis
-//! hash must be found among the decoded extensions and must match the genesis
-//! hash known for the chain. Spec version must be found among the decoded
-//! extensions and must match the spec version derived from the provided
-//! metadata. This is done to make sure that the correct metadata was used for
-//! parsing.
+//! Signable transactions without length prefix are parsed with function
+//! [`parse_transaction_unmarked`], call first. Similarly, found in extensions
+//! chain `spec_version` is checked to assure the correct metadata was used.
+//!
+//! Call parsing entry point is `call_ty`. This is the type describing all calls
+//! available on chain. Effectively, `call_ty` leads to enum with variants
+//! corresponsing to all pallets, first `u8` of the data is the pallet index.
+//! Each variant is expected to have only one field, the type of which is also
+//! an enum. This second enum represents all calls available in the selected
+//! pallet, with second `u8` of the data being enum variant index, i.e. exact
+//! call contained in transaction. Further data is just the set of fields for
+//! this selected variant.
+//!
+//! Remaining data is SCALE-encoded set of signable extensions, as declared, for
+//! example, in
+//! [`v14::ExtrinsicMetadata`](frame_metadata::v14::ExtrinsicMetadata) for `V14`
+//! and in [`v15::ExtrinsicMetadata`](frame_metadata::v15::ExtrinsicMetadata)
+//! for `V15`. Chain genesis hash must be found among the decoded extensions and
+//! must match the genesis hash known for the chain, if the one was provided for
+//! parser. `spec_version` must be found among the decoded extensions and must
+//! match the `spec_version` derived from the provided metadata.
 //!
 //! ## Storage items
 //!
 //! Storage items could be queried from chain via rpc calls, and the retrieved
 //! SCALE-encoded data has a type declared in corresponding chain metadata
 //! [`StorageEntryType`](frame_metadata::v14::StorageEntryType).
+//!
+//! Storage items (combination of both a key and a value) is parsed using
+//! [`decode_as_storage_entry`] function.
+//!
+//! ## Unchecked extrinsics
+//!
+//! Unchecked extrinsics could be decoded with metadata implementing
+//! [`AsCompleteMetadata`] trait, using function
+//! [`decode_as_unchecked_extrinsic`].
+//!
+//! ## Other items
+//!
+//! Any part of a bytes blob could be decoded if the corresponding type is known
+//! using function [`decode_as_type_at_position`].
+//!
+//! For cases when whole blob corresponds to a single known type, function
+//! [`decode_all_as_type`] is suggested.
 //!
 //! # Parsed data and cards
 //!
@@ -93,24 +136,16 @@
 //! a one of balance-displaying [pallets](crate::cards::PALLETS_BALANCE_VALID)
 //! or in extensions.
 //!
+//! Some types (`AccountId32`, `Era`, public key types, signature types) are
+//! re-defined in this crate (module `additional_types`) similarly to their
+//! original counterparts in `sp_core` and `sp_runtime` crates. This is done to
+//! ensure `no_std` compatibility and simplify dependencies tree. Internal
+//! content of these types could be seamlessly transferred into original types
+//! if need be.
+//!
 //! # Features
 //!
 //! Crate supports `no_std` in `default-features = false` mode.
-//!
-//! With feature `std` (available by default) parsed data is translated directly
-//! into corresponding Substrate types, such as `Era` from `sp_runtime` and
-//! special arrays such as `AccountId32`, public keys, and signatures from
-//! `sp_core`.
-//!
-//! In `no_std` mode types named and built similarly to the original Substrate
-//! types are introduced in `additional_types` module, to avoid apparent current
-//! incompatibility of `sp_runtime` and `sp_core/full_crypto` with some `no_std`
-//! build targets. Types from `additional_types` module are intended mainly for
-//! proper parsed data display.
-//!
-//! Feature `embed-display` is suggested for `no_std` usage, as it supports also
-//! base58 representation of `AccountId32` and public keys, identical to the one
-//! in `sp_core`.
 //!
 //! # Examples
 //!```
@@ -120,13 +155,12 @@
 //! use parity_scale_codec::Decode;
 //! use primitive_types::H256;
 //! use scale_info::{IntoPortable, Path, Registry};
-//! use sp_core::crypto::AccountId32;
-//! use sp_runtime::generic::Era;
 //! use std::str::FromStr;
 //! use substrate_parser::{
 //!     parse_transaction,
 //!     AddressableBuffer,
 //!     AsMetadata,
+//!     additional_types::{AccountId32, Era},
 //!     cards::{
 //!         Call, ExtendedData, FieldData, Info,
 //!         PalletSpecificData, ParsedData, VariantData,
@@ -181,7 +215,7 @@
 //!                         type_name: Some(String::from("AccountId")),
 //!                         field_docs: String::new(),
 //!                         data: ExtendedData {
-//!                             data: ParsedData::Id(AccountId32::from_str("8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48").unwrap()),
+//!                             data: ParsedData::Id(AccountId32(hex::decode("8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48").unwrap().try_into().unwrap())),
 //!                             info: vec![
 //!                                 Info {
 //!                                     docs: String::new(),
@@ -460,7 +494,6 @@ use parity_scale_codec::{Decode, Encode};
 use primitive_types::H256;
 use scale_info::interner::UntrackedSymbol;
 
-#[cfg(not(feature = "std"))]
 pub mod additional_types;
 pub mod cards;
 pub mod compacts;
@@ -475,7 +508,7 @@ pub mod storage_data;
 pub mod traits;
 pub mod unchecked_extrinsic;
 
-#[cfg(any(feature = "std", feature = "embed-display"))]
+#[cfg(feature = "std")]
 #[cfg(test)]
 mod tests;
 
@@ -497,7 +530,9 @@ use core::{any::TypeId, marker::PhantomData};
 
 pub use decoding_sci::{decode_as_call, decode_as_call_unmarked, ResolvedTy};
 pub use decoding_sci_ext::{decode_extensions, decode_extensions_unmarked};
-pub use traits::{AsMetadata, ResolveType};
+pub use storage_data::decode_as_storage_entry;
+pub use traits::{AsCompleteMetadata, AsMetadata, ResolveType};
+pub use unchecked_extrinsic::decode_as_unchecked_extrinsic;
 
 use cards::{Call, ExtendedCard, ExtendedData};
 use compacts::get_compact;
@@ -648,7 +683,7 @@ where
     // some fundamental flaw is in transaction itself
     let marked_data = MarkedData::<B, E, M>::mark(data, ext_memory)?;
 
-    // try parsing extensions, check that spec version and genesis hash are
+    // try parsing extensions, check that `spec_version` and genesis hash are
     // correct
     let extensions =
         decode_extensions::<B, E, M>(&marked_data, ext_memory, metadata, optional_genesis_hash)?;
@@ -695,7 +730,7 @@ impl TransactionUnmarkedParsed {
     }
 }
 
-/// Parse a signable transaction, Ledger format. Call is not prefixed with call length.
+/// Parse a signable transaction when call is not prefixed by call length.
 pub fn parse_transaction_unmarked<B, E, M>(
     data: &B,
     ext_memory: &mut E,
@@ -712,7 +747,7 @@ where
     // try parsing call data
     let call = decode_as_call_unmarked::<B, E, M>(data, &mut position, ext_memory, metadata)?;
 
-    // try parsing extensions, check that spec version and genesis hash are
+    // try parsing extensions, check that `spec_version` and genesis hash are
     // correct
     let extensions = decode_extensions_unmarked::<B, E, M>(
         data,
@@ -725,7 +760,7 @@ where
     Ok(TransactionUnmarkedParsed { call, extensions })
 }
 
-/// Decode part of `&[u8]` slice as a known type using `V14` metadata.
+/// Decode part of bytes slice starting at a given position as a known type.
 ///
 /// Input `position` marks the first element in data that goes into the
 /// decoding. As decoding proceeds, `position` gets changed.
@@ -756,7 +791,7 @@ where
     )
 }
 
-/// Decode whole `&[u8]` slice as a known type using `V14` metadata.
+/// Decode whole bytes slice as a known type.
 ///
 /// All data is expected to be used for the decoding.
 pub fn decode_all_as_type<B, E, M>(

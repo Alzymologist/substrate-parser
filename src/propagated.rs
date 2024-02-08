@@ -176,8 +176,8 @@ impl Default for Checker {
     }
 }
 
-/// Propagating data and collected type information (`Checker` and all non-empty
-/// type info).
+/// Propagating data and collected type information ([`Checker`] and all
+/// non-empty type info).
 #[derive(Clone, Debug)]
 pub struct Propagated {
     /// Type data that is collected and checked during parsing.

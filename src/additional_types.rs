@@ -1,13 +1,8 @@
-//! Types and functions for `no_std` only.
-//!
-//! Exactly follow current substrate code from `no_std` incompatible crates. Last confirmed on v7.0.0
-#[cfg(feature = "embed-display")]
+//! Types and functions from [`sp_core`](https://docs.rs/sp-core/latest/sp_core/)
+//! and [`sp_runtime`](https://docs.rs/sp-runtime/latest/sp_runtime/).
 use base58::ToBase58;
 use parity_scale_codec::{Decode, Encode, Error, Input, Output};
 
-pub use crate::special_types::{SIGNATURE_LEN_ECDSA, SIGNATURE_LEN_ED25519, SIGNATURE_LEN_SR25519};
-
-#[cfg(feature = "embed-display")]
 use crate::std::{string::String, vec::Vec};
 
 /// Era period, same as in `sp_runtime::generic`.
@@ -49,7 +44,7 @@ impl Encode for Era {
         match self {
             Self::Immortal => output.push_byte(0),
             Self::Mortal(period, phase) => {
-                let quantize_factor = (*period as u64 >> 12).max(1);
+                let quantize_factor = (*period >> 12).max(1);
                 let encoded = (period.trailing_zeros() - 1).clamp(1, 15) as u16
                     | ((phase / quantize_factor) << 4) as u16;
                 encoded.encode_to(output);
@@ -88,6 +83,15 @@ pub const PUBLIC_LEN_SR25519: usize = 32;
 /// Known size for `sp_core::ecdsa::Public`.
 pub const PUBLIC_LEN_ECDSA: usize = 33;
 
+/// Known size for `sp_core::ed25519::Signature`.
+pub const SIGNATURE_LEN_ED25519: usize = 64;
+
+/// Known size for `sp_core::sr25519::Signature`.
+pub const SIGNATURE_LEN_SR25519: usize = 64;
+
+/// Known size for `sp_core::ecdsa::Signature`.
+pub const SIGNATURE_LEN_ECDSA: usize = 65;
+
 define_array! {
     /// Placeholder for `sp_core::crypto::AccountId32`.
     AccountId32(ACCOUNT_ID_32_LEN)
@@ -118,11 +122,9 @@ define_array! {
 }
 
 /// Prefix used in base58 conversion. From `sp_core`.
-#[cfg(feature = "embed-display")]
 const PREFIX: &[u8] = b"SS58PRE";
 
 /// Hash calculation used in base58 conversion. From `sp_core`.
-#[cfg(feature = "embed-display")]
 fn ss58hash(data: &[u8]) -> Vec<u8> {
     use blake2::{Blake2b512, Digest};
 
@@ -135,7 +137,6 @@ fn ss58hash(data: &[u8]) -> Vec<u8> {
 /// Same as `to_ss58check_with_version()` method for `Ss58Codec`.
 ///
 /// Comments also from `sp_core`.
-#[cfg(feature = "embed-display")]
 fn as_base58_with_known_prefix(input: &[u8], base58prefix: u16) -> String {
     // We mask out the upper two bits of the ident - SS58 Prefix currently only supports 14-bits
     let ident: u16 = base58prefix & 0b0011_1111_1111_1111;
@@ -158,7 +159,6 @@ fn as_base58_with_known_prefix(input: &[u8], base58prefix: u16) -> String {
 }
 
 /// Base58 representation for some special arrays from `sp_core`.
-#[cfg(feature = "embed-display")]
 macro_rules! add_base {
     ($($name: ident), *) => {
         $(
@@ -171,7 +171,6 @@ macro_rules! add_base {
     }
 }
 
-#[cfg(feature = "embed-display")]
 add_base!(AccountId32, PublicEd25519, PublicSr25519, PublicEcdsa);
 
 #[cfg(test)]

@@ -35,14 +35,14 @@ pub const BALANCE_ID_SET: &[&str] = &[
 /// If the value is unsigned integer, it will be considered nonce.
 pub const NONCE_ID_SET: &[&str] = &["nonce"];
 
-/// [`Field`] `name` set indicating the value *may* be metadata spec version.
+/// [`Field`] `name` set indicating the value *may* be metadata `spec_version`.
 ///
-/// If the value is unsigned integer, it will be considered spec version.
+/// If the value is unsigned integer, it will be considered `spec_version`.
 pub const SPEC_VERSION_ID_SET: &[&str] = &["spec_version"];
 
-/// [`Field`] `name` set indicating the value *may* be metadata spec name.
+/// [`Field`] `name` set indicating the value *may* be metadata `spec_name`.
 ///
-/// If the value is `str`, it will be considered spec name.
+/// If the value is `str`, it will be considered `spec_name`.
 pub const SPEC_NAME_ID_SET: &[&str] = &["spec_name"];
 
 /// [`Type`]-associated [`Path`] `ident` for
@@ -104,20 +104,22 @@ pub const SP_CORE_ECDSA: &[&str] = &["sp_core", "ecdsa"];
 pub const UNCHECKED_EXTRINSIC_NAMESPACE: &[&str] =
     &["sp_runtime", "generic", "unchecked_extrinsic"];
 
-/// [`Type`]-associated [`Path`] `ident` for `sp_runtime::generic::UncheckedExtrinsic`.
+/// [`Type`]-associated [`Path`] `ident` for
+/// `sp_runtime::generic::UncheckedExtrinsic`.
 pub const UNCHECKED_EXTRINSIC_IDENT: &str = "UncheckedExtrinsic";
 
 /// Extensions `identifier` from [`SignedExtensionMetadata`] for metadata spec
 /// version.
 ///
-/// If underlying value is unsigned integer, it will be considered spec version.
+/// If underlying value is unsigned integer, it will be considered
+/// `spec_version.`
 ///
 /// Apparently established `identifier` across different chains.
 pub const CHECK_SPEC_VERSION: &str = "CheckSpecVersion";
 
-/// Extensions `identifier` from [`SignedExtensionMetadata`] for tx version.
+/// Extensions `identifier` from [`SignedExtensionMetadata`] for `tx_version`.
 ///
-/// If underlying value is unsigned integer, it will be considered tx version.
+/// If underlying value is unsigned integer, it will be considered `tx_version`.
 ///
 /// Apparently established `identifier` across different chains.
 pub const CHECK_TX_VERSION: &str = "CheckTxVersion";
@@ -184,10 +186,10 @@ pub enum SpecialtyUnsignedInteger {
     /// Value is nonce.
     Nonce,
 
-    /// Value is metadata spec version from signable transaction extensions.
+    /// Value is metadata `spec_version` from signable transaction extensions.
     SpecVersion,
 
-    /// Value is tx version from signable transaction extensions.
+    /// Value is `tx_version` from signable transaction extensions.
     TxVersion,
 }
 

@@ -1,4 +1,4 @@
-//! Decode using metadata with in-built types descriptors.
+//! Decode types and calls using metadata with in-built type descriptors.
 #[cfg(any(target_pointer_width = "32", test))]
 use bitvec::prelude::BitOrder;
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
@@ -14,17 +14,9 @@ use scale_info::{
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 
-#[cfg(not(feature = "std"))]
 use crate::additional_types::{
     AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
     SignatureSr25519,
-};
-#[cfg(feature = "std")]
-use sp_core::{
-    crypto::AccountId32,
-    ecdsa::{Public as PublicEcdsa, Signature as SignatureEcdsa},
-    ed25519::{Public as PublicEd25519, Signature as SignatureEd25519},
-    sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
 };
 
 use crate::std::{borrow::ToOwned, string::String, vec::Vec};
@@ -157,14 +149,18 @@ where
 }
 
 /// Parse call part of the signable transaction [`MarkedData`] using provided
-/// `V14` metadata.
+/// metadata.
 ///
 /// Call data is expected to have proper call structure and to be decoded
 /// completely, with no data left.
 ///
-/// The first `u8` element of the call data is a pallet index, the type within
-/// corresponding `PalletCallMetadata` is expected to be an enum with
-/// pallet-specific calls. If the pallet-call pattern is not observed, an error
+/// Entry point for call decoding is `call_ty`, describing all available pallets
+/// for the chain. Type corresponding to `call_ty` is expected to be an enum
+/// with call-associated `Path` identifier
+/// [`CALL`](crate::special_indicators::CALL), and the selected variant is
+/// expected to have a single field, also and enum by type, also having
+/// call-associated `Path` identifier and corresponding to all calls within
+/// selected pallet. If the pallet-call pattern is not observed, an error
 /// occurs.
 pub fn decode_as_call<B, E, M>(
     marked_data: &MarkedData<B, E, M>,
@@ -192,9 +188,13 @@ where
 
 /// Parse call part of the signable transaction using provided metadata.
 ///
-/// The first `u8` element of the call data is a pallet index, the type within
-/// corresponding `PalletCallMetadata` is expected to be an enum with
-/// pallet-specific calls. If the pallet-call pattern is not observed, an error
+/// Entry point for call decoding is `call_ty`, describing all available pallets
+/// for the chain. Type corresponding to `call_ty` is expected to be an enum
+/// with call-associated `Path` identifier
+/// [`CALL`](crate::special_indicators::CALL), and the selected variant is
+/// expected to have a single field, also and enum by type, also having
+/// call-associated `Path` identifier and corresponding to all calls within
+/// selected pallet. If the pallet-call pattern is not observed, an error
 /// occurs.
 pub fn decode_as_call_unmarked<B, E, M>(
     data: &B,
@@ -244,7 +244,7 @@ where
 ///
 /// - enums (variant index is passed)
 /// - vectors (compact vector length indicator is passed)
-/// - calls and events, options (also variant index is passed)
+/// - calls and events (also variant index is passed)
 ///
 /// In empty enums there are no inner types, therefore cycling is impossible.
 ///
@@ -571,8 +571,8 @@ where
     }
 }
 
-/// Parse part of data as a set of [`Field`]s. Used for structs, enums and call
-/// decoding.
+/// Parse part of data as a set of [`Field`]s. Used for structs, enums and
+/// pallet-specific items.
 ///
 /// Current parser position gets changed.
 fn decode_fields<B, E, M>(
@@ -686,7 +686,7 @@ where
 ///
 /// First data `u8` element is `index` of [`Variant`].
 ///
-/// Does not modify the input.
+/// Does not shift the current parser position.
 pub fn pick_variant<'a, B, E>(
     variants: &'a [Variant<PortableForm>],
     data: &B,
@@ -748,12 +748,13 @@ where
 }
 
 /// `BitOrder` as determined by the `bit_order_type` for [`TypeDefBitSequence`].
+#[derive(Debug)]
 pub enum FoundBitOrder {
     Lsb0,
     Msb0,
 }
 
-/// Determine BitOrder type of [`TypeDefBitSequence`].
+/// Determine `BitOrder` type of [`TypeDefBitSequence`].
 pub fn find_bit_order_ty<E, M>(
     bit_ty: &TypeDefBitSequence<PortableForm>,
     id: u32,
@@ -890,6 +891,7 @@ where
 }
 
 /// Positions and related values for decoding `BitVec`.
+#[derive(Debug)]
 pub struct BitVecPositions {
     /// Encoded `BitVec` start position, includes bit length compact.
     bitvec_start: usize,
@@ -1122,6 +1124,7 @@ impl_patched!(Msb0, reform_vec_msb0);
 /// Element [`Info`] is collected while resolving the type. No identical
 /// [`Type`] `id`s are expected to be encountered (these are collected and
 /// checked in [`Checker`]), otherwise the resolving would go indefinitely.
+#[derive(Debug)]
 pub struct HuskedType {
     pub info: Vec<Info>,
     pub checker: Checker,
@@ -1200,13 +1203,14 @@ where
 /// Type information used for parsing.
 #[derive(Debug)]
 pub enum Ty<'a> {
-    /// Type is already resolved in metadata `Registry`.
+    /// Type is already resolved in metadata types registry.
     Resolved(ResolvedTy),
 
     /// Type is not yet resolved.
     Symbol(&'a UntrackedSymbol<TypeId>),
 }
 
+///Type previously resolved in metadata types registry.
 #[derive(Debug)]
 pub struct ResolvedTy {
     pub ty: Type<PortableForm>,

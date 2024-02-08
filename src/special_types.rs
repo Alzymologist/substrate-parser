@@ -5,11 +5,6 @@ use parity_scale_codec::{DecodeAll, HasCompact};
 use primitive_types::{H160, H256, H512};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 
-#[cfg(not(feature = "std"))]
-use crate::additional_types::Era;
-#[cfg(feature = "std")]
-use sp_runtime::generic::Era;
-
 #[cfg(all(not(feature = "std"), not(test)))]
 use core::{convert::TryInto, mem::size_of};
 #[cfg(any(feature = "std", test))]
@@ -17,19 +12,10 @@ use std::{convert::TryInto, mem::size_of};
 
 use crate::std::{borrow::ToOwned, vec::Vec};
 
-#[cfg(not(feature = "std"))]
 use crate::additional_types::{
-    AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
+    AccountId32, Era, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
     SignatureSr25519,
 };
-#[cfg(feature = "std")]
-use sp_core::{
-    crypto::{AccountId32, ByteArray},
-    ecdsa::{Public as PublicEcdsa, Signature as SignatureEcdsa},
-    ed25519::{Public as PublicEd25519, Signature as SignatureEd25519},
-    sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
-};
-
 use crate::cards::{ParsedData, Sequence, SequenceData};
 use crate::compacts::get_compact;
 use crate::error::{ParserError, RegistryError};
@@ -51,7 +37,7 @@ pub(crate) trait StableLength: Sized {
 
     /// Get type value from the data.
     ///
-    /// Slice of appropriate length is selected from input `&[u8]` starting at
+    /// Slice of appropriate length is selected from input bytes starting at
     /// `position`, and decoded as the type. `position` marker gets moved after
     /// decoding.
     fn cut_and_decode<B, E>(
@@ -171,50 +157,8 @@ impl StableLength for char {
     }
 }
 
-/// Implement [`StableLength`] for well-known arrays.
-macro_rules! impl_stable_length_array_closed {
-    ($($array: ty, $length: stmt, $make: ident), *) => {
-        $(
-            #[cfg(feature = "std")]
-            impl StableLength for $array {
-                fn len_encoded() -> usize {
-                    $length
-                }
-                fn cut_and_decode<B, E> (data: &B, ext_memory: &mut E, position: &mut usize) -> Result<Self, ParserError<E>>
-                where
-                    B: AddressableBuffer<E>,
-                    E: ExternalMemory
-                {
-                    let slice_to_array = data.read_slice(ext_memory, *position, Self::len_encoded())?;
-                    let out = Self::$make(slice_to_array.as_ref().try_into().expect("stable known length"));
-                    Self::shift_position(position);
-                    Ok(out)
-                }
-            }
-        )*
-    }
-}
-
-impl_stable_length_array_closed!(AccountId32, Self::LEN, new);
-impl_stable_length_array_closed!(PublicEd25519, Self::LEN, from_raw);
-impl_stable_length_array_closed!(PublicSr25519, Self::LEN, from_raw);
-impl_stable_length_array_closed!(PublicEcdsa, Self::LEN, from_raw);
-
-/// Known size for `sp_core::ed25519::Signature`.
-pub const SIGNATURE_LEN_ED25519: usize = 64;
-
-/// Known size for `sp_core::sr25519::Signature`.
-pub const SIGNATURE_LEN_SR25519: usize = 64;
-
-/// Known size for `sp_core::ecdsa::Signature`.
-pub const SIGNATURE_LEN_ECDSA: usize = 65;
-
-impl_stable_length_array_closed!(SignatureEd25519, SIGNATURE_LEN_ED25519, from_raw);
-impl_stable_length_array_closed!(SignatureSr25519, SIGNATURE_LEN_SR25519, from_raw);
-impl_stable_length_array_closed!(SignatureEcdsa, SIGNATURE_LEN_ECDSA, from_raw);
-
-/// Implement [`StableLength`] for well-known hashes.
-macro_rules! impl_stable_length_array_open {
+/// Implement [`StableLength`] for well-known hashes and arrays.
+macro_rules! impl_stable_length_array {
     ($($array: ty), *) => {
         $(
             impl StableLength for $array {
@@ -236,10 +180,10 @@ macro_rules! impl_stable_length_array_open {
     }
 }
 
-impl_stable_length_array_open!(H160, H256, H512);
-
-#[cfg(not(feature = "std"))]
-impl_stable_length_array_open!(
+impl_stable_length_array!(
+    H160,
+    H256,
+    H512,
     AccountId32,
     PublicEd25519,
     PublicSr25519,

@@ -1,11 +1,7 @@
-//! Decode signable transaction extensions using `RuntimeMetadataV14`.
+//! Decode signable transaction extensions using metadata with in-built type
+//! descriptors.
 use external_memory_tools::{AddressableBuffer, ExternalMemory};
 use primitive_types::H256;
-
-#[cfg(not(feature = "std"))]
-use crate::additional_types::Era;
-#[cfg(feature = "std")]
-use sp_runtime::generic::Era;
 
 use crate::std::{
     borrow::ToOwned,
@@ -13,6 +9,7 @@ use crate::std::{
     vec::Vec,
 };
 
+use crate::additional_types::Era;
 use crate::cards::{ExtendedData, ParsedData};
 use crate::decoding_sci::{decode_with_type, Ty};
 use crate::error::{ExtensionsError, SignableError};
@@ -23,15 +20,17 @@ use crate::traits::AsMetadata;
 use crate::MarkedData;
 
 /// Parse extensions part of the signable transaction [`MarkedData`] using
-/// provided `V14` metadata.
+/// provided metadata.
 ///
 /// Extensions data is expected to be decoded completely, with no data left.
 ///
-/// Metadata spec version and chain genesis hash are used to check that correct
-/// metadata is used for parsing.
+/// Metadata `spec_version` and chain genesis hash (if provided) are used to
+/// check that correct metadata is used for parsing. All extensions are
+/// displayed as parsed for user for final checking.
 ///
-/// Extensions and their order are determined by `signed_extensions` in
-/// [`ExtrinsicMetadata`](frame_metadata::v14::ExtrinsicMetadata).
+/// Extensions and their order are determined by `signed_extensions`, a set of
+/// [`SignedExtensionMetadata`](crate::traits::SignedExtensionMetadata) known
+/// for each type implementing `AsMetadata`.
 ///
 /// Whole `signed_extensions` set is scanned first for types in `ty` field, and
 /// then the second time, for types in `additional_signed` field.
@@ -62,11 +61,13 @@ where
 ///
 /// Extensions data is expected to be decoded completely, with no data left.
 ///
-/// Metadata spec version and chain genesis hash are used to check that correct
-/// metadata is used for parsing.
+/// Metadata `spec_version` and chain genesis hash (if provided) are used to
+/// check that correct metadata is used for parsing. All extensions are
+/// displayed as parsed for user for final checking.
 ///
-/// Extensions and their order are determined by `signed_extensions` in
-/// [`ExtrinsicMetadata`](frame_metadata::v14::ExtrinsicMetadata).
+/// Extensions and their order are determined by `signed_extensions`, a set of
+/// [`SignedExtensionMetadata`](crate::traits::SignedExtensionMetadata) known
+/// for each type implementing `AsMetadata`.
 ///
 /// Whole `signed_extensions` set is scanned first for types in `ty` field, and
 /// then the second time, for types in `additional_signed` field.
@@ -124,7 +125,7 @@ where
 
 /// Check collected extensions.
 ///
-/// Extensions must include metadata spec version and chain genesis hash.
+/// Extensions must include metadata `spec_version` and chain genesis hash.
 /// If extensions also include `Era`, block hash for immortal `Era` must match
 /// chain genesis hash.
 fn check_extensions<E: ExternalMemory, M: AsMetadata<E>>(
@@ -282,7 +283,7 @@ impl CollectedExt {
         }
     }
 
-    /// Add metadata spec version to set.
+    /// Add metadata `spec_version` to set.
     fn add_spec_version<T: UnsignedInteger, E: ExternalMemory, M: AsMetadata<E>>(
         &mut self,
         spec_version: T,

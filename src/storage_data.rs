@@ -5,10 +5,8 @@
 //!
 //! Storage key has prefix built from `prefix` of
 //! [`PalletStorageMetadata`](frame_metadata::v14::PalletStorageMetadata) and
-//! `name` of
-//! [`StorageEntryMetadata`](frame_metadata::v14::StorageEntryMetadata), both
-//! processed as bytes in [`twox_128`](sp_core_hashing::twox_128) and
-//! concatenated together.
+//! `name` of [`StorageEntryMetadata`], both processed as bytes in
+//! [`twox_128`](sp_core_hashing::twox_128) and concatenated together.
 //!
 //! There are `Plain` and `Map` variants of [`StorageEntryType`].
 //!
@@ -52,8 +50,8 @@ pub struct Storage {
     /// Storage value decoded.
     pub value: ExtendedData,
 
-    /// [`StorageEntryMetadata`](frame_metadata::v14::StorageEntryMetadata)
-    /// documentation, common for all storage entries with the same prefix.
+    /// [`StorageEntryMetadata`] documentation, common for all storage entries
+    /// with the same prefix.
     pub docs: String,
 }
 
@@ -228,7 +226,7 @@ cut_hash!(cut_twox_256, TWOX256_LEN, Twox256);
 /// decodeable part.
 ///
 /// Position moves according to the hash length. Data parsing starts at first
-/// byte after the hash. `&[u8]` slice corresponding to the parsed data is
+/// byte after the hash. Bytes slice corresponding to the parsed data is
 /// hashed and matched with the hash found in the key.
 macro_rules! check_hash {
     ($func:ident, $hash_len:ident, $fn_into:ident) => {
