@@ -1,4 +1,4 @@
-//! Types for parsed data (nested) and parser cards (flat and formatted).
+//! Types for output: parsed data (nested) and parser cards (flat and formatted).
 use bitvec::prelude::{BitVec, Lsb0, Msb0};
 use frame_metadata::v14::StorageEntryMetadata;
 use num_bigint::{BigInt, BigUint};
@@ -6,23 +6,10 @@ use primitive_types::{H160, H256, H512};
 use scale_info::{form::PortableForm, Field, Path, Type, Variant};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 
-#[cfg(not(feature = "std"))]
 use crate::additional_types::{
-    AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
+    AccountId32, Era, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
     SignatureSr25519,
 };
-#[cfg(feature = "std")]
-use sp_core::{
-    crypto::{AccountId32, Ss58AddressFormat, Ss58Codec},
-    ecdsa::{Public as PublicEcdsa, Signature as SignatureEcdsa},
-    ed25519::{Public as PublicEd25519, Signature as SignatureEd25519},
-    sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
-};
-
-#[cfg(not(feature = "std"))]
-use crate::additional_types::Era;
-#[cfg(feature = "std")]
-use sp_runtime::generic::Era;
 
 #[cfg(feature = "std")]
 use plot_icon::generate_png_scaled_default;
@@ -94,8 +81,7 @@ pub trait Documented {
     fn collect_docs(&self) -> String;
 }
 
-/// Collect documentation from documented [`scale_info`] entity ([`Type`],
-/// [`Field`], [`Variant`], [`StorageEntryMetadata<PortableForm>`]).
+/// Collect documentation from documented [`scale_info`] entity.
 macro_rules! impl_documented {
     ($($ty: ty), *) => {
         $(
@@ -913,36 +899,28 @@ impl std::fmt::Display for InfoFlat {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IdData {
     /// Base58 address
-    #[cfg(any(feature = "std", feature = "embed-display"))]
     pub base58: String,
 
     /// Identicon `png` data
     #[cfg(feature = "std")]
     pub identicon: Vec<u8>,
-
-    /// Hexadecimal key
-    #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
-    pub hex: String,
 }
 
+/// Transform array representable as base58 into [`IdData`].
 macro_rules! make_id_data {
     ($($func: ident, $ty: ty), *) => {
         $(
             impl IdData {
                 #[cfg(feature = "std")]
                 pub fn $func(value: &$ty, base58prefix: u16) -> Self {
-                    let base58 = value.to_ss58check_with_version(Ss58AddressFormat::custom(base58prefix));
-                    let identicon = generate_png_scaled_default(value.as_ref());
+                    let base58 = value.as_base58(base58prefix);
+                    let identicon = generate_png_scaled_default(value.0.as_ref());
                     Self { base58, identicon }
                 }
-                #[cfg(feature = "embed-display")]
+                #[cfg(not(feature = "std"))]
                 pub fn $func(value: &$ty, base58prefix: u16) -> Self {
                     let base58 = value.as_base58(base58prefix);
                     Self { base58 }
-                }
-                #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
-                pub fn $func(value: &$ty, _base58prefix: u16) -> Self {
-                    Self { hex: hex::encode(value.0) }
                 }
             }
         )*
@@ -1139,10 +1117,7 @@ impl ExtendedCard {
             ParserCard::H160(a) => readable(self.indent, "H160", &hex::encode(a.0)),
             ParserCard::H256(a) => readable(self.indent, "H256", &hex::encode(a.0)),
             ParserCard::H512(a) => readable(self.indent, "H512", &hex::encode(a.0)),
-            #[cfg(any(feature = "std", feature = "embed-display"))]
             ParserCard::Id(a) => readable(self.indent, "Id", &a.base58),
-            #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
-            ParserCard::Id(a) => readable(self.indent, "Id", &a.hex),
             ParserCard::NameSpecVersion { name, version } => {
                 readable(self.indent, "Chain", &format!("{name}{version}"))
             }
@@ -1175,18 +1150,9 @@ impl ExtendedCard {
             ParserCard::PrimitiveU64(a) => readable(self.indent, "u64", &a.to_string()),
             ParserCard::PrimitiveU128(a) => readable(self.indent, "u128", &a.to_string()),
             ParserCard::PrimitiveU256(a) => readable(self.indent, "BigUint", &a.to_string()),
-            #[cfg(any(feature = "std", feature = "embed-display"))]
             ParserCard::PublicEd25519(a) => readable(self.indent, "PublicKey Ed25519", &a.base58),
-            #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
-            ParserCard::PublicEd25519(a) => readable(self.indent, "PublicKey Ed25519", &a.hex),
-            #[cfg(any(feature = "std", feature = "embed-display"))]
             ParserCard::PublicSr25519(a) => readable(self.indent, "PublicKey Sr25519", &a.base58),
-            #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
-            ParserCard::PublicSr25519(a) => readable(self.indent, "PublicKey Sr25519", &a.hex),
-            #[cfg(any(feature = "std", feature = "embed-display"))]
             ParserCard::PublicEcdsa(a) => readable(self.indent, "PublicKey Ecdsa", &a.base58),
-            #[cfg(all(not(feature = "std"), not(feature = "embed-display")))]
-            ParserCard::PublicEcdsa(a) => readable(self.indent, "PublicKey Ecdsa", &a.hex),
             ParserCard::SequenceAnnounced {
                 len,
                 element_info_flat: _,

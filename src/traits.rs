@@ -1,3 +1,4 @@
+//! Traits for generalized metadata.
 #[cfg(not(feature = "std"))]
 use core::{
     any::TypeId,
@@ -39,6 +40,8 @@ use crate::error::{MetaStructureErrorV14, MetaVersionErrorPallets, RegistryError
 use crate::propagated::Checker;
 use crate::special_indicators::{SpecialtyStr, SpecialtyUnsignedInteger};
 
+/// Metadata sufficient for parsing of signable transactions, storage data, and
+/// bytes with a known type.
 pub trait AsMetadata<E: ExternalMemory>: Debug + Sized {
     type TypeRegistry: ResolveType<E>;
     type MetaStructureError: Debug + Display + Eq;
@@ -48,11 +51,13 @@ pub trait AsMetadata<E: ExternalMemory>: Debug + Sized {
     fn signed_extensions(&self) -> Result<Vec<SignedExtensionMetadata>, Self::MetaStructureError>;
 }
 
+/// Metadata sufficient for parsing of unchecked extrinsics.
 pub trait AsCompleteMetadata<E: ExternalMemory>: AsMetadata<E> {
     fn extrinsic_type_params(&self) -> Result<ExtrinsicTypeParams, Self::MetaStructureError>;
     fn extrinsic_version(&self) -> Result<u8, Self::MetaStructureError>;
 }
 
+/// Set of types defining unchecked extrinsic contents.
 #[repr(C)]
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct ExtrinsicTypeParams {
@@ -62,6 +67,7 @@ pub struct ExtrinsicTypeParams {
     pub extra_ty: UntrackedSymbol<TypeId>,
 }
 
+/// Metadata of the signed extensions of an extrinsic.
 #[repr(C)]
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct SignedExtensionMetadata {
@@ -70,6 +76,7 @@ pub struct SignedExtensionMetadata {
     pub additional_signed: UntrackedSymbol<TypeId>,
 }
 
+/// Transform type into [`SignedExtensionMetadata`].
 macro_rules! impl_signed_extension_metadata_from {
     ($($ty: ty), *) => {
         $(
@@ -91,6 +98,18 @@ impl_signed_extension_metadata_from!(
     SignedExtensionMetadataV15<PortableForm>
 );
 
+/// Metadata `spec_name` and `spec_version`.
+///
+/// There is a well-known Substrate type
+/// [`RuntimeVersion`](https://docs.rs/sp-version/latest/sp_version/struct.RuntimeVersion.html)
+/// that describes the contents of `Version` constant in `System` pallet of the
+/// metadata in most chains. This `RuntimeVersion` has `spec_version` type set
+/// to `u32`. However, it is not necessarily the case that all chains in all
+/// versions will stick to `u32`, as the type of `Version` constant itself is
+/// described in the metadata.
+///
+/// Thus, metadata is printed into `String`, to accomodate reasonable types
+/// variation of the `spec_version`.
 #[repr(C)]
 #[derive(Clone, Debug, Decode, Encode, Eq, PartialEq)]
 pub struct SpecNameVersion {
@@ -98,6 +117,7 @@ pub struct SpecNameVersion {
     pub spec_name: String,
 }
 
+/// Generalized types registry. Could be addressed in external memory.
 pub trait ResolveType<E: ExternalMemory> {
     fn resolve_ty(&self, id: u32, ext_memory: &mut E) -> Result<Type<PortableForm>, RegistryError>;
 }
@@ -271,8 +291,8 @@ impl<E: ExternalMemory> AsCompleteMetadata<E> for RuntimeMetadataV15 {
     }
 }
 
-/// Locate in metadata the type corresponding to all possible calls.
-pub fn process_extrinsic_type_params(
+/// Transform extrinsic type parameters set into [`ExtrinsicTypeParams`].
+fn process_extrinsic_type_params(
     extrinsic_type_params: Vec<TypeParameter<PortableForm>>,
 ) -> Result<ExtrinsicTypeParams, MetaStructureErrorV14> {
     let mut found_address = None;
@@ -303,53 +323,58 @@ pub fn process_extrinsic_type_params(
     })
 }
 
-/// [`TypeParameter`](scale_info::TypeParameter) name for `address`.
+/// [`TypeParameter`] name for `address`.
 pub const ADDRESS_INDICATOR: &str = "Address";
 
-/// [`TypeParameter`](scale_info::TypeParameter) name for `call`.
+/// [`TypeParameter`] name for `call`.
 pub const CALL_INDICATOR: &str = "Call";
 
-/// [`TypeParameter`](scale_info::TypeParameter) name for `extra`.
+/// [`TypeParameter`] name for `extra`.
 pub const EXTRA_INDICATOR: &str = "Extra";
 
-/// [`TypeParameter`](scale_info::TypeParameter) name for `signature`.
+/// [`TypeParameter`] name for `signature`.
 pub const SIGNATURE_INDICATOR: &str = "Signature";
 
+/// Find `Version` constant and its type in `System` pallet.
 macro_rules! impl_runtime_version_data_and_ty {
-    ($($ty: ty, $func: ident), *) => {
+    ($(#[$attr:meta] $ty: ty, $func: ident), *) => {
         $(
+            #[$attr]
             fn $func(pallets: &[$ty]) -> Result<(Vec<u8>, UntrackedSymbol<TypeId>), MetaVersionErrorPallets> {
-    let mut runtime_version_data_and_ty = None;
-    let mut system_block = false;
-    for pallet in pallets.iter() {
-        if pallet.name == "System" {
-            system_block = true;
-            for constant in pallet.constants.iter() {
-                if constant.name == "Version" {
-                    runtime_version_data_and_ty = Some((constant.value.to_vec(), constant.ty))
+                let mut runtime_version_data_and_ty = None;
+                let mut system_block = false;
+                for pallet in pallets.iter() {
+                    if pallet.name == "System" {
+                        system_block = true;
+                        for constant in pallet.constants.iter() {
+                            if constant.name == "Version" {
+                                runtime_version_data_and_ty = Some((constant.value.to_vec(), constant.ty))
+                            }
+                        }
+                        break;
+                    }
                 }
+                if !system_block {
+                    return Err(MetaVersionErrorPallets::NoSystemPallet);
+                }
+                runtime_version_data_and_ty.ok_or(MetaVersionErrorPallets::NoVersionInConstants)
             }
-            break;
-        }
-    }
-    if !system_block {
-        return Err(MetaVersionErrorPallets::NoSystemPallet);
-    }
-    runtime_version_data_and_ty.ok_or(MetaVersionErrorPallets::NoVersionInConstants)
-}
         )*
     }
 }
 
 impl_runtime_version_data_and_ty!(
+    /// Find `Version` constant and its type in `System` pallet for `V14` metadata.
     PalletMetadataV14<PortableForm>,
     runtime_version_data_and_ty_v14
 );
 impl_runtime_version_data_and_ty!(
+    /// Find `Version` constant and its type in `System` pallet for `V15` metadata.
     PalletMetadataV15<PortableForm>,
     runtime_version_data_and_ty_v15
 );
 
+/// Extract [`SpecNameVersion`] from parsed data.
 fn spec_name_version_from_runtime_version_data(
     parsed_data: ParsedData,
 ) -> Result<SpecNameVersion, MetaVersionErrorPallets> {

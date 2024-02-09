@@ -13,11 +13,8 @@ use primitive_types::H256;
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, IntoPortable, Path, Registry, TypeDef,
 };
-#[cfg(feature = "std")]
-use sp_core::{crypto::AccountId32, sr25519::Signature as SignatureSr25519};
-#[cfg(feature = "std")]
-use sp_runtime::generic::Era;
 
+use crate::additional_types::{AccountId32, Era, SignatureSr25519};
 use crate::cards::{
     ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
 };
@@ -25,7 +22,6 @@ use crate::error::{ParserError, RegistryError, SignableError};
 use crate::special_indicators::SpecialtyUnsignedInteger;
 use crate::storage_data::{decode_as_storage_entry, KeyData, KeyPart};
 use crate::traits::AsMetadata;
-#[cfg(feature = "std")]
 use crate::unchecked_extrinsic::{decode_as_unchecked_extrinsic, UncheckedExtrinsic};
 use crate::{decode_all_as_type, parse_transaction, parse_transaction_unmarked, ShortSpecs};
 
@@ -955,7 +951,7 @@ fn unchecked_extrinsic_1() {
                             type_name: Some("AccountId".to_string()),
                             field_docs: "".to_string(),
                             data: ExtendedData {
-                                data: ParsedData::Id(AccountId32::new(hex::decode("d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d").unwrap().try_into().unwrap())),
+                                data: ParsedData::Id(AccountId32(hex::decode("d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d").unwrap().try_into().unwrap())),
                                 info: vec![
                                     Info {
                                         docs: "".to_string(),
@@ -997,7 +993,7 @@ fn unchecked_extrinsic_1() {
                             type_name: Some("sr25519::Signature".to_string()),
                             field_docs: "".to_string(),
                             data: ExtendedData {
-                                data: ParsedData::SignatureSr25519(SignatureSr25519::from_raw(hex::decode("58e09098782f2e40602b37d94fe3e2d051c2e4927c34bc85525297310642db08280110b4a02b89676e966d07fdf7f362cdeb858d28d681564bd0f7d33dce5c8c").unwrap().try_into().unwrap())),
+                                data: ParsedData::SignatureSr25519(SignatureSr25519(hex::decode("58e09098782f2e40602b37d94fe3e2d051c2e4927c34bc85525297310642db08280110b4a02b89676e966d07fdf7f362cdeb858d28d681564bd0f7d33dce5c8c").unwrap().try_into().unwrap())),
                                 info: vec![
                                     Info {
                                         docs: "".to_string(),
@@ -1186,7 +1182,7 @@ fn unchecked_extrinsic_1() {
                                         type_name: Some("AccountId".to_string()),
                                         field_docs: "".to_string(),
                                         data: ExtendedData {
-                                            data: ParsedData::Id(AccountId32::new(hex::decode("8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48").unwrap().try_into().unwrap())),
+                                            data: ParsedData::Id(AccountId32(hex::decode("8eaf04151687736326c9fea17e25fc5287613693c912909cb226aa4794f26a48").unwrap().try_into().unwrap())),
                                             info: vec![
                                                 Info {
                                                     docs: "".to_string(),

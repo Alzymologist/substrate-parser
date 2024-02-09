@@ -1,5 +1,5 @@
 //! Errors.
-use external_memory_tools::BufferError;
+use external_memory_tools::{BufferError, ExternalMemory};
 use primitive_types::H256;
 
 use crate::std::string::String;
@@ -12,8 +12,6 @@ use std::{
 
 #[cfg(not(feature = "std"))]
 use core::fmt::{Display, Formatter, Result as FmtResult};
-
-use external_memory_tools::ExternalMemory;
 
 use crate::traits::AsMetadata;
 
@@ -172,15 +170,14 @@ impl RegistryError {
     }
 }
 
-/// Errors caused by [`RuntimeMetadataV14`](frame_metadata::v14::RuntimeMetadataV14)
-/// extensions set.
+/// Errors caused by the extensions set.
 ///
 /// Decoding signable transactions puts a set of requirements on the metadata
 /// itself. Extensions are expected to contain:
 ///
 /// - no more than one `Era`
 /// - no more than one block hash
-/// - metadata spec version (exactly once)
+/// - metadata `spec_version` (exactly once)
 /// - chain genesis hash (exactly once)
 ///
 /// Spec version of the metadata and genesis hash are required to check that the
@@ -293,7 +290,7 @@ impl MetaVersionErrorPallets {
     }
 }
 
-/// Error in parsing an unchecked extrinsic.
+/// Error in parsing of an unchecked extrinsic.
 #[derive(Debug, Eq, PartialEq)]
 pub enum UncheckedExtrinsicError<E: ExternalMemory, M: AsMetadata<E>> {
     FormatNoCompact,
@@ -319,8 +316,7 @@ where
     }
 }
 
-/// Implement [`Display`] for errors in both `std` and `no_std` cases.
-/// Implement `Error` for `std` case.
+/// Implement [`Display`] and `Error` (`std` only). Errors with no generics.
 macro_rules! impl_display_and_error {
     ($($ty: ty), *) => {
         $(
@@ -347,8 +343,7 @@ impl_display_and_error!(
     RegistryError
 );
 
-/// Implement [`Display`] for errors in both `std` and `no_std` cases.
-/// Implement `Error` for `std` case.
+/// Implement [`Display`] and `Error` (`std` only). Errors with single `<E>` generic.
 macro_rules! impl_display_and_error_gen {
     ($($ty: ty), *) => {
         $(
@@ -382,9 +377,7 @@ impl<E: ExternalMemory> From<RegistryError> for ParserError<E> {
     }
 }
 
-/// Implement [`Display`] for errors in both `std` and `no_std` cases.
-/// Implement `Error` for `std` case.
-/// Implement `From<ParserError<E>>` for simplified error conversion.
+/// Implement [`Display`], `Error` (`std` only), and `From<ParserError<E>>` conversion.
 macro_rules! impl_display_error_from_2gen {
     ($($ty: ty), *) => {
         $(

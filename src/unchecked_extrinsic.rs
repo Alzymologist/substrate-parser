@@ -1,15 +1,12 @@
 //! Decode unchecked extrinsics, signed or unsigned.
 //!
-//! Here in decoding it is assumed that the unchecked extrinsic is an encoded
-//! opaque `Vec<u8>`, its general structure described
-//! [here](https://docs.substrate.io/reference/transaction-format/).
-//!
-//! Unchecked extrinsic type [`UncheckedExtrinsic`](https://docs.rs/sp-runtime/latest/sp_runtime/generic/struct.UncheckedExtrinsic.html)
-//! is metadata-specific, and is described in
-//! [`ExtrinsicMetadata`](https://docs.rs/frame-metadata/15.0.0/frame_metadata/v14/struct.ExtrinsicMetadata.html).
-//! There `ty` is the extrinsic type, which is expected to resolve into
-//! `Vec<u8>`, and its parameters specify the address, signature, extra data,
-//! and call types, from which the extrinsic is built.
+//! Unchecked extrinsics are assumed to be SCALE-encoded opaque `Vec<u8>`, its
+//! general structure described
+//! [here](https://docs.substrate.io/reference/transaction-format/). It could be
+//! signed or unsigned, the type
+//! [`UncheckedExtrinsic`](https://docs.rs/sp-runtime/latest/sp_runtime/generic/struct.UncheckedExtrinsic.html)
+//! itself contains metadata-specific blocks, the types of which could be found
+//! in metadata.
 //!
 //! Signed unchecked extrinsic structure:
 //!
@@ -37,11 +34,17 @@
 //! Signed and unsigned unchecked extrinsics are differentiated by version byte.
 //! The first bit in the version byte is `0` if the extrinsic is unsigned and
 //! `1` if the extrinsic is signed. Other 7 bits must match the extrinsic
-//! `version` from [`ExtrinsicMetadata`](https://docs.rs/frame-metadata/15.0.0/frame_metadata/v14/struct.ExtrinsicMetadata.html).
+//! `version`, found, for example, in `version` field of
+//! [`v14::ExtrinsicMetadata`](https://docs.rs/frame-metadata/latest/frame_metadata/v14/struct.ExtrinsicMetadata.html)
+//! or [`v15::ExtrinsicMetadata`](https://docs.rs/frame-metadata/latest/frame_metadata/v15/struct.ExtrinsicMetadata.html).
 //! Currently the `version` has a constant value of `4` (see
-//! [`EXTRINSIC_FORMAT_VERSION`](https://docs.rs/sp-runtime/9.0.0/src/sp_runtime/generic/unchecked_extrinsic.rs.html#39)
+//! [`EXTRINSIC_FORMAT_VERSION`](https://docs.rs/sp-runtime/31.0.1/src/sp_runtime/generic/unchecked_extrinsic.rs.html#39)
 //! in `sp_runtime`, thus version byte is `0x04` for unsigned extrinsics and
 //! `0x84` for signed extrinsics.
+//!
+//! Types defining unchecked extrinsic content, i.e. `call_ty`, `address_ty`,
+//! `extra_ty`, `signature_ty`, and `version` value are determined for metadata
+//! implementing [`AsCompleteMetadata`] trait.
 #[cfg(feature = "std")]
 use std::cmp::Ordering;
 
