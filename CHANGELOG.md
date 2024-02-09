@@ -1,3 +1,14 @@
+# v0.6.0
+
+API changes:
+
+- Features simplified: it's either `std` (default), or `no-std`. Features were removed, thus version bump
+
+Other changes
+
+- Bring documentation up to date
+- Remove `sp-core` and `sp-runtime` dependencies
+
 # v0.5.0
 
 New features:
