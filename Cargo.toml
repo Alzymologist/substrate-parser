@@ -15,7 +15,7 @@ exclude = ["/for_tests", "/.github"]
 base58 = {version = "0.2.0"}
 bitvec = {version = "1.0.1", default-features = false, features = ["alloc"]}
 blake2 = {version = "0.10.6", default-features = false}
-external-memory-tools = {version = "0.1.0", default-features = false}
+external-memory-tools = {version = "0.1.1", default-features = false}
 frame-metadata = {version = "16.0.0", default-features = false, features = ["current", "decode"]}
 hex = {version = "0.4.3", default-features = false, features = ["alloc"]}
 num-bigint = {version = "0.4.3", default-features = false}

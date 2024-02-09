@@ -605,7 +605,9 @@ where
     /// Extensions are cut to ensure the call decoding never gets outside the
     /// call data.
     pub fn data_no_extensions(&self) -> B {
-        self.data.limit_length(self.extensions_start())
+        self.data
+            .limit_length(self.extensions_start())
+            .expect("checked extensions start to be within limits when generating `MarkedData`")
     }
 
     /// Start positions for call data.
