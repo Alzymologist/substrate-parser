@@ -38,7 +38,7 @@
 //! [`v14::ExtrinsicMetadata`](https://docs.rs/frame-metadata/latest/frame_metadata/v14/struct.ExtrinsicMetadata.html)
 //! or [`v15::ExtrinsicMetadata`](https://docs.rs/frame-metadata/latest/frame_metadata/v15/struct.ExtrinsicMetadata.html).
 //! Currently the `version` has a constant value of `4` (see
-//! [`EXTRINSIC_FORMAT_VERSION`](https://docs.rs/sp-runtime/latest/src/sp_runtime/generic/unchecked_extrinsic.rs.html#39)
+//! [`EXTRINSIC_FORMAT_VERSION`](https://docs.rs/sp-runtime/31.0.1/src/sp_runtime/generic/unchecked_extrinsic.rs.html#39)
 //! in `sp_runtime`, thus version byte is `0x04` for unsigned extrinsics and
 //! `0x84` for signed extrinsics.
 //!
