@@ -145,7 +145,7 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV14 {
     }
 
     fn spec_name_version(&self) -> Result<SpecNameVersion, Self::MetaStructureError> {
-        let (value, ty) = runtime_version_data_and_ty_v14(&self.pallets)?;
+        let (value, ty) = version_constant_data_and_ty_v14(&self.pallets)?;
         match decode_all_as_type::<&[u8], (), RuntimeMetadataV14>(
             &ty,
             &value.as_ref(),
@@ -247,7 +247,7 @@ impl<E: ExternalMemory> AsMetadata<E> for RuntimeMetadataV15 {
     }
 
     fn spec_name_version(&self) -> Result<SpecNameVersion, Self::MetaStructureError> {
-        let (value, ty) = runtime_version_data_and_ty_v15(&self.pallets)?;
+        let (value, ty) = version_constant_data_and_ty_v15(&self.pallets)?;
         match decode_all_as_type::<&[u8], (), RuntimeMetadataV15>(
             &ty,
             &value.as_ref(),
@@ -336,11 +336,11 @@ pub const EXTRA_INDICATOR: &str = "Extra";
 pub const SIGNATURE_INDICATOR: &str = "Signature";
 
 /// Find `Version` constant and its type in `System` pallet.
-macro_rules! impl_runtime_version_data_and_ty {
+macro_rules! version_constant_data_and_ty {
     ($(#[$attr:meta] $ty: ty, $func: ident), *) => {
         $(
             #[$attr]
-            fn $func(pallets: &[$ty]) -> Result<(Vec<u8>, UntrackedSymbol<TypeId>), MetaVersionErrorPallets> {
+            pub fn $func(pallets: &[$ty]) -> Result<(Vec<u8>, UntrackedSymbol<TypeId>), MetaVersionErrorPallets> {
                 let mut runtime_version_data_and_ty = None;
                 let mut system_block = false;
                 for pallet in pallets.iter() {
@@ -363,15 +363,15 @@ macro_rules! impl_runtime_version_data_and_ty {
     }
 }
 
-impl_runtime_version_data_and_ty!(
+version_constant_data_and_ty!(
     /// Find `Version` constant and its type in `System` pallet for `V14` metadata.
     PalletMetadataV14<PortableForm>,
-    runtime_version_data_and_ty_v14
+    version_constant_data_and_ty_v14
 );
-impl_runtime_version_data_and_ty!(
+version_constant_data_and_ty!(
     /// Find `Version` constant and its type in `System` pallet for `V15` metadata.
     PalletMetadataV15<PortableForm>,
-    runtime_version_data_and_ty_v15
+    version_constant_data_and_ty_v15
 );
 
 /// Extract [`SpecNameVersion`] from parsed data.
