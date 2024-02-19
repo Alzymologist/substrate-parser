@@ -24,7 +24,7 @@ parity-scale-codec = {version = "3.6.9", default-features = false, features = ["
 primitive-types = {version = "0.12.2", default-features = false}
 scale-info = {version = "2.10.0", default-features = false}
 sp-arithmetic = {version = "23.0.0", default-features = false}
-sp-core-hashing = {version = "15.0.0", default-features = false}
+sp-core-hashing = {version = "16.0.0", default-features = false}
 
 [features]
 default = ["std"]
