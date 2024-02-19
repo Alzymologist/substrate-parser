@@ -1,3 +1,9 @@
+# v0.6.1
+
+- Add interpretation of `TxVersion` in struct fields, not only extensions
+- Some functions made public
+- Dependency bumps
+
 # v0.6.0
 
 API changes:
