@@ -45,6 +45,12 @@ pub const SPEC_VERSION_ID_SET: &[&str] = &["spec_version"];
 /// If the value is `str`, it will be considered `spec_name`.
 pub const SPEC_NAME_ID_SET: &[&str] = &["spec_name"];
 
+/// [`Field`] `name` set indicating the value *may* be metadata
+/// `transaction_version`.
+///
+/// If the value is unsigned integer, it will be considered `transaction_version`.
+pub const TX_VERSION_ID_SET: &[&str] = &["tx_version", "transaction_version"];
+
 /// [`Type`]-associated [`Path`] `ident` for
 /// [`sp_core::crypto::AccountId32`](https://docs.rs/sp-core/latest/sp_core/crypto/struct.AccountId32.html).
 pub const ACCOUNT_ID32: &str = "AccountId32";
@@ -235,6 +241,7 @@ pub enum Hint {
     FieldNonce,
     FieldSpecName,
     FieldSpecVersion,
+    FieldTxVersion,
 }
 
 impl Hint {
@@ -246,6 +253,7 @@ impl Hint {
                 a if NONCE_ID_SET.contains(&a) => Self::FieldNonce,
                 a if SPEC_VERSION_ID_SET.contains(&a) => Self::FieldSpecVersion,
                 a if SPEC_NAME_ID_SET.contains(&a) => Self::FieldSpecName,
+                a if TX_VERSION_ID_SET.contains(&a) => Self::FieldTxVersion,
                 _ => Self::None,
             },
             None => Self::None,
@@ -295,7 +303,7 @@ impl Hint {
             Hint::CheckSpecVersion | Hint::FieldSpecVersion => {
                 SpecialtyUnsignedInteger::SpecVersion
             }
-            Hint::CheckTxVersion => SpecialtyUnsignedInteger::TxVersion,
+            Hint::CheckTxVersion | Hint::FieldTxVersion => SpecialtyUnsignedInteger::TxVersion,
             Hint::CheckNonce | Hint::FieldNonce => SpecialtyUnsignedInteger::Nonce,
             Hint::ChargeTransactionPayment => SpecialtyUnsignedInteger::Tip,
             Hint::FieldBalance => SpecialtyUnsignedInteger::Balance,
