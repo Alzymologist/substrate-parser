@@ -24,7 +24,7 @@
 use external_memory_tools::{AddressableBuffer, ExternalMemory};
 use frame_metadata::v14::{StorageEntryMetadata, StorageEntryType, StorageHasher};
 use scale_info::{form::PortableForm, interner::UntrackedSymbol, TypeDef};
-use sp_core_hashing::{blake2_128, twox_64};
+use sp_crypto_hashing::{blake2_128, twox_64};
 
 use crate::std::{string::String, vec::Vec};
 
