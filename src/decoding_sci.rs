@@ -31,7 +31,7 @@ use crate::cards::{
     SequenceData, SequenceRawData, VariantData,
 };
 use crate::compacts::{find_compact, get_compact};
-use crate::error::{ParserError, RegistryError, SignableError};
+use crate::error::{ParserError, RegistryError, RegistryInternalError, SignableError};
 use crate::propagated::{Checker, Propagated, SpecialtySet};
 use crate::special_indicators::{
     Hint, PalletSpecificItem, SpecialtyTypeChecked, SpecialtyTypeHinted, ENUM_INDEX_ENCODED_LEN,
@@ -760,7 +760,7 @@ pub fn find_bit_order_ty<E, M>(
     id: u32,
     ext_memory: &mut E,
     registry: &M::TypeRegistry,
-) -> Result<FoundBitOrder, RegistryError>
+) -> Result<FoundBitOrder, RegistryError<E>>
 where
     E: ExternalMemory,
     M: AsMetadata<E>,
@@ -771,11 +771,17 @@ where
             Some(x) => match x.as_str() {
                 LSB0 => Ok(FoundBitOrder::Lsb0),
                 MSB0 => Ok(FoundBitOrder::Msb0),
-                _ => Err(RegistryError::NotBitOrderType { id }),
+                _ => Err(RegistryError::Internal(
+                    RegistryInternalError::NotBitOrderType { id },
+                )),
             },
-            None => Err(RegistryError::NotBitOrderType { id }),
+            None => Err(RegistryError::Internal(
+                RegistryInternalError::NotBitOrderType { id },
+            )),
         },
-        _ => Err(RegistryError::NotBitOrderType { id }),
+        _ => Err(RegistryError::Internal(
+            RegistryInternalError::NotBitOrderType { id },
+        )),
     }
 }
 
@@ -886,7 +892,9 @@ where
             FoundBitOrder::Msb0 => Msb0::patch_bitvec_u64::<B, E>(data, ext_memory, position)
                 .map(ParsedData::BitVecU64Msb0),
         },
-        _ => Err(ParserError::Registry(RegistryError::NotBitStoreType { id })),
+        _ => Err(ParserError::Registry(RegistryError::Internal(
+            RegistryInternalError::NotBitStoreType { id },
+        ))),
     }
 }
 
@@ -1141,7 +1149,7 @@ pub fn husk_type<E, M>(
     registry: &M::TypeRegistry,
     ext_memory: &mut E,
     mut checker: Checker,
-) -> Result<HuskedType, RegistryError>
+) -> Result<HuskedType, RegistryError<E>>
 where
     E: ExternalMemory,
     M: AsMetadata<E>,

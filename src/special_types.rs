@@ -6,9 +6,9 @@ use primitive_types::{H160, H256, H512};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
 
 #[cfg(all(not(feature = "std"), not(test)))]
-use core::{convert::TryInto, mem::size_of};
+use core::mem::size_of;
 #[cfg(any(feature = "std", test))]
-use std::{convert::TryInto, mem::size_of};
+use std::mem::size_of;
 
 use crate::std::{borrow::ToOwned, vec::Vec};
 
@@ -18,7 +18,7 @@ use crate::additional_types::{
 };
 use crate::cards::{ParsedData, Sequence, SequenceData};
 use crate::compacts::get_compact;
-use crate::error::{ParserError, RegistryError};
+use crate::error::{ParserError, RegistryError, RegistryInternalError};
 use crate::printing_balance::AsBalance;
 use crate::propagated::SpecialtySet;
 use crate::special_indicators::{SpecialtyH256, SpecialtyUnsignedInteger};
@@ -207,7 +207,6 @@ pub(crate) trait UnsignedInteger:
     where
         B: AddressableBuffer<E>,
         E: ExternalMemory;
-    fn default_card_name() -> &'static str;
 }
 
 /// Implement [`UnsignedInteger`] trait for all unsigned integers.
@@ -225,9 +224,6 @@ macro_rules! impl_unsigned_integer {
                         else {<Self>::cut_and_decode::<B, E>(data, ext_memory, position)?}
                     };
                     Ok(ParsedData::$enum_variant{value, specialty: specialty_set.unsigned_integer()})
-                }
-                fn default_card_name() -> &'static str {
-                    stringify!($ty)
                 }
             }
         )*
@@ -288,7 +284,7 @@ macro_rules! impl_block_compact {
                     E: ExternalMemory
                 {
                     let value = {
-                        if let Some(id) = compact_at {return Err(ParserError::Registry(RegistryError::UnexpectedCompactInsides{id}))}
+                        if let Some(id) = compact_at {return Err(ParserError::Registry(RegistryError::Internal(RegistryInternalError::UnexpectedCompactInsides{id})))}
                         else {<Self>::cut_and_decode::<B, E>(data, ext_memory, position)?}
                     };
                     Ok(ParsedData::$enum_variant(value))
