@@ -18,7 +18,7 @@ use crate::additional_types::{AccountId32, Era, SignatureSr25519};
 use crate::cards::{
     ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
 };
-use crate::error::{ParserError, RegistryError, SignableError};
+use crate::error::{ParserError, RegistryError, RegistryInternalError, SignableError};
 use crate::special_indicators::SpecialtyUnsignedInteger;
 use crate::storage_data::{decode_as_storage_entry, KeyData, KeyPart};
 use crate::traits::AsMetadata;
@@ -670,7 +670,9 @@ fn storage_2_spoiled_digest() {
         &metadata.types,
     )
     .unwrap_err();
-    let reply_known = ParserError::Registry(RegistryError::CyclicMetadata { id: 11 });
+    let reply_known = ParserError::Registry(RegistryError::Internal(
+        RegistryInternalError::CyclicMetadata { id: 11 },
+    ));
     assert_eq!(reply_known, reply);
 }
 

@@ -114,7 +114,7 @@ impl<E: ExternalMemory> StorageError<E> {
 #[derive(Debug, Eq, PartialEq)]
 pub enum ParserError<E: ExternalMemory> {
     Buffer(BufferError<E>),
-    Registry(RegistryError),
+    Registry(RegistryError<E>),
     NoCompact { position: usize },
     SomeDataNotUsedBlob { from: usize },
     TypeFailure { position: usize, ty: &'static str },
@@ -144,9 +144,29 @@ impl<E: ExternalMemory> ParserError<E> {
     }
 }
 
-/// Errors in metadata types registry.
+/// Errors in metadata types registry
 #[derive(Debug, Eq, PartialEq)]
-pub enum RegistryError {
+pub enum RegistryError<E: ExternalMemory> {
+    External(E::ExternalMemoryError),
+    Internal(RegistryInternalError),
+}
+
+impl<E: ExternalMemory> RegistryError<E> {
+    fn error_text(&self) -> String {
+        match &self {
+            RegistryError::External(external_memory_error) => {
+                format!("Error accessing type from external memory. {external_memory_error}")
+            }
+            RegistryError::Internal(registry_internal_error) => {
+                format!("{registry_internal_error}")
+            }
+        }
+    }
+}
+
+/// Internal errors in metadata types registry.
+#[derive(Debug, Eq, PartialEq)]
+pub enum RegistryInternalError {
     CyclicMetadata { id: u32 },
     ExtrinsicNoCallParam,
     NotBitOrderType { id: u32 },
@@ -156,17 +176,23 @@ pub enum RegistryError {
     UnexpectedExtrinsicType { extrinsic_ty_id: u32 },
 }
 
-impl RegistryError {
+impl RegistryInternalError {
     fn error_text(&self) -> String {
         match &self {
-            RegistryError::CyclicMetadata { id } => format!("Resolving type id {id} in metadata type registry results in cycling."),
-            RegistryError::ExtrinsicNoCallParam => String::from("Extrinsic type in provided metadata has no specified call parameter."),
-            RegistryError::NotBitOrderType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitOrder type."),
-            RegistryError::NotBitStoreType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitStore type."),
-            RegistryError::TypeNotResolved { id } => format!("Unable to resolve type id {id} in metadata type registry."),
-            RegistryError::UnexpectedCompactInsides { id } => format!("Compact type {id} in metadata type registry has unexpected type inside compact."),
-            RegistryError::UnexpectedExtrinsicType { extrinsic_ty_id } => format!("Decoding is based on assumption that extrinsic type resolves into a SCALE-encoded opaque `Vec<u8>`. Unexpected type description is found for type {extrinsic_ty_id} in metadata type registry."),
+            RegistryInternalError::CyclicMetadata { id } => format!("Resolving type id {id} in metadata type registry results in cycling."),
+            RegistryInternalError::ExtrinsicNoCallParam => String::from("Extrinsic type in provided metadata has no specified call parameter."),
+            RegistryInternalError::NotBitOrderType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitOrder type."),
+            RegistryInternalError::NotBitStoreType { id } => format!("BitVec type {id} in metadata type registry has unexpected BitStore type."),
+            RegistryInternalError::TypeNotResolved { id } => format!("Unable to resolve type id {id} in metadata type registry."),
+            RegistryInternalError::UnexpectedCompactInsides { id } => format!("Compact type {id} in metadata type registry has unexpected type inside compact."),
+            RegistryInternalError::UnexpectedExtrinsicType { extrinsic_ty_id } => format!("Decoding is based on assumption that extrinsic type resolves into a SCALE-encoded opaque `Vec<u8>`. Unexpected type description is found for type {extrinsic_ty_id} in metadata type registry."),
         }
+    }
+}
+
+impl<E: ExternalMemory> From<RegistryInternalError> for RegistryError<E> {
+    fn from(registry_internal_error: RegistryInternalError) -> Self {
+        RegistryError::Internal(registry_internal_error)
     }
 }
 
@@ -211,7 +237,7 @@ impl ExtensionsError {
 /// Errors in expected structure of V14 metadata.
 #[derive(Debug, Eq, PartialEq)]
 pub enum MetaStructureErrorV14 {
-    ExtrinsicTypeNotResolved(RegistryError),
+    ExtrinsicTypeNotResolved(RegistryInternalError),
     NoAddressParam,
     NoCallParam,
     NoExtraParam,
@@ -240,9 +266,19 @@ impl From<MetaVersionErrorPallets> for MetaStructureErrorV14 {
     }
 }
 
-impl From<RegistryError> for MetaStructureErrorV14 {
-    fn from(registry_error_extrinsic: RegistryError) -> Self {
+impl From<RegistryInternalError> for MetaStructureErrorV14 {
+    fn from(registry_error_extrinsic: RegistryInternalError) -> Self {
         MetaStructureErrorV14::ExtrinsicTypeNotResolved(registry_error_extrinsic)
+    }
+}
+
+impl From<RegistryError<()>> for MetaStructureErrorV14 {
+    fn from(registry_error_extrinsic: RegistryError<()>) -> Self {
+        if let RegistryError::Internal(internal) = registry_error_extrinsic {
+            MetaStructureErrorV14::ExtrinsicTypeNotResolved(internal)
+        } else {
+            unreachable!("RegistryError<()> can not have externally originated variants.")
+        }
     }
 }
 
@@ -340,7 +376,7 @@ impl_display_and_error!(
     ExtensionsError,
     MetaStructureErrorV14,
     MetaVersionErrorPallets,
-    RegistryError
+    RegistryInternalError
 );
 
 /// Implement [`Display`] and `Error` (`std` only). Errors with single `<E>` generic.
@@ -363,7 +399,7 @@ macro_rules! impl_display_and_error_gen {
     }
 }
 
-impl_display_and_error_gen!(ParserError<E>, StorageError<E>);
+impl_display_and_error_gen!(ParserError<E>, RegistryError<E>, StorageError<E>);
 
 impl<E: ExternalMemory> From<BufferError<E>> for ParserError<E> {
     fn from(buffer_error: BufferError<E>) -> Self {
@@ -371,8 +407,14 @@ impl<E: ExternalMemory> From<BufferError<E>> for ParserError<E> {
     }
 }
 
-impl<E: ExternalMemory> From<RegistryError> for ParserError<E> {
-    fn from(registry_error: RegistryError) -> Self {
+impl<E: ExternalMemory> From<RegistryInternalError> for ParserError<E> {
+    fn from(registry_error: RegistryInternalError) -> Self {
+        ParserError::Registry(RegistryError::Internal(registry_error))
+    }
+}
+
+impl<E: ExternalMemory> From<RegistryError<E>> for ParserError<E> {
+    fn from(registry_error: RegistryError<E>) -> Self {
         ParserError::Registry(registry_error)
     }
 }

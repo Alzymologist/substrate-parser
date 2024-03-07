@@ -36,7 +36,9 @@ use scale_info::{
 use crate::cards::ParsedData;
 use crate::decode_all_as_type;
 use crate::decoding_sci::husk_type;
-use crate::error::{MetaStructureErrorV14, MetaVersionErrorPallets, RegistryError};
+use crate::error::{
+    MetaStructureErrorV14, MetaVersionErrorPallets, RegistryError, RegistryInternalError,
+};
 use crate::propagated::Checker;
 use crate::special_indicators::{SpecialtyStr, SpecialtyUnsignedInteger};
 
@@ -119,7 +121,11 @@ pub struct SpecNameVersion {
 
 /// Generalized types registry. Could be addressed in external memory.
 pub trait ResolveType<E: ExternalMemory> {
-    fn resolve_ty(&self, id: u32, ext_memory: &mut E) -> Result<Type<PortableForm>, RegistryError>;
+    fn resolve_ty(
+        &self,
+        id: u32,
+        ext_memory: &mut E,
+    ) -> Result<Type<PortableForm>, RegistryError<E>>;
 }
 
 impl<E: ExternalMemory> ResolveType<E> for PortableRegistry {
@@ -127,10 +133,12 @@ impl<E: ExternalMemory> ResolveType<E> for PortableRegistry {
         &self,
         id: u32,
         _ext_memory: &mut E,
-    ) -> Result<Type<PortableForm>, RegistryError> {
+    ) -> Result<Type<PortableForm>, RegistryError<E>> {
         match self.resolve(id) {
             Some(a) => Ok(a.to_owned()),
-            None => Err(RegistryError::TypeNotResolved { id }),
+            None => Err(RegistryError::Internal(
+                RegistryInternalError::TypeNotResolved { id },
+            )),
         }
     }
 }

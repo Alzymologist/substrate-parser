@@ -4,7 +4,7 @@ use scale_info::{form::PortableForm, Field, Path, Type};
 use crate::std::vec::Vec;
 
 use crate::cards::Info;
-use crate::error::RegistryError;
+use crate::error::RegistryInternalError;
 use crate::special_indicators::{Hint, SpecialtyH256, SpecialtyUnsignedInteger};
 use crate::traits::SignedExtensionMetadata;
 
@@ -51,9 +51,9 @@ impl SpecialtySet {
 
     /// Check that `compact_at` field is not `Some(_)`, i.e. there was no
     /// compact type encountered.
-    pub fn reject_compact(&self) -> Result<(), RegistryError> {
+    pub fn reject_compact(&self) -> Result<(), RegistryInternalError> {
         if let Some(id) = self.compact_at {
-            Err(RegistryError::UnexpectedCompactInsides { id })
+            Err(RegistryInternalError::UnexpectedCompactInsides { id })
         } else {
             Ok(())
         }
@@ -113,7 +113,7 @@ impl Checker {
 
     /// Check that `compact_at` field in associated [`SpecialtySet`] is not
     /// `Some(_)`, i.e. there was no compact type encountered.
-    pub fn reject_compact(&self) -> Result<(), RegistryError> {
+    pub fn reject_compact(&self) -> Result<(), RegistryInternalError> {
         self.specialty_set.reject_compact()
     }
 
@@ -124,7 +124,10 @@ impl Checker {
 
     /// Use known, propagated from above `Checker` to construct a new `Checker`
     /// for an individual [`Field`].
-    pub fn update_for_field(&self, field: &Field<PortableForm>) -> Result<Self, RegistryError> {
+    pub fn update_for_field(
+        &self,
+        field: &Field<PortableForm>,
+    ) -> Result<Self, RegistryInternalError> {
         let mut checker = self.clone();
 
         // update `Hint`
@@ -140,7 +143,11 @@ impl Checker {
 
     /// Use known, propagated from above `Checker` to construct a new `Checker`
     /// for a [`Type`].
-    pub fn update_for_ty(&self, ty: &Type<PortableForm>, id: u32) -> Result<Self, RegistryError> {
+    pub fn update_for_ty(
+        &self,
+        ty: &Type<PortableForm>,
+        id: u32,
+    ) -> Result<Self, RegistryInternalError> {
         let mut checker = self.clone();
         checker.check_id(id)?;
         checker.specialty_set.update_from_path(&ty.path);
@@ -160,9 +167,9 @@ impl Checker {
     /// If type was already encountered in this `Checker` (and thus its `id` is
     /// in `cycle_check`), the decoding has entered a cycle and must be stopped.
     /// If not, type `id` is added into `cycle_check`.
-    pub fn check_id(&mut self, id: u32) -> Result<(), RegistryError> {
+    pub fn check_id(&mut self, id: u32) -> Result<(), RegistryInternalError> {
         if self.cycle_check.contains(&id) {
-            Err(RegistryError::CyclicMetadata { id })
+            Err(RegistryInternalError::CyclicMetadata { id })
         } else {
             self.cycle_check.push(id);
             Ok(())
@@ -225,7 +232,7 @@ impl Propagated {
     pub fn for_field(
         checker: &Checker,
         field: &Field<PortableForm>,
-    ) -> Result<Self, RegistryError> {
+    ) -> Result<Self, RegistryInternalError> {
         Ok(Self {
             checker: Checker::update_for_field(checker, field)?,
             info: Vec::new(),
@@ -238,7 +245,7 @@ impl Propagated {
         checker: &Checker,
         ty: &Type<PortableForm>,
         id: u32,
-    ) -> Result<Self, RegistryError> {
+    ) -> Result<Self, RegistryInternalError> {
         Ok(Self {
             checker: Checker::update_for_ty(checker, ty, id)?,
             info: Vec::new(),
@@ -252,7 +259,7 @@ impl Propagated {
 
     /// Check that `compact_at` field in associated [`SpecialtySet`] is not
     /// `Some(_)`, i.e. there was no compact type encountered.
-    pub fn reject_compact(&self) -> Result<(), RegistryError> {
+    pub fn reject_compact(&self) -> Result<(), RegistryInternalError> {
         self.checker.specialty_set.reject_compact()
     }
 
