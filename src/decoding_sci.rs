@@ -13,10 +13,11 @@ use scale_info::{
     TypeDefPrimitive, Variant,
 };
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
-
-use crate::additional_types::{
-    AccountId32, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
-    SignatureSr25519,
+use substrate_crypto_light::{
+    common::AccountId32,
+    ecdsa::{Public as PublicEcdsa, Signature as SignatureEcdsa},
+    ed25519::{Public as PublicEd25519, Signature as SignatureEd25519},
+    sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
 };
 
 use crate::std::{borrow::ToOwned, string::String, vec::Vec};

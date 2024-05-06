@@ -136,12 +136,13 @@
 //! a one of balance-displaying [pallets](crate::cards::PALLETS_BALANCE_VALID)
 //! or in extensions.
 //!
-//! Some types (`AccountId32`, `Era`, public key types, signature types) are
-//! re-defined in this crate (module `additional_types`) similarly to their
-//! original counterparts in `sp_core` and `sp_runtime` crates. This is done to
-//! ensure `no_std` compatibility and simplify dependencies tree. Internal
-//! content of these types could be seamlessly transferred into original types
-//! if need be.
+//! Some types (`AccountId32`, public key types, signature types) are used as
+//! re-defined in lightweight crate `substrate_crypto_light`, `Era` is
+//! re-defined in module `additional_types`. These types are similar to their
+//! original counterparts in `sp_core` and `sp_runtime` crates. Re-defining
+//! is done to ensure `no_std` compatibility and simplify dependencies tree.
+//! Internal content of these types could be seamlessly transferred into
+//! original types if need be.
 //!
 //! # Features
 //!
@@ -156,11 +157,12 @@
 //! use primitive_types::H256;
 //! use scale_info::{IntoPortable, Path, Registry};
 //! use std::str::FromStr;
+//! use substrate_crypto_light::common::AccountId32;
 //! use substrate_parser::{
 //!     parse_transaction,
 //!     AddressableBuffer,
 //!     AsMetadata,
-//!     additional_types::{AccountId32, Era},
+//!     additional_types::Era,
 //!     cards::{
 //!         Call, ExtendedData, FieldData, Info,
 //!         PalletSpecificData, ParsedData, VariantData,
