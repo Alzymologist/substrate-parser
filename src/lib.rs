@@ -137,7 +137,7 @@
 //! or in extensions.
 //!
 //! Some types (`AccountId32`, public key types, signature types) are used as
-//! re-defined in lightweight crate `substrate_crypto_light`, `Era` is 
+//! re-defined in lightweight crate `substrate_crypto_light`, `Era` is
 //! re-defined in module `additional_types`. These types are similar to their
 //! original counterparts in `sp_core` and `sp_runtime` crates. Re-defining
 //! is done to ensure `no_std` compatibility and simplify dependencies tree.
