@@ -4,6 +4,12 @@ use num_bigint::{BigInt, BigUint};
 use parity_scale_codec::{DecodeAll, HasCompact};
 use primitive_types::{H160, H256, H512};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
+use substrate_crypto_light::{
+    common::AccountId32,
+    ecdsa::{Public as PublicEcdsa, Signature as SignatureEcdsa},
+    ed25519::{Public as PublicEd25519, Signature as SignatureEd25519},
+    sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
+};
 
 #[cfg(all(not(feature = "std"), not(test)))]
 use core::mem::size_of;
@@ -12,10 +18,7 @@ use std::mem::size_of;
 
 use crate::std::{borrow::ToOwned, vec::Vec};
 
-use crate::additional_types::{
-    AccountId32, Era, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
-    SignatureSr25519,
-};
+use crate::additional_types::Era;
 use crate::cards::{ParsedData, Sequence, SequenceData};
 use crate::compacts::get_compact;
 use crate::error::{ParserError, RegistryError, RegistryInternalError};
@@ -159,11 +162,11 @@ impl StableLength for char {
 
 /// Implement [`StableLength`] for well-known hashes and arrays.
 macro_rules! impl_stable_length_array {
-    ($($array: ty), *) => {
+    ($($array: ty, $len: expr), *) => {
         $(
             impl StableLength for $array {
                 fn len_encoded() -> usize {
-                    Self::len_bytes()
+                    $len
                 }
                 fn cut_and_decode<B, E> (data: &B, ext_memory: &mut E, position: &mut usize) -> Result<Self, ParserError<E>>
                 where
@@ -180,17 +183,21 @@ macro_rules! impl_stable_length_array {
     }
 }
 
+impl_stable_length_array!(H160, Self::len_bytes());
+impl_stable_length_array!(H256, Self::len_bytes());
+impl_stable_length_array!(H512, Self::len_bytes());
+impl_stable_length_array!(AccountId32, substrate_crypto_light::common::HASH_256_LEN);
+impl_stable_length_array!(PublicEcdsa, substrate_crypto_light::ecdsa::PUBLIC_LEN);
+impl_stable_length_array!(PublicEd25519, substrate_crypto_light::ed25519::PUBLIC_LEN);
+impl_stable_length_array!(PublicSr25519, substrate_crypto_light::sr25519::PUBLIC_LEN);
+impl_stable_length_array!(SignatureEcdsa, substrate_crypto_light::ecdsa::SIGNATURE_LEN);
 impl_stable_length_array!(
-    H160,
-    H256,
-    H512,
-    AccountId32,
-    PublicEd25519,
-    PublicSr25519,
-    PublicEcdsa,
     SignatureEd25519,
+    substrate_crypto_light::ed25519::SIGNATURE_LEN
+);
+impl_stable_length_array!(
     SignatureSr25519,
-    SignatureEcdsa
+    substrate_crypto_light::sr25519::SIGNATURE_LEN
 );
 
 /// Unsigned integer trait. Compatible with compacts, uses the propagated

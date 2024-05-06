@@ -13,8 +13,9 @@ use primitive_types::H256;
 use scale_info::{
     form::PortableForm, interner::UntrackedSymbol, IntoPortable, Path, Registry, TypeDef,
 };
+use substrate_crypto_light::{common::AccountId32, sr25519::Signature as SignatureSr25519};
 
-use crate::additional_types::{AccountId32, Era, SignatureSr25519};
+use crate::additional_types::Era;
 use crate::cards::{
     ExtendedData, FieldData, Info, ParsedData, Sequence, SequenceData, SequenceRawData, VariantData,
 };

@@ -12,9 +12,7 @@ keywords = ["parser", "substrate"]
 exclude = ["/for_tests", "/.github"]
 
 [dependencies]
-base58 = {version = "0.2.0"}
 bitvec = {version = "1.0.1", default-features = false, features = ["alloc"]}
-blake2 = {version = "0.10.6", default-features = false}
 external-memory-tools = {version = "0.1.1", default-features = false}
 frame-metadata = {version = "16.0.0", default-features = false, features = ["current", "decode"]}
 hex = {version = "0.4.3", default-features = false, features = ["alloc"]}
@@ -25,10 +23,11 @@ primitive-types = {version = "0.12.2", default-features = false}
 scale-info = {version = "2.10.0", default-features = false}
 sp-arithmetic = {version = "25.0.0", default-features = false}
 sp-crypto-hashing = {version = "0.1.0", default-features = false}
+substrate-crypto-light = {git = "https://github.com/Alzymologist/substrate-crypto-light", default-features = false, features = ["ecdsa", "ed25519", "sr25519"]}
 
 [features]
 default = ["std"]
-std = ["external-memory-tools/std", "frame-metadata/std", "plot_icon", "primitive-types/std", "sp-crypto-hashing/std"]
+std = ["external-memory-tools/std", "frame-metadata/std", "plot_icon", "primitive-types/std", "sp-crypto-hashing/std", "substrate-crypto-light/std"]
 
 [lib]
 name = "substrate_parser"

@@ -5,11 +5,14 @@ use num_bigint::{BigInt, BigUint};
 use primitive_types::{H160, H256, H512};
 use scale_info::{form::PortableForm, Field, Path, Type, Variant};
 use sp_arithmetic::{PerU16, Perbill, Percent, Permill, Perquintill};
-
-use crate::additional_types::{
-    AccountId32, Era, PublicEcdsa, PublicEd25519, PublicSr25519, SignatureEcdsa, SignatureEd25519,
-    SignatureSr25519,
+use substrate_crypto_light::{
+    common::{AccountId32, AsBase58},
+    ecdsa::{Public as PublicEcdsa, Signature as SignatureEcdsa},
+    ed25519::{Public as PublicEd25519, Signature as SignatureEd25519},
+    sr25519::{Public as PublicSr25519, Signature as SignatureSr25519},
 };
+
+use crate::additional_types::Era;
 
 #[cfg(feature = "std")]
 use plot_icon::generate_png_scaled_default;
@@ -913,13 +916,13 @@ macro_rules! make_id_data {
             impl IdData {
                 #[cfg(feature = "std")]
                 pub fn $func(value: &$ty, base58prefix: u16) -> Self {
-                    let base58 = value.as_base58(base58prefix);
+                    let base58 = value.to_base58_string(base58prefix);
                     let identicon = generate_png_scaled_default(value.0.as_ref());
                     Self { base58, identicon }
                 }
                 #[cfg(not(feature = "std"))]
                 pub fn $func(value: &$ty, base58prefix: u16) -> Self {
-                    let base58 = value.as_base58(base58prefix);
+                    let base58 = value.to_base58_string(base58prefix);
                     Self { base58 }
                 }
             }
