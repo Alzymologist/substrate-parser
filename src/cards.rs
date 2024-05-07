@@ -391,6 +391,7 @@ macro_rules! specialty_card {
                     );
                     ParserCard::Tip(tip)
                 }
+                SpecialtyUnsignedInteger::TipAsset => ParserCard::TipAsset($value.to_string()),
                 SpecialtyUnsignedInteger::Nonce => ParserCard::Nonce($value.to_string()),
                 SpecialtyUnsignedInteger::SpecVersion => ParserCard::NameSpecVersion {
                     name: $spec_name.to_owned(),
@@ -1012,6 +1013,7 @@ pub enum ParserCard {
     SpecName(String),
     Text(String),
     Tip(Currency),
+    TipAsset(String),
     TupleAnnounced(usize),
     TxVersion(String),
 }
@@ -1182,6 +1184,7 @@ impl ExtendedCard {
             ParserCard::Tip(a) => {
                 readable(self.indent, "Tip", &format!("{} {}", a.number, a.units))
             }
+            ParserCard::TipAsset(a) => readable(self.indent, "Tip Asset", a),
             ParserCard::TupleAnnounced(a) => {
                 readable(self.indent, "Tuple", &format!("{a} element(s)"))
             }
