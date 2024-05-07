@@ -69,7 +69,10 @@ impl SpecialtySet {
     /// Previously found `Hint` (if there was any) is no longer relevant and is
     /// discarded.
     pub fn forget_hint(&mut self) {
-        self.hint = Hint::None;
+        if let Hint::ChargeAssetTxPayment = self.hint {
+        } else {
+            self.hint = Hint::None;
+        }
     }
 
     /// Apply `hint` field on unsigned integer decoding.

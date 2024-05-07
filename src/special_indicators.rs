@@ -166,6 +166,17 @@ pub const CHECK_NONCE: &str = "CheckNonce";
 /// Apparently established `identifier` across different chains.
 pub const CHARGE_TRANSACTION_PAYMENT: &str = "ChargeTransactionPayment";
 
+/// Extensions `identifier` from [`SignedExtensionMetadata`] for transaction
+/// tip that may or may not be in asset units.
+///
+/// If underlying value has unsigned integer, it will be considered an asset
+/// tip.
+///
+/// Note: asset tip is always gets carded as raw.
+///
+/// Apparently established `identifier` across different chains.
+pub const CHARGE_ASSET_TX_PAYMENT: &str = "ChargeAssetTxPayment";
+
 /// Encoded length of an enum variant index.
 pub const ENUM_INDEX_ENCODED_LEN: usize = 1;
 
@@ -188,6 +199,10 @@ pub enum SpecialtyUnsignedInteger {
     /// Value is transaction tip from signable transaction extensions, always
     /// displayed as currency with chain decimals and units.
     Tip,
+
+    /// Value is transaction tip from signable transaction extensions, possibly
+    /// with asset units and decimals. Displayed as raw.
+    TipAsset,
 
     /// Value is nonce.
     Nonce,
@@ -236,6 +251,7 @@ pub enum Hint {
     CheckGenesis,
     CheckMortality,
     CheckNonce,
+    ChargeAssetTxPayment,
     ChargeTransactionPayment,
     FieldBalance,
     FieldNonce,
@@ -277,6 +293,7 @@ impl Hint {
             CHECK_GENESIS => Self::CheckGenesis,
             CHECK_MORTALITY => Self::CheckMortality,
             CHECK_NONCE => Self::CheckNonce,
+            CHARGE_ASSET_TX_PAYMENT => Self::ChargeAssetTxPayment,
             CHARGE_TRANSACTION_PAYMENT => Self::ChargeTransactionPayment,
             _ => Self::None,
         }
@@ -290,6 +307,7 @@ impl Hint {
         match path.ident() {
             Some(a) => match a.as_str() {
                 CHECK_NONCE => Self::CheckNonce,
+                CHARGE_ASSET_TX_PAYMENT => Self::ChargeAssetTxPayment,
                 CHARGE_TRANSACTION_PAYMENT => Self::ChargeTransactionPayment,
                 _ => Self::None,
             },
@@ -306,6 +324,7 @@ impl Hint {
             Hint::CheckTxVersion | Hint::FieldTxVersion => SpecialtyUnsignedInteger::TxVersion,
             Hint::CheckNonce | Hint::FieldNonce => SpecialtyUnsignedInteger::Nonce,
             Hint::ChargeTransactionPayment => SpecialtyUnsignedInteger::Tip,
+            Hint::ChargeAssetTxPayment => SpecialtyUnsignedInteger::TipAsset,
             Hint::FieldBalance => SpecialtyUnsignedInteger::Balance,
             _ => SpecialtyUnsignedInteger::None,
         }

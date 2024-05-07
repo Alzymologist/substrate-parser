@@ -1900,3 +1900,159 @@ Block Hash: 91b171bb158e2d3848fa23a9f1c25182fb8e20313b2c1eb49219da7a70ce90c3
 ";
     assert_eq!(extensions_known, extensions_printed);
 }
+
+#[test]
+fn tr_14() {
+    let data = hex::decode("2802080a0300da9f7fd3d9612a68d2ead69dde53297b172b7db514d0d261e7c5be987df7f32a522206000a0400da9f7fd3d9612a68d2ead69dde53297b172b7db514d0d261e7c5be987df7f32a008502400400104a0f000e00000068d56f15f85d3136970ec16946040bc1752654e906147f7e43e9d539d7c3de2f6739fa4cf873fc3b0ad34981f8cb692e13eeecd4323e44039409f4ccccccdac7").unwrap();
+
+    let metadata_statemint = metadata_v15("for_tests/statemint1002000");
+
+    //2802080a0300da9f7fd3d9612a68d2ead69dde53297b172b7db514d0d261e7c5be987df7f32a522206000a0400da9f7fd3d9612a68d2ead69dde53297b172b7db514d0d261e7c5be987df7f32a0085024004010f00104a0f000e00000068d56f15f85d3136970ec16946040bc1752654e906147f7e43e9d539d7c3de2f6739fa4cf873fc3b0ad34981f8cb692e13eeecd4323e44039409f4ccccccdac7
+
+    let reply = parse_transaction_unmarked(&data.as_ref(), &mut (), &metadata_statemint, None)
+        .unwrap()
+        .card(
+            &specs_polkadot(),
+            &<RuntimeMetadataV15 as AsMetadata<()>>::spec_name_version(&metadata_statemint)
+                .unwrap()
+                .spec_name,
+        );
+
+    let call_printed = format!(
+        "\n{}\n",
+        reply
+            .call
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let call_known = "
+Pallet: Utility
+  Call: batch_all
+    Field Name: calls
+      Sequence: 2 element(s)
+        Pallet: Balances
+          Call: transfer_keep_alive
+            Field Name: dest
+              Enum
+                Enum Variant Name: Id
+                  Id: 15wepZh1jWNqxBjsgErm8HmYiE21n79c5krQJeTsYAjHddeM
+            Field Name: value
+              Balance: 10.0500 uDOT
+        Pallet: Balances
+          Call: transfer_all
+            Field Name: dest
+              Enum
+                Enum Variant Name: Id
+                  Id: 15wepZh1jWNqxBjsgErm8HmYiE21n79c5krQJeTsYAjHddeM
+            Field Name: keep_alive
+              Bool: false
+";
+    assert_eq!(call_known, call_printed);
+
+    let extensions_printed = format!(
+        "\n{}\n",
+        reply
+            .extensions
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let extensions_known = "
+Era: Mortal, phase: 40, period: 64
+Nonce: 16
+Struct: 2 field(s)
+  Field Name: tip
+    Tip Asset: 1
+  Field Name: asset_id
+    Enum
+      Enum Variant Name: None
+Chain: statemint1002000
+Tx Version: 14
+Genesis Hash: 68d56f15f85d3136970ec16946040bc1752654e906147f7e43e9d539d7c3de2f
+Block Hash: 6739fa4cf873fc3b0ad34981f8cb692e13eeecd4323e44039409f4ccccccdac7
+";
+    assert_eq!(extensions_known, extensions_printed);
+}
+
+#[test]
+fn tr_15() {
+    let data = hex::decode("2802080a0300da9f7fd3d9612a68d2ead69dde53297b172b7db514d0d261e7c5be987df7f32a522206000a0400da9f7fd3d9612a68d2ead69dde53297b172b7db514d0d261e7c5be987df7f32a0085024004010f00104a0f000e00000068d56f15f85d3136970ec16946040bc1752654e906147f7e43e9d539d7c3de2f6739fa4cf873fc3b0ad34981f8cb692e13eeecd4323e44039409f4ccccccdac7").unwrap();
+
+    let metadata_statemint = metadata_v15("for_tests/statemint1002000");
+
+    let reply = parse_transaction_unmarked(&data.as_ref(), &mut (), &metadata_statemint, None)
+        .unwrap()
+        .card(
+            &specs_polkadot(),
+            &<RuntimeMetadataV15 as AsMetadata<()>>::spec_name_version(&metadata_statemint)
+                .unwrap()
+                .spec_name,
+        );
+
+    let call_printed = format!(
+        "\n{}\n",
+        reply
+            .call
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let call_known = "
+Pallet: Utility
+  Call: batch_all
+    Field Name: calls
+      Sequence: 2 element(s)
+        Pallet: Balances
+          Call: transfer_keep_alive
+            Field Name: dest
+              Enum
+                Enum Variant Name: Id
+                  Id: 15wepZh1jWNqxBjsgErm8HmYiE21n79c5krQJeTsYAjHddeM
+            Field Name: value
+              Balance: 10.0500 uDOT
+        Pallet: Balances
+          Call: transfer_all
+            Field Name: dest
+              Enum
+                Enum Variant Name: Id
+                  Id: 15wepZh1jWNqxBjsgErm8HmYiE21n79c5krQJeTsYAjHddeM
+            Field Name: keep_alive
+              Bool: false
+";
+    assert_eq!(call_known, call_printed);
+
+    let extensions_printed = format!(
+        "\n{}\n",
+        reply
+            .extensions
+            .iter()
+            .map(|card| card.show())
+            .collect::<Vec<String>>()
+            .join("\n")
+    );
+    let extensions_known = "
+Era: Mortal, phase: 40, period: 64
+Nonce: 16
+Struct: 2 field(s)
+  Field Name: tip
+    Tip Asset: 1
+  Field Name: asset_id
+    Enum
+      Enum Variant Name: Some
+        Struct: 2 field(s)
+          Field Name: parents
+            u8: 15
+          Field Name: interior
+            Enum
+              Enum Variant Name: Here
+Chain: statemint1002000
+Tx Version: 14
+Genesis Hash: 68d56f15f85d3136970ec16946040bc1752654e906147f7e43e9d539d7c3de2f
+Block Hash: 6739fa4cf873fc3b0ad34981f8cb692e13eeecd4323e44039409f4ccccccdac7
+";
+    assert_eq!(extensions_known, extensions_printed);
+}
