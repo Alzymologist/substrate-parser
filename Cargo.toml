@@ -21,7 +21,7 @@ plot_icon = {version = "0.3.0", optional = true, default-features = false, featu
 parity-scale-codec = {version = "3.6.9", default-features = false, features = ["derive", "bit-vec"]}
 primitive-types = {version = "0.12.2", default-features = false}
 scale-info = {version = "2.10.0", default-features = false}
-sp-arithmetic = {version = "25.0.0", default-features = false}
+sp-arithmetic = {version = "26.0.0", default-features = false}
 sp-crypto-hashing = {version = "0.1.0", default-features = false}
 substrate-crypto-light = {git = "https://github.com/Alzymologist/substrate-crypto-light", default-features = false, features = ["ecdsa", "ed25519", "sr25519"]}
 
