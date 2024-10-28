@@ -192,6 +192,7 @@ where
 
 /// Decoded unchecked extrinsic.
 #[derive(Debug, Eq, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum UncheckedExtrinsic {
     Signed {
         address: ExtendedData,

@@ -393,10 +393,7 @@ impl Collectable for Vec<u8> {
                 _ => return None,
             }
         }
-        let inner_element_info = match inner_element_info {
-            Some(a) => a,
-            None => Vec::new(),
-        };
+        let inner_element_info = inner_element_info.unwrap_or_default();
         Some(Sequence::VecU8 {
             sequence: out,
             inner_element_info,
