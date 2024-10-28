@@ -1232,6 +1232,39 @@ fn unchecked_extrinsic_1() {
     }
 }
 
+#[cfg(feature = "std")]
+#[test]
+fn unchecked_extrinsic_2() {
+    let data = hex::decode("3502840094af1b41d3346c8b50f9f2d229422ddbbc53e7a59df3b49abd049ff059122d6e01c240497d62b63d2e6144bd59d43f385f5d377d03c21d0643513054491cf90c67f71c5f32ae4ac37d16f55eb100dae006b774f57283d21bb7afb84c8bbfb5de873500280000000a040036988c476fff14e9885c49f938193f2fc4b54ba9e4cf673ffed3dc4e413aeb3a00").unwrap();
+    let metadata = metadata_v15("for_tests/polkadot1003003_v15");
+    let parsed = decode_as_unchecked_extrinsic(&data.as_ref(), &mut (), &metadata).unwrap();
+    if let UncheckedExtrinsic::Signed {
+        address: _,
+        signature,
+        extra: _,
+        call: _,
+    } = parsed
+    {
+        let expected_signature = ExtendedData {
+                data: ParsedData::SignatureSr25519(SignatureSr25519(hex::decode("c240497d62b63d2e6144bd59d43f385f5d377d03c21d0643513054491cf90c67f71c5f32ae4ac37d16f55eb100dae006b774f57283d21bb7afb84c8bbfb5de87").unwrap().try_into().unwrap())),
+                info: vec![
+                    Info {
+                        docs: "".to_string(),
+                        path: Path::from_segments(vec![
+                            "sp_runtime",
+                            "MultiSignature",
+                        ])
+                        .unwrap()
+                        .into_portable(&mut Registry::new()),
+                    }
+                ]
+            };
+        assert_eq!(expected_signature, signature);
+    } else {
+        panic!("Not a signed extrinsic: {parsed:?}")
+    }
+}
+
 #[test]
 fn tr_7() {
     let data = hex::decode("a00a0304a84b841c4d9d1a179be03bb31131c14ebf6ce22233158139ae28a3dfaac5fe1560a5e9e05cd5038d248ed73e0d9808000003000000fc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64cfc41b9bd8ef8fe53d58c7ea67c794c7ec9a73daf05e6d54b14ff6342c99ba64c").unwrap();
