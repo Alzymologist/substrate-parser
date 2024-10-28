@@ -274,11 +274,8 @@ impl From<RegistryInternalError> for MetaStructureErrorV14 {
 
 impl From<RegistryError<()>> for MetaStructureErrorV14 {
     fn from(registry_error_extrinsic: RegistryError<()>) -> Self {
-        if let RegistryError::Internal(internal) = registry_error_extrinsic {
-            MetaStructureErrorV14::ExtrinsicTypeNotResolved(internal)
-        } else {
-            unreachable!("RegistryError<()> can not have externally originated variants.")
-        }
+        let RegistryError::Internal(internal) = registry_error_extrinsic;
+        MetaStructureErrorV14::ExtrinsicTypeNotResolved(internal)
     }
 }
 

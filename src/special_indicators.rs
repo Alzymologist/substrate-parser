@@ -8,12 +8,13 @@
 //! mentioned in metadata descriptors, rather than decoded as more generalized
 //! type and cast into custom type later on.
 use external_memory_tools::{AddressableBuffer, ExternalMemory};
-use scale_info::{form::PortableForm, Field, Path, Type, TypeDef, Variant};
+use scale_info::{form::PortableForm, Field, Path, Type, TypeDef, TypeDefPrimitive, Variant};
 
 use crate::std::{borrow::ToOwned, string::String, vec::Vec};
 
 use crate::cards::Info;
-use crate::decoding_sci::pick_variant;
+use crate::decoding_sci::{husk_type, pick_variant};
+use crate::propagated::Checker;
 use crate::traits::{AsMetadata, ResolveType, SignedExtensionMetadata};
 
 /// [`Field`] `type_name` set indicating that the value *may* be
@@ -29,6 +30,24 @@ pub const BALANCE_ID_SET: &[&str] = &[
     "PalletBalanceOf<T>",
     "T::Balance",
 ];
+
+/// [`Field`] `type_name` set indicating that the value *may* be Ecdsa
+/// signature.
+///
+/// If the value is array `[u8; 65]`, it will be considered Ecdsa signature.
+pub const SIGNATURE_ECDSA_ID_SET: &[&str] = &["ecdsa::Signature"];
+
+/// [`Field`] `type_name` set indicating that the value *may* be Ed25519
+/// signature.
+///
+/// If the value is array `[u8; 64]`, it will be considered Ed25519 signature.
+pub const SIGNATURE_ED25519_ID_SET: &[&str] = &["ed25519::Signature"];
+
+/// [`Field`] `type_name` set indicating that the value *may* be Sr25519
+/// signature.
+///
+/// If the value is array `[u8; 64]`, it will be considered Sr25519 signature.
+pub const SIGNATURE_SR25519_ID_SET: &[&str] = &["sr25519::Signature"];
 
 /// [`Field`] `name` set indicating the value *may* be nonce.
 ///
@@ -75,6 +94,9 @@ pub const H256: &str = "H256";
 
 /// [`Type`]-associated [`Path`] `ident` for [primitive_types::H512].
 pub const H512: &str = "H512";
+
+/// [`Type`]-associated [`Path`] `ident` for `sp_runtime::MultiSignature`.
+pub const MULTI_SIGNATURE: &str = "MultiSignature";
 
 /// [`Type`]-associated [`Path`] `ident` for [sp_arithmetic::Perbill].
 pub const PERBILL: &str = "Perbill";
@@ -233,6 +255,81 @@ pub enum SpecialtyH256 {
     BlockHash,
 }
 
+/// Indicator that the field would be considered a signature. Non-propagating.
+#[derive(Clone, Copy, Debug)]
+pub enum SignatureIndicator {
+    None,
+    Ecdsa,
+    Ed25519,
+    Sr25519,
+}
+
+impl SignatureIndicator {
+    /// `SignatureIndicator` for a [`Field`]. Uses `type_name`, checks signature
+    /// type to be an `u8` array of the known length.
+    pub fn from_field<E, M>(
+        field: &Field<PortableForm>,
+        ext_memory: &mut E,
+        registry: &M::TypeRegistry,
+    ) -> Self
+    where
+        E: ExternalMemory,
+        M: AsMetadata<E>,
+    {
+        if let Ok(husked_field_ty) =
+            husk_type::<E, M>(&field.ty, registry, ext_memory, Checker::new())
+        {
+            // check here that the underlying type is really `[u8; LEN]` array
+            let array_u8_length = match husked_field_ty.ty.type_def {
+                TypeDef::Array(signature_array_ty) => {
+                    let element_ty_id = signature_array_ty.type_param.id;
+                    if let Ok(element_ty) = registry.resolve_ty(element_ty_id, ext_memory) {
+                        if let TypeDef::Primitive(TypeDefPrimitive::U8) = element_ty.type_def {
+                            signature_array_ty.len
+                        } else {
+                            return Self::None;
+                        }
+                    } else {
+                        return Self::None;
+                    }
+                }
+                _ => return Self::None,
+            };
+            match &field.type_name {
+                Some(type_name) => match type_name.as_str() {
+                    a if SIGNATURE_ECDSA_ID_SET.contains(&a) => {
+                        if array_u8_length == substrate_crypto_light::ecdsa::SIGNATURE_LEN as u32 {
+                            Self::Ecdsa
+                        } else {
+                            Self::None
+                        }
+                    }
+                    a if SIGNATURE_ED25519_ID_SET.contains(&a) => {
+                        if array_u8_length == substrate_crypto_light::ed25519::SIGNATURE_LEN as u32
+                        {
+                            Self::Ed25519
+                        } else {
+                            Self::None
+                        }
+                    }
+                    a if SIGNATURE_SR25519_ID_SET.contains(&a) => {
+                        if array_u8_length == substrate_crypto_light::sr25519::SIGNATURE_LEN as u32
+                        {
+                            Self::Sr25519
+                        } else {
+                            Self::None
+                        }
+                    }
+                    _ => Self::None,
+                },
+                None => Self::None,
+            }
+        } else {
+            Self::None
+        }
+    }
+}
+
 /// Nonbinding, propagating type specialty indicator.
 ///
 /// Propagates during the decoding into compacts and single-field structs and
@@ -362,6 +459,7 @@ pub enum SpecialtyTypeHinted {
     H160,
     H256,
     H512,
+    MultiSignature,
     PalletSpecific(PalletSpecificItem),
     Perbill,
     Percent,
@@ -401,6 +499,7 @@ impl SpecialtyTypeHinted {
                 a if H160.contains(&a) => Self::H160,
                 H256 => Self::H256,
                 H512 => Self::H512,
+                MULTI_SIGNATURE => Self::MultiSignature,
                 PERBILL => Self::Perbill,
                 PERCENT => Self::Percent,
                 PERMILL => Self::Permill,
@@ -506,6 +605,40 @@ impl SpecialtyTypeChecked {
             SpecialtyTypeHinted::H160 => Self::H160,
             SpecialtyTypeHinted::H256 => Self::H256,
             SpecialtyTypeHinted::H512 => Self::H512,
+            SpecialtyTypeHinted::MultiSignature => {
+                if let TypeDef::Variant(x) = &ty.type_def {
+                    match pick_variant::<B, E>(&x.variants, data, ext_memory, *position) {
+                        Ok(signature_variant) => {
+                            if signature_variant.fields.len() == 1 {
+                                match SignatureIndicator::from_field::<E, M>(
+                                    &signature_variant.fields[0],
+                                    ext_memory,
+                                    registry,
+                                ) {
+                                    SignatureIndicator::None => Self::None,
+                                    SignatureIndicator::Ecdsa => {
+                                        *position += ENUM_INDEX_ENCODED_LEN;
+                                        Self::SignatureEcdsa
+                                    }
+                                    SignatureIndicator::Ed25519 => {
+                                        *position += ENUM_INDEX_ENCODED_LEN;
+                                        Self::SignatureEd25519
+                                    }
+                                    SignatureIndicator::Sr25519 => {
+                                        *position += ENUM_INDEX_ENCODED_LEN;
+                                        Self::SignatureSr25519
+                                    }
+                                }
+                            } else {
+                                Self::None
+                            }
+                        }
+                        Err(_) => Self::None,
+                    }
+                } else {
+                    Self::None
+                }
+            }
             SpecialtyTypeHinted::PalletSpecific(item) => {
                 if let TypeDef::Variant(x) = &ty.type_def {
                     // found specific variant corresponding to pallet,
