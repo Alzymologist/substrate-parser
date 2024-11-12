@@ -6,7 +6,7 @@
 //! Storage key has prefix built from `prefix` of
 //! [`PalletStorageMetadata`](frame_metadata::v14::PalletStorageMetadata) and
 //! `name` of [`StorageEntryMetadata`], both processed as bytes in
-//! [`twox_128`](sp_core_hashing::twox_128) and concatenated together.
+//! [`twox_128`](sp_crypto_hashing::twox_128) and concatenated together.
 //!
 //! There are `Plain` and `Map` variants of [`StorageEntryType`].
 //!
