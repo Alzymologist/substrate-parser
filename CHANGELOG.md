@@ -1,3 +1,9 @@
+# v0.7.0
+
+- Use types from `substrate-crypto-light` crate
+- Asset tip recognition
+- Multisignature recognition
+
 # v0.6.1
 
 - Add interpretation of `TxVersion` in struct fields, not only extensions
