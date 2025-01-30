@@ -23,7 +23,7 @@ primitive-types = {version = "0.13.1", default-features = false}
 scale-info = {version = "2.11.5", default-features = false}
 sp-arithmetic = {version = "26.0.0", default-features = false}
 sp-crypto-hashing = {version = "0.1.0", default-features = false}
-substrate-crypto-light = {version = "0.1.0", default-features = false, features = ["ecdsa", "ed25519", "sr25519"]}
+substrate-crypto-light = {version = "0.2.0", default-features = false, features = ["ecdsa", "ed25519", "sr25519"]}
 
 [features]
 default = ["std"]
