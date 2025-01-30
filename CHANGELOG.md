@@ -1,3 +1,7 @@
+# v0.7.1
+
+- bump `substrate-crypto-light` to 0.2.0
+
 # v0.7.0
 
 - Use types from `substrate-crypto-light` crate
